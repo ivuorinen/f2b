@@ -1,0 +1,848 @@
+#!/usr/bin/env bash
+#
+# This script is a wrapper for `fail2ban-client` and allows you to use
+# short hand commands to interact with fail2ban.
+# Commands include: list jails, status of jails, ban/unban IP addresses, etc.
+#
+# Author: Ismo Vuorinen <https://github.com/ivuorinen> (2024)
+# License: MIT
+# Source: https://github.com/ivuorinen/f2b
+
+VERSION="1.0.0" # Update version number
+
+# Get basename for this script
+F2B_SCRIPT=$(basename "$0")
+# Get path to fail2ban-client
+F2B_CLIENT=$(command -v fail2ban-client)
+
+# Check if fail2ban-client is installed
+if [ -z "$F2B_CLIENT" ]; then
+  echo "Error: fail2ban-client is not installed, or not in the PATH."
+  exit 1
+fi
+
+# Check for all the required command line tools this script uses
+F2B_REQUIRED_TOOLS="awk cat date grep ls sed sort tail tr wc zcat"
+F2B_REQUIRED_TOOLS_AVAILABLE=1
+for TOOL in $F2B_REQUIRED_TOOLS; do
+  if ! command -v "$TOOL" &>/dev/null; then
+    echo "Error: \"$TOOL\" is required but not installed."
+    F2B_REQUIRED_TOOLS_AVAILABLE=0
+  fi
+done
+if [ $F2B_REQUIRED_TOOLS_AVAILABLE -eq 0 ]; then
+  echo "Please install the required tools and try again."
+  exit 1
+fi
+
+# Humans can't remember to run scripts as root, so let's remind them, or run as sudo
+# https://stackoverflow.com/a/28776100
+if [ "$(id -u)" != "0" ]; then
+  # Check that user belongs to sudo group or is sudoer
+  if groups | grep -q -w sudo; then
+    F2B_CLIENT="sudo $F2B_CLIENT"
+  else
+    echo "Please run this script as root or add yourself to the sudo group."
+    exit 1
+  fi
+fi
+
+# Function to compare version strings
+# $1: version string of form 1.2.3
+# Improved from https://stackoverflow.com/a/53400482
+# Usage: (( $(ver 1.2.3) >= $(ver 1.2.4) )) && echo "yes" || echo "no"
+ver() {
+  local SPLIT_VERSION=()
+  read -r -a SPLIT_VERSION <<<"${1//./ }"
+  while [ ${#SPLIT_VERSION[@]} -lt 3 ]; do
+    SPLIT_VERSION+=("0")
+  done
+  printf "%02d%02d%02d" "${SPLIT_VERSION[0]}" "${SPLIT_VERSION[1]}" "${SPLIT_VERSION[2]}"
+}
+
+# Check if fail2ban version is 0.11.0 or newer
+# The script was developed against fail2ban 0.11.2
+F2B_VER="$($F2B_CLIENT -V)"
+F2B_REQ="0.11.0"
+if (($(ver "$F2B_VER") < $(ver "$F2B_REQ"))); then
+  echo "Error: fail2ban version $F2B_REQ or newer is required."
+  echo "       Your version: $F2B_VER"
+  exit 1
+fi
+
+# Get arguments and convert to lowercase
+F2B_ARG1=$(echo "$1" | tr '[:upper:]' '[:lower:]')
+F2B_ARG2=$(echo "$2" | tr '[:upper:]' '[:lower:]')
+F2B_ARG3=$(echo "$3" | tr '[:upper:]' '[:lower:]')
+
+# If there are more than 3 arguments, show error
+if [ "$#" -gt 3 ]; then
+  echo "Error: Too many arguments."
+  exit 1
+fi
+
+if [ -z "$F2B_ARG1" ]; then
+  F2B_ARG1=""
+fi
+if [ -z "$F2B_ARG2" ]; then
+  F2B_ARG2=""
+fi
+if [ -z "$F2B_ARG3" ]; then
+  F2B_ARG3=""
+fi
+
+# Check if fail2ban is running
+if ! $F2B_CLIENT ping &>/dev/null; then
+  echo "Error: fail2ban is not running."
+  exit 1
+fi
+
+# Get list of jails and replace "," with space
+F2B_JAILS=$($F2B_CLIENT status | tail -n1 | cut -d':' -f2- | tr -d '[:space:]' | tr ',' ' ')
+read -r -a F2B_JAILS_ARRAY <<<"$F2B_JAILS"
+
+# Return f2b help
+# Usage: $0 help
+help() {
+  echo "Usage: $F2B_SCRIPT [command] [options]"
+  echo " list-jails             List all jails"
+  echo " status all             Show status of all jails"
+  echo " status [jail]          Show status of a specific jail"
+  echo " banned                 Show all banned IP addresses with ban time left"
+  echo " banned [jail]          Show all banned IP addresses with ban time left in a jail"
+  echo " ban [ip]               Ban IP address in all jails"
+  echo " ban [ip] [jail]        Ban IP address in a specific jail"
+  echo " unban [ip]             Unban IP address in all jails"
+  echo " unban [ip] [jail]      Unban IP address in a specific jail"
+  echo " test [ip]              Test if IP address is banned"
+  echo " logs                   Show fail2ban logs"
+  echo " logs all [ip]          Show logs for a specific IP address in all jails"
+  echo " logs [jail]            Show logs for a specific jail"
+  echo " logs [jail] [ip]       Show logs for a specific jail and IP address"
+  echo " logs-watch             Watch fail2ban logs"
+  echo " logs-watch all [ip]    Watch logs for a specific IP address"
+  echo " logs-watch [jail]      Watch logs for a specific jail"
+  echo " logs-watch [jail] [ip] Watch logs for a specific jail and IP address"
+  echo " test-filter [filter]   Test a fail2ban filter"
+  echo " service start          Start fail2ban"
+  echo " service stop           Stop fail2ban"
+  echo " service restart        Restart fail2ban"
+  echo " help                   Show help"
+  echo " version                Show version"
+}
+
+# {{{
+
+# Get fail2ban log files and filter by jail and ip if provided
+# Usage: f2b_jail_get_log_entries <jail> <ip>
+# Example: f2b_jail_get_log_entries
+# Example: f2b_jail_get_log_entries sshd
+# Example: f2b_jail_get_log_entries sshd 1.2.3.4
+f2b_jail_get_log_entries() {
+  local JAIL=${1:-""} # default to empty string if not provided
+  local IP=${2:-""}   # default to empty string if not provided
+  local LOG_FILES=""
+  LOG_FILES=$(ls -1 --color=never /var/log/fail2ban.log* 2>/dev/null)
+
+  # If $LOG_FILES is empty, return
+  if [ -z "$LOG_FILES" ]; then
+    echo ""
+    return 0
+  fi
+
+  # Loop through log files and get log entries, use cat for normal,
+  # and zcat for compressed files, concat all log entries into one local string LOG_ENTRIES
+  local LOG_ENTRIES=""
+  for LOG_FILE in $LOG_FILES; do
+    if [ -f "$LOG_FILE" ]; then
+      if file "$LOG_FILE" | grep -q "compressed"; then
+        LOG_ENTRIES="$LOG_ENTRIES\n$(zcat "$LOG_FILE")\n"
+      else
+        LOG_ENTRIES="$LOG_ENTRIES\n$(cat "$LOG_FILE")\n"
+      fi
+    fi
+  done
+
+  # If $JAIL is not empty, and is not empty string, filter by jail
+  if [ -n "$JAIL" ] && [ "$JAIL" != "" ]; then
+    LOG_ENTRIES=$(echo "$LOG_ENTRIES" | grep "[$JAIL]")
+  fi
+
+  # If $IP is not empty, filter by IP address
+  if [ -n "$IP" ] && [ "$IP" != "" ]; then
+    LOG_ENTRIES=$(echo "$LOG_ENTRIES" | grep "$IP")
+  fi
+
+  # Return log entries
+  echo "$LOG_ENTRIES"
+}
+
+# Poll fail2ban logs every 5 seconds
+# Usage: f2b_poll_jail_log_entries [jail] [ip]
+# Example: f2b_poll_jail_log_entries sshd
+# Example: f2b_poll_jail_log_entries sshd 1.2.3.4
+f2b_poll_jail_log_entries() {
+  local JAIL=${1:-""}
+  local IP=${2:-""}
+  local LOG_ENTRIES=""
+  LOG_ENTRIES=$(f2b_jail_get_log_entries "$JAIL" "$IP" | tail -n10)
+
+  echo "$LOG_ENTRIES"
+  while true; do
+    NEW_LOG_ENTRIES=$(f2b_jail_get_log_entries "$JAIL" "$IP" | tail -n10)
+    if [ "$LOG_ENTRIES" != "$NEW_LOG_ENTRIES" ]; then
+      echo "$NEW_LOG_ENTRIES"
+      LOG_ENTRIES="$NEW_LOG_ENTRIES"
+    fi
+    sleep 5
+  done
+  return 0
+}
+
+# Test if a fail2ban jail exists, return 0 if exists, 1 if not
+# Usage: f2b_jail_exists <jail>
+# Example: f2b_jail_exists sshd
+f2b_jail_exists() {
+  local JAIL=${1:-""}
+
+  if [ -z "$JAIL" ] && [ "$JAIL" != "" ]; then
+    echo "[f2b_jail_exists] Error: Please provide a jail to check if it exists."
+    exit 1
+  fi
+
+  local JAILS=""
+  JAILS=$(echo "$F2B_JAILS" | tr ',' ' ')
+  for J in $JAILS; do
+    if [ "$J" == "$JAIL" ]; then
+      return 0
+    fi
+  done
+  echo "Error: Jail '$JAIL' does not exist."
+  echo "       Existing jails: $F2B_JAILS"
+  exit 1
+}
+
+# Convert seconds to hours, minutes, and seconds
+# Usage: f2b_secs_to_hours_minutes_seconds <seconds>
+# Example: f2b_secs_to_hours_minutes_seconds 3600 (01:00:00)
+# Example: f2b_secs_to_hours_minutes_seconds 3661 (01:01:01)
+# Returns: hours:minutes:seconds
+f2b_secs_to_hours_minutes_seconds() {
+  local SECONDS=${1:-0}
+
+  if [ -z "$SECONDS" ]; then
+    echo "[f2b_secs_to_hours_minutes_seconds] Error: Please provide seconds to convert."
+    exit 1
+  fi
+
+  if [ "$SECONDS" -lt 0 ]; then
+    echo "[f2b_secs_to_hours_minutes_seconds] Error: Seconds must be a positive integer."
+    exit 1
+  fi
+
+  local SECONDS=$((SECONDS % 86400))
+  local HOURS=$((SECONDS / 3600))
+  local SECONDS=$((SECONDS % 3600))
+  local MINUTES=$((SECONDS / 60))
+  local SECONDS=$((SECONDS % 60))
+
+  # Pad hours, minutes, and seconds with zeros if they are less than 10
+  echo "$(printf "%02d" "$HOURS"):$(printf "%02d" "$MINUTES"):$(printf "%02d" "$SECONDS")"
+}
+
+# Ban IP address in a specific jail, if provided
+# Usage: ban_ip [ip] <jail>
+# Example: ban_ip 1.2.3.4      (to ban in all jails)
+# Example: ban_ip 1.2.3.4 sshd (to ban in a specific jail)
+f2b_ban_ip() {
+  local IP=${1:-""}
+  local JAIL=${2:-""}
+
+  if [ -z "$IP" ] || [ "$IP" == "" ]; then
+    printf "[f2b_ban_ip] Error: Please provide an IP address to ban.\n"
+    exit 1
+  fi
+  if [ -z "$JAIL" ] || [ "$JAIL" == "" ]; then
+    printf "[f2b_ban_ip] Error: Please provide a jail to ban IP address in.\n"
+    exit 1
+  fi
+
+  COMMAND_OUTPUT=$($F2B_CLIENT set "$JAIL" banip "$F2B_ARG2")
+  if [ "$COMMAND_OUTPUT" -eq "0" ]; then
+    printf "(!) Banned in %s: %s - Banned\n" "$JAIL" "$F2B_ARG2"
+    return 0
+  fi
+  if [ "$COMMAND_OUTPUT" -eq "1" ]; then
+    printf "(!) Banned in %s: %s - Already banned\n" "$JAIL" "$F2B_ARG2"
+    return 0
+  fi
+  printf "(!) Banned in %s: %s - Unknown error\n" "$JAIL" "$F2B_ARG2"
+  return 1
+}
+
+# Unban IP address in a specific jail, if provided
+# Usage: f2b_unban_ip [ip] [jail]
+# Example: f2b_unban_ip 1.2.3.4
+# Example: f2b_unban_ip 1.2.3.4 sshd
+f2b_unban_ip() {
+  local IP=${1:-""}
+  local JAIL=${2:-""}
+
+  if [ -z "$IP" ] || [ "$IP" == "" ]; then
+    printf "[f2b_unban_ip] Error: Please provide an IP address to unban.\n"
+    exit 1
+  fi
+  if [ -z "$JAIL" ] || [ "$JAIL" == "" ]; then
+    printf "[f2b_unban_ip] Error: Please provide a jail to unban IP address from.\n"
+    exit 1
+  fi
+
+  COMMAND_OUTPUT=$($F2B_CLIENT set "$JAIL" unbanip "$F2B_ARG2")
+  if [ "$COMMAND_OUTPUT" -eq "0" ]; then
+    printf "(!) Unbanned in %s: %s - Unbanned\n" "$JAIL" "$F2B_ARG2"
+    return 0
+  fi
+  if [ "$COMMAND_OUTPUT" -eq "1" ]; then
+    printf "(!) Unbanned in %s: %s - Already unbanned\n" "$JAIL" "$F2B_ARG2"
+    return 0
+  fi
+  printf "(!) Unbanned in %s: %s - Unknown error\n" "$JAIL" "$F2B_ARG2"
+  return 1
+}
+
+# Get all banned IPs from all jails in a nice table format
+# Usage: f2b_banned_ips [jail] (default: all)
+# Example: f2b_banned_ips
+# Example: f2b_banned_ips sshd
+# Example: f2b_banned_ips all
+# Returns: table of banned IPs and some statistics
+f2b_banned_ips() {
+  local JAIL=${1:-"all"}
+
+  # If JAIL is something other than "all", check if the jail exists
+  # Then set the JAILS_TO_LOOP variable to the jail name,
+  # otherwise loop through all known jails
+  if [ "$JAIL" != "all" ]; then
+    f2b_jail_exists "$JAIL"
+    JAILS_TO_LOOP="$JAIL"
+  else
+    JAILS_TO_LOOP="$F2B_JAILS"
+  fi
+
+  # Set local variables
+  local BANNED_IPS=""              # List of all banned IPs
+  local UNIQUE_IPS_LIST=""         # List of unique IPs
+  local UNIQUE_IPS_COUNT=0         # Number of unique IPs
+  local OLDEST_BAN_DATE=9999999999 # Anything will be older than this
+  local NEWEST_BAN_DATE=0          # Anything will be newer than this
+
+  # Get all banned ips from all jails using fail2ban-client get <jail> banip --with-time
+  # This is many times faster than grepping the fail2ban log file.
+  for J in $JAILS_TO_LOOP; do
+    # The output of fail2ban-client get <jail> banip --with-time is:
+    # [IP Address] [Date and Time Banned] + [Bantime] = [Unban Date and Time]
+    # we need to add the jail name to the end of the line and format it as:
+    # [Unban Date and Time]|[Date and Time Banned]|[IP Address]|[Bantime]|[Jail Name]
+    # and then sort it by the unban date and time so the oldest bans are first
+    JAILED_IPS=$($F2B_CLIENT get "$J" banip --with-time)
+
+    # If the output is empty, skip to the next jail
+    if [ -z "$JAILED_IPS" ]; then
+      continue
+    fi
+
+    # Take the output of the fail2ban-client command and format it as:
+    # [Unban Date and Time]|[Date and Time Banned]|[IP Address]|[Bantime]|[Jail Name]
+    JAILED_IPS=$(
+      echo "$JAILED_IPS" |
+        awk -v jail="$J" '{print $7 "T" $8 "|" $2 "T" $3 "|" $1 "|" $5 "|" jail}'
+    )
+
+    # Remove any lines that begin with "T" character.
+    # This happens because we are using the "T" character as
+    # a separator in the awk command above for the date and time
+    # and if the date and time are empty, the line will begin with "T"
+    JAILED_IPS=$(echo "$JAILED_IPS" | grep -v "^T")
+
+    # Again, if filtering JAILED_IPS results in an empty string, skip to the next jail
+    if [ -z "$JAILED_IPS" ]; then
+      continue
+    fi
+
+    # Collect statistics
+    UNIQUE_IPS_LIST=$(echo "$JAILED_IPS" | awk -F"|" '{print $3}' | sort -u)
+    UNIQUE_IPS_COUNT=$(echo "$UNIQUE_IPS_LIST" | wc -l)
+    OLDEST_BAN_DATE_JAIL=$(echo "$JAILED_IPS" | head -n1 | awk -F"|" '{print $2}')
+    NEWEST_BAN_DATE_JAIL=$(echo "$JAILED_IPS" | tail -n1 | awk -F"|" '{print $2}')
+
+    # Convert the oldest and newest ban dates to a human readable format
+    # and then to seconds since epoch for comparison
+    OLDEST_BAN_DATE_JAIL=$(date -d "$OLDEST_BAN_DATE_JAIL" +"%Y-%m-%d %H:%M:%S")
+    NEWEST_BAN_DATE_JAIL=$(date -d "$NEWEST_BAN_DATE_JAIL" +"%Y-%m-%d %H:%M:%S")
+    OLDEST_BAN_DATE_SECS=$(date -d "$OLDEST_BAN_DATE_JAIL" +"%s")
+    NEWEST_BAN_DATE_SECS=$(date -d "$NEWEST_BAN_DATE_JAIL" +"%s")
+
+    if [ "$OLDEST_BAN_DATE_SECS" -lt "$OLDEST_BAN_DATE" ]; then
+      OLDEST_BAN_DATE=$OLDEST_BAN_DATE_SECS
+    fi
+    if [ "$NEWEST_BAN_DATE_SECS" -gt "$NEWEST_BAN_DATE" ]; then
+      NEWEST_BAN_DATE=$NEWEST_BAN_DATE_SECS
+    fi
+
+    BANNED_IPS=$(printf "%s\n%s" "$BANNED_IPS" "$JAILED_IPS")
+  done
+
+  # Sort banned ips by unban date and time, remove empty lines
+  BANNED_IPS=$(echo "$BANNED_IPS" | sort -n | grep -v "^$")
+
+  # Format date format for the oldest and newest ban date
+  OLDEST_BAN_DATE=$(date -d "@$OLDEST_BAN_DATE" +"%Y-%m-%d %H:%M:%S")
+  NEWEST_BAN_DATE=$(date -d "@$NEWEST_BAN_DATE" +"%Y-%m-%d %H:%M:%S")
+
+  # Calculate the widths
+  STATS_OLD_W=${#OLDEST_BAN_DATE}
+  STATS_NEW_W=${#NEWEST_BAN_DATE}
+  STATS_IP_W=$(
+    echo "$BANNED_IPS" |
+      awk -F"|" '{print $3}' | awk '{print length}' | sort -nr | head -n1
+  )
+  # Calculate the width of the statistics table and add 8 for padding
+  STATS_W=$((STATS_IP_W + STATS_OLD_W + STATS_NEW_W + 8))
+  # Calculate the width of a row in the statistics table and subtract 2 for padding
+  STATS_R_W=$((STATS_W - 2))
+
+  # Print the statistics
+  printf "+-%*s-+\n" $STATS_R_W " "
+  printf "| %-*s |\n" $STATS_R_W "Statistics"
+  # Print table separator based on STATS_W
+  printf "+-%*s-+-%*s-+-%*s-+\n" \
+    "$STATS_IP_W" " " \
+    "$STATS_OLD_W" " " \
+    "$STATS_NEW_W" " "
+  printf "| %-*s | %-*s | %-*s |\n" \
+    "$STATS_IP_W" "Banned IPs" \
+    "$STATS_OLD_W" "Oldest ban date" \
+    "$STATS_NEW_W" "Newest ban date"
+  printf "| %-*s | %-*s | %-*s |\n" \
+    "$STATS_IP_W" "$UNIQUE_IPS_COUNT" \
+    "$STATS_OLD_W" "$OLDEST_BAN_DATE" \
+    "$STATS_NEW_W" "$NEWEST_BAN_DATE"
+  printf "+-%*s-+\n" $STATS_R_W " "
+  printf "| %-*s |\n" $STATS_R_W "Jails"
+  printf "| %-*s |\n" $STATS_R_W "$JAILS_TO_LOOP"
+  printf "+-%*s-+-%*s-+-%*s-+\n" \
+    "$STATS_IP_W" " " \
+    "$STATS_OLD_W" " " \
+    "$STATS_NEW_W" " "
+
+  echo ""
+
+  # Initialize the default guessed widths
+  local R1W=3  # BAN_NO, start with 3
+  local R2W=4  # Jail, sshd might be the most common
+  local R3W=15 # IP Address, 3+1+3+1+3+1+3=15 (xxx.xxx.xxx)
+  local R4W=19 # Banned Date, 10+1+8=19 (YYYY-MM-DD HH:MM:SS)
+  local R5W=8  # Ban Expires, 2+1+2+1+2=8 (HH:MM:SS)
+
+  # Use BANNED_IPS to loop through the banned IPs and get values for the upcoming table
+  # The table will have the following columns:
+  # | # | Jail | IP Address | Banned Date | Expires |
+  #
+  # Each line of the BANNED_IPS array is in the following format:
+  # [Unban Date and Time]|[Date and Time Banned]|[IP Address]|[Bantime]|[Jail Name]
+
+  # Init variable and arrays to store the values for the table
+  local BAN_NO=0               # Incrementing number for each banned IP
+  local BAN_NO_ARRAY=()        # Array to store the incrementing number for each banned IP
+  local BAN_IP_ARRAY=()        # Array to store the IP address of the banned IP
+  local BAN_BANNED_ARRAY=()    # Array to store the date and time the IP was banned
+  local BAN_REMAINING_ARRAY=() # Array to store the remaining time the IP will be banned
+  local BAN_JAIL_ARRAY=()      # Array to store the jail the IP is banned in
+
+  for ROW in $BANNED_IPS; do
+    # Increment the BAN_NO
+    BAN_NO=$((BAN_NO + 1))
+    # Get the date and time the IP will be unbanned
+    local BAN_EXPIRES=""
+    BAN_EXPIRES=$(echo "$ROW" | awk -F"|" '{print $1}')
+    # Get the date and time the IP was banned
+    local BAN_BANNED=""
+    BAN_BANNED=$(echo "$ROW" | awk -F"|" '{print $2}')
+    # Get the IP address of the banned IP
+    local BAN_IP=""
+    BAN_IP=$(echo "$ROW" | awk -F"|" '{print $3}')
+    # Get the jails the IP is banned in
+    local BAN_JAILS=""
+    BAN_JAILS=$(echo "$ROW" | awk -F"|" '{print $5}')
+
+    # Get the current time in seconds
+    local CURRENT_TIME=""
+    CURRENT_TIME=$(date +%s)
+    # Get the unban time in seconds
+    local BAN_EXPIRES_SECS=""
+    BAN_EXPIRES_SECS=$(date -d "$BAN_EXPIRES" +%s)
+    # Calculate the time remaining until the IP is unbanned
+    local BAN_REMAINING=$((BAN_EXPIRES_SECS - CURRENT_TIME))
+
+    # Format the time remaining until the IP is unbanned
+    local BAN_REMAINING=""
+    BAN_REMAINING=$(f2b_secs_to_hours_minutes_seconds "$BAN_REMAINING")
+
+    # Get the length of the ban number
+    local BAN_NO_LENGTH=${#BAN_NO}
+    # Get the length of the jails
+    local BAN_JAILS_LENGTH=${#BAN_JAILS}
+    # Get the length of the IP address
+    local BAN_IP_LENGTH=${#BAN_IP}
+    # Get the length of the banned date
+    local BAN_BANNED_LENGTH=${#BAN_BANNED}
+    # Get the length of the remaining time
+    local BAN_REMAINING_LENGTH=${#BAN_REMAINING}
+
+    # Get the length of the longest ban number
+    if [ "$BAN_NO_LENGTH" -gt "$R1W" ]; then
+      R1W=$BAN_NO_LENGTH
+    fi
+    # Get the length of the longest jails
+    if [ "$BAN_JAILS_LENGTH" -gt "$R2W" ]; then
+      R2W=$BAN_JAILS_LENGTH
+    fi
+    # Get the length of the longest IP address
+    if [ "$BAN_IP_LENGTH" -gt "$R3W" ]; then
+      R3W=$BAN_IP_LENGTH
+    fi
+    # Get the length of the longest banned date
+    if [ "$BAN_BANNED_LENGTH" -gt "$R4W" ]; then
+      R4W=$BAN_BANNED_LENGTH
+    fi
+    # Get the length of the longest remaining time
+    if [ "$BAN_REMAINING_LENGTH" -gt "$R5W" ]; then
+      R5W=$BAN_REMAINING_LENGTH
+    fi
+
+    # Add the values to the arrays for the table
+    BAN_NO_ARRAY+=("$BAN_NO")
+    BAN_JAIL_ARRAY+=("$BAN_JAILS")
+    BAN_IP_ARRAY+=("$BAN_IP")
+    BAN_BANNED_ARRAY+=("$BAN_BANNED")
+    BAN_REMAINING_ARRAY+=("$BAN_REMAINING")
+  done
+
+  # Increase the width of the columns by 2 to allow for padding
+  H1W=$((R1W + 2))
+  H2W=$((R2W + 2))
+  H3W=$((R3W + 2))
+  H4W=$((R4W + 2))
+  H5W=$((R5W + 2))
+
+  # Print the table
+  printf "  %-${H1W}s %-${H2W}s %-${H3W}s %-${H4W}s %-${H5W}s\n" \
+    "#" "Jail" "IP" "Banned" "Expires"
+
+  # Print the table header separator
+  printf "+-%-${R1W}s-+-%-${R2W}s-+-%-${R3W}s-+-%-${R4W}s-+-%-${R5W}s-+\n" \
+    "" "" "" "" ""
+
+  # Loop through the arrays to print the table rows
+  for ((i = 0; i < ${#BAN_IP_ARRAY[@]}; i++)); do
+    # Left pad the value of the ban number to the width of the longest ban number
+    BAN_NO=$(printf "%-${R1W}s" "${BAN_NO_ARRAY[$i]}")
+
+    printf "| %-${R1W}s | %-${R2W}s | %-${R3W}s | %-${R4W}s | %-${R5W}s |\n" \
+      "${BAN_NO_ARRAY[$i]}" \
+      "${BAN_JAIL_ARRAY[$i]}" \
+      "${BAN_IP_ARRAY[$i]}" \
+      "${BAN_BANNED_ARRAY[$i]}" \
+      "${BAN_REMAINING_ARRAY[$i]}"
+  done
+
+  # Print the table footer
+  printf "+-%-${R1W}s-+-%-${R2W}s-+-%-${R3W}s-+-%-${R4W}s-+-%-${R5W}s-+\n" \
+    "" "" "" "" ""
+  echo ""
+  echo "Expiration time is in days:hours:minutes format."
+  echo ""
+}
+
+# }}}
+
+# Check if no arguments are provided or help is requested
+if [ $# -eq 0 ]; then
+  help
+  exit 0
+fi
+case $F2B_ARG1 in
+"help")
+  help
+  exit 0
+  ;;
+"version")
+  echo "$F2B_SCRIPT version $VERSION"
+  echo "Author: Ismo Vuorinen <https://github.com/ivuorinen>"
+  exit 0
+  ;;
+"list-jails")
+  echo "$F2B_JAILS"
+  exit 0
+  ;;
+esac
+
+# Use case statement to check for commands: status
+if [ "$F2B_ARG1" == "status" ]; then
+  case $F2B_ARG2 in
+  "")
+    echo "Usage: $F2B_SCRIPT status all (to show status of all jails)"
+    echo "       $F2B_SCRIPT status [jail] (to show status of a specific jail)"
+    echo "       Available jails: $F2B_JAILS"
+    exit 0
+    ;;
+  "all")
+    $F2B_CLIENT status
+    exit 0
+    ;;
+  *)
+    f2b_jail_exists "$F2B_ARG2"
+    $F2B_CLIENT status "$F2B_ARG2"
+    exit 0
+    ;;
+  esac
+fi
+
+# Use case statement to check for commands: banned
+if [ "$F2B_ARG1" == "banned" ]; then
+  case $F2B_ARG2 in
+  "")
+    echo "Usage: $F2B_SCRIPT banned        Show all banned IP addresses with ban time left"
+    echo "       $F2B_SCRIPT banned [jail] Show all banned IP addresses with ban time left in a jail"
+    echo "       Available jails: $F2B_JAILS"
+    exit 0
+    ;;
+  "all")
+    f2b_banned_ips all
+    exit 0
+    ;;
+  *)
+    # If jail is not in the list, show error
+    if ! echo "$F2B_JAILS" | grep -q -w "$F2B_ARG2"; then
+      echo "Error: $F2B_ARG2 not found in: $F2B_JAILS"
+      exit 1
+    fi
+    f2b_banned_ips "$F2B_ARG2"
+    exit 0
+    ;;
+  esac
+fi
+
+# Use case statement to check for commands: ban
+if [ "$F2B_ARG1" == "ban" ]; then
+  case $F2B_ARG2 in
+  "")
+    echo "Error: Please provide an IP address to ban."
+    echo "Usage: $F2B_SCRIPT ban [ip]        Ban IP address in all jails"
+    echo "       $F2B_SCRIPT ban [ip] <jail> Ban IP address in a specific jail"
+    echo "       Available jails: $F2B_JAILS"
+    exit 1
+    ;;
+  *)
+    # Ban IP address in all jails
+    if [ -z "$F2B_ARG3" ]; then
+      # loop over jails and ban ip in all of them
+      for JAIL in $F2B_JAILS_ARRAY; do
+        f2b_ban_ip "$F2B_ARG2" "$JAIL"
+      done
+      exit 0
+    fi
+    # Ban IP address in a specific jail
+    f2b_jail_exists "$F2B_ARG3"
+    f2b_ban_ip "$F2B_ARG2" "$F2B_ARG3"
+    exit 0
+    ;;
+  esac
+fi
+
+# Use case statement to check for commands: unban
+if [ "$F2B_ARG1" == "unban" ]; then
+  case $F2B_ARG2 in
+  "")
+    echo "Error: Please provide an IP address to unban."
+    echo "Usage: $F2B_SCRIPT unban [ip] (to unban IP address in all jails)"
+    echo "       $F2B_SCRIPT unban [ip] [jail] (to unban IP address in a specific jail)"
+    echo "       Available jails: $F2B_JAILS"
+    exit 1
+    ;;
+  *)
+    # Unban IP address in all jails
+    if [ -z "$F2B_ARG3" ]; then
+      # loop over jails and unban ip in all of them
+      for JAIL in $F2B_JAILS_ARRAY; do
+        f2b_unban_ip "$F2B_ARG2" "$JAIL"
+      done
+      exit 0
+    fi
+    # Unban IP address in a specific jail
+    f2b_jail_exists "$F2B_ARG3"
+    f2b_unban_ip "$F2B_ARG2" "$F2B_ARG3"
+    exit 0
+    ;;
+  esac
+fi
+
+# Use case statement to check for commands: test
+if [ "$F2B_ARG1" == "test" ]; then
+  if [ -z "$F2B_ARG2" ]; then
+    echo "Error: Please provide an IP address to test."
+    echo "Usage: $F2B_SCRIPT test [ip] (to test IP address in all jails)"
+    exit 1
+  fi
+
+  # Get list of jails where IP is banned, remove [, ], and quotes
+  BANNED_IN_JAILS=$($F2B_CLIENT banned "$F2B_ARG2" | sed 's/\[//g; s/\]//g; s/"//g')
+  echo "IP address $F2B_ARG2 is banned in: $BANNED_IN_JAILS"
+  exit 0
+fi
+
+# Use case statement to check for commands: logs
+if [ "$F2B_ARG1" == "logs" ]; then
+  case $F2B_ARG2 in
+  "")
+    echo "Usage: $F2B_SCRIPT logs [jail]      (to show logs for a specific jail)"
+    echo "       $F2B_SCRIPT logs all         (to show logs for all jails)"
+    echo "       $F2B_SCRIPT logs all [ip]    (to show logs for a specific IP address in all jails)"
+    echo "       $F2B_SCRIPT logs [jail] [ip] (to show logs for a specific IP address in a specific jail)"
+    echo "       Available jails: $F2B_JAILS"
+    exit 0
+    ;;
+  "all")
+    if [ -n "$F2B_ARG3" ]; then
+      # loop over jails and show logs for all of them
+      for JAIL in $F2B_JAILS_ARRAY; do
+        f2b_jail_get_log_entries "$JAIL" "$F2B_ARG3"
+      done
+      exit 0
+    fi
+    # loop over jails and show logs for all of them
+    for JAIL in $F2B_JAILS; do
+      f2b_jail_get_log_entries "$JAIL"
+    done
+    exit 0
+    ;;
+  *)
+    # Show logs for a specific jail
+    f2b_jail_exists "$F2B_ARG3"
+    f2b_jail_get_log_entries "$F2B_ARG2"
+    exit 0
+    ;;
+  esac
+fi
+
+# Use case statement to check for commands: logs-watch
+if [ "$F2B_ARG1" == "logs-watch" ]; then
+  case $F2B_ARG2 in
+  "")
+    echo "Usage: $F2B_SCRIPT logs-watch [jail] (to watch logs for a specific jail)"
+    echo "       $F2B_SCRIPT logs-watch all (to watch logs for all jails)"
+    echo "       $F2B_SCRIPT logs-watch all [ip] (to watch logs for a specific IP address in all jails)"
+    echo "       $F2B_SCRIPT logs-watch [jail] [ip] (to watch logs for a specific IP address in a specific jail)"
+    echo "       Available jails: $F2B_JAILS"
+    exit 0
+    ;;
+  "all")
+    if [ -n "$F2B_ARG3" ]; then
+      # loop over jails and watch logs for all of them
+      for JAIL in $F2B_JAILS_ARRAY; do
+        f2b_poll_jail_log_entries "$JAIL" "$F2B_ARG3"
+      done
+      exit 0
+    fi
+    # loop over jails and watch logs for all of them
+    for JAIL in $F2B_JAILS; do
+      f2b_poll_jail_log_entries "$JAIL"
+    done
+    exit 0
+    ;;
+  *)
+    # Watch logs for a specific jail
+    f2b_jail_exists "$F2B_ARG3"
+    f2b_poll_jail_log_entries "$F2B_ARG2"
+    exit 0
+    ;;
+  esac
+fi
+
+# Use case statement to check for commands: service
+if [ "$F2B_ARG1" == "service" ]; then
+  case $F2B_ARG2 in
+  "start")
+    echo "Starting fail2ban service..."
+    sudo service fail2ban start
+    exit 0
+    ;;
+  "stop")
+    echo "Stopping fail2ban service..."
+    sudo service fail2ban stop
+    exit 0
+    ;;
+  "restart")
+    echo "Restarting fail2ban service..."
+    sudo service fail2ban stop
+    sudo service fail2ban start
+    exit 0
+    ;;
+  "status")
+    echo "Checking fail2ban service status..."
+    sudo service fail2ban status
+    exit 0
+    ;;
+  *)
+    echo "Usage: $F2B_SCRIPT service [start|stop|restart|status]"
+    exit 1
+    ;;
+  esac
+fi
+
+# If first argument is test-filter, run test-filter command
+if [ "$F2B_ARG1" == "test-filter" ]; then
+  F2B_REGEX_COMMAND="command -v fail2ban-regex"
+  F2B_REGEX_SUDOED="sudo $F2B_REGEX_COMMAND"
+  if [ -z "$F2B_REGEX_COMMAND" ] || [ ! -x "$F2B_REGEX_COMMAND" ]; then
+    echo "Error: fail2ban-regex command not found."
+    exit 1
+  fi
+  if [ -z "$F2B_ARG2" ]; then
+    F2B_FILTERS=$(sudo ls /etc/fail2ban/filter.d/ | sed 's/\.conf//g' | tr '\n' ' ')
+    echo "Error: Please provide a filter to test."
+    echo "Usage: $F2B_SCRIPT test-filter [filter]"
+    echo "       Available filters: $F2B_FILTERS"
+    exit 1
+  fi
+  F2B_FILTER_FILE="/etc/fail2ban/filter.d/$F2B_ARG2.conf"
+  if [ ! -f "$F2B_FILTER_FILE" ]; then
+    echo "Error: $F2B_ARG2 filter not found."
+    exit 1
+  fi
+  # Get log path from filter file
+  F2B_LOG_PATH=$(grep -i "logpath" "$F2B_FILTER_FILE" | awk '{print $3}')
+  if [ -z "$F2B_LOG_PATH" ]; then
+    echo "Error: logpath not found in: $F2B_FILTER_FILE"
+    exit 1
+  fi
+  # Get regex from filter file
+  F2B_REGEX=$(sudo grep -i "failregex" "$F2B_FILTER_FILE" |
+    awk '{for(i=2;i<=NF;++i) printf "%s ", $i}')
+  if [ -z "$F2B_REGEX" ]; then
+    echo "Error: failregex not found in: $F2B_FILTER_FILE"
+    exit 1
+  fi
+  # Test filter
+  echo "Testing filter: $F2B_ARG2"
+  echo "- Filter file: $F2B_FILTER_FILE"
+  echo "- Log path: $F2B_LOG_PATH"
+  echo "- Regex: $F2B_REGEX"
+  $F2B_REGEX_SUDOED "$F2B_LOG_PATH" "$F2B_REGEX"
+
+  unset F2B_REGEX_COMMAND F2B_REGEX_SUDOED F2B_FILTERS F2B_FILTER_FILE F2B_LOG_PATH F2B_REGEX
+fi
+
+# Show help if no valid command is provided
+help
+exit 0

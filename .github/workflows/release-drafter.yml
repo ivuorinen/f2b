@@ -11,4 +11,4 @@ permissions:
 
 jobs:
   Draft:
-    uses: ivuorinen/.github/.github/workflows/sync-labels.yml@main
+    uses: ivuorinen/ivuorinen/.github/workflows/sync-labels.yml@main

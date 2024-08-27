@@ -15,4 +15,4 @@ permissions:
 
 jobs:
   SuperLinter:
-    uses: ivuorinen/.github/.github/workflows/pr-lint.yml@main
+    uses: ivuorinen/ivuorinen/.github/workflows/pr-lint.yml@main

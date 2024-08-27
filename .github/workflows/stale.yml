@@ -15,4 +15,4 @@ permissions:
 
 jobs:
   stale:
-    uses: ivuorinen/.github/.github/workflows/stale.yml@main
+    uses: ivuorinen/ivuorinen/.github/workflows/stale.yml@main
