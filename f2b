@@ -647,7 +647,7 @@ if [ "$F2B_ARG1" == "ban" ]; then
     # Ban IP address in all jails
     if [ -z "$F2B_ARG3" ]; then
       # loop over jails and ban ip in all of them
-      for JAIL in $F2B_JAILS_ARRAY; do
+      for JAIL in "${F2B_JAILS_ARRAY[@]}"; do
         f2b_ban_ip "$F2B_ARG2" "$JAIL"
       done
       exit 0
@@ -674,7 +674,7 @@ if [ "$F2B_ARG1" == "unban" ]; then
     # Unban IP address in all jails
     if [ -z "$F2B_ARG3" ]; then
       # loop over jails and unban ip in all of them
-      for JAIL in $F2B_JAILS_ARRAY; do
+      for JAIL in "${F2B_JAILS_ARRAY[@]}"; do
         f2b_unban_ip "$F2B_ARG2" "$JAIL"
       done
       exit 0
@@ -715,7 +715,7 @@ if [ "$F2B_ARG1" == "logs" ]; then
   "all")
     if [ -n "$F2B_ARG3" ]; then
       # loop over jails and show logs for all of them
-      for JAIL in $F2B_JAILS_ARRAY; do
+      for JAIL in "${F2B_JAILS_ARRAY[@]}"; do
         f2b_jail_get_log_entries "$JAIL" "$F2B_ARG3"
       done
       exit 0
@@ -749,13 +749,13 @@ if [ "$F2B_ARG1" == "logs-watch" ]; then
   "all")
     if [ -n "$F2B_ARG3" ]; then
       # loop over jails and watch logs for all of them
-      for JAIL in $F2B_JAILS_ARRAY; do
+      for JAIL in "${F2B_JAILS_ARRAY[@]}"; do
         f2b_poll_jail_log_entries "$JAIL" "$F2B_ARG3"
       done
       exit 0
     fi
     # loop over jails and watch logs for all of them
-    for JAIL in $F2B_JAILS; do
+    for JAIL in "${F2B_JAILS[@]}"; do
       f2b_poll_jail_log_entries "$JAIL"
     done
     exit 0
