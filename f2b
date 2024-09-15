@@ -15,6 +15,13 @@ F2B_SCRIPT=$(basename "$0")
 # Get path to fail2ban-client
 F2B_CLIENT=$(command -v fail2ban-client)
 
+# Return version
+if [ "$1" == "version" ]; then
+  echo "$F2B_SCRIPT version $VERSION"
+  echo "Author Ismo Vuorinen <https://github.com/ivuorinen>"
+  exit 0
+fi
+
 # Check if fail2ban-client is installed
 if [ -z "$F2B_CLIENT" ]; then
   echo "Error: fail2ban-client is not installed, or not in the PATH."
@@ -841,6 +848,17 @@ if [ "$F2B_ARG1" == "test-filter" ]; then
   $F2B_REGEX_SUDOED "$F2B_LOG_PATH" "$F2B_REGEX"
 
   unset F2B_REGEX_COMMAND F2B_REGEX_SUDOED F2B_FILTERS F2B_FILTER_FILE F2B_LOG_PATH F2B_REGEX
+fi
+
+# Secret test command to test the script
+if [ "$F2B_ARG1" == "test" ]; then
+  case $F2B_ARG2 in
+  "timestamp")
+    echo f2b_secs_to_hours_minutes_seconds "$F2B_ARG3"
+    exit 0
+    ;;
+  esac
+  exit 0
 fi
 
 # Show help if no valid command is provided
