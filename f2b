@@ -850,8 +850,8 @@ if [ "$F2B_ARG1" == "test-filter" ]; then
   unset F2B_REGEX_COMMAND F2B_REGEX_SUDOED F2B_FILTERS F2B_FILTER_FILE F2B_LOG_PATH F2B_REGEX
 fi
 
-# Secret test command to test the script
-if [ "$F2B_ARG1" == "test" ]; then
+# Secret "_test" command to test the script
+if [ "$F2B_ARG1" == "_test" ]; then
   case $F2B_ARG2 in
   "timestamp")
     echo f2b_secs_to_hours_minutes_seconds "$F2B_ARG3"
