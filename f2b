@@ -728,7 +728,7 @@ if [ "$F2B_ARG1" == "logs" ]; then
     ;;
   *)
     # Show logs for a specific jail
-    f2b_jail_exists "$F2B_ARG3"
+    f2b_jail_exists "$F2B_ARG2"
     f2b_jail_get_log_entries "$F2B_ARG2"
     exit 0
     ;;
