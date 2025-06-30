@@ -755,7 +755,7 @@ if [ "$F2B_ARG1" == "logs-watch" ]; then
       exit 0
     fi
     # loop over jails and watch logs for all of them
-    for JAIL in "${F2B_JAILS[@]}"; do
+    for JAIL in "${F2B_JAILS_ARRAY[@]}"; do
       f2b_poll_jail_log_entries "$JAIL"
     done
     exit 0
