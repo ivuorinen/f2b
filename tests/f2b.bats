@@ -26,7 +26,7 @@ case "$cmd" in
   *)
     echo "Mocked fail2ban-client: $cmd $*"
     ;;
- esac
+esac
 MOCK
   chmod +x "$BATS_TEST_DIRNAME/bin/fail2ban-client"
 }
