@@ -205,7 +205,7 @@ f2b_poll_jail_log_entries() {
 f2b_jail_exists() {
   local JAIL=${1:-""}
 
-  if [ -z "$JAIL" ] && [ "$JAIL" != "" ]; then
+  if [ -z "$JAIL" ]; then
     echo "[f2b_jail_exists] Error: Please provide a jail to check if it exists."
     exit 1
   fi
