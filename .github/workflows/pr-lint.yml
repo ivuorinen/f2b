@@ -1,18 +1,36 @@
 ---
-name: PR Lint
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: Lint PR Code Base
 
 on:
-  push:
-    branches-ignore: [master, main]
-    # Remove the line above to run when pushing to master
   pull_request:
     branches: [master, main]
 
-permissions:
-  contents: read
-  packages: read
-  statuses: write
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: read-all
 
 jobs:
-  SuperLinter:
-    uses: ivuorinen/ivuorinen/.github/workflows/pr-lint.yml@main
+  Linter:
+    name: PR Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      statuses: write
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Yarn Lock Changes
+        uses: Simek/yarn-lock-changes@34017425198654c20162a4dfd4f238fbece9636f # v0.12.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run PR Lint
+        # https://github.com/ivuorinen/actions
+        uses: ivuorinen/actions/pr-lint@9480614ba2231013d99dd5b9c730d2b105b9e160 # 25.6.25
