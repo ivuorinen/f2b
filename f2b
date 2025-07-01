@@ -226,7 +226,7 @@ f2b_jail_exists() {
 # Usage: f2b_secs_to_hours_minutes_seconds <seconds>
 # Example: f2b_secs_to_hours_minutes_seconds 3600 (01:00:00)
 # Example: f2b_secs_to_hours_minutes_seconds 3661 (01:01:01)
-# Returns: hours:minutes:seconds
+# Returns: hours:minutes:seconds (hours can exceed 24)
 f2b_secs_to_hours_minutes_seconds() {
   local SECONDS=${1:-0}
 
@@ -240,7 +240,6 @@ f2b_secs_to_hours_minutes_seconds() {
     exit 1
   fi
 
-  local SECONDS=$((SECONDS % 86400))
   local HOURS=$((SECONDS / 3600))
   local SECONDS=$((SECONDS % 3600))
   local MINUTES=$((SECONDS / 60))
@@ -442,7 +441,7 @@ f2b_banned_ips() {
   local R2W=4  # Jail, sshd might be the most common
   local R3W=15 # IP Address, 3+1+3+1+3+1+3=15 (xxx.xxx.xxx)
   local R4W=19 # Banned Date, 10+1+8=19 (YYYY-MM-DD HH:MM:SS)
-  local R5W=8  # Ban Expires, 2+1+2+1+2=8 (HH:MM:SS)
+  local R5W=8  # Ban Expires, 2+1+2+1+2=8 (HH:MM:SS, hours may exceed 24)
 
   # Use BANNED_IPS to loop through the banned IPs and get values for the upcoming table
   # The table will have the following columns:
@@ -483,6 +482,9 @@ f2b_banned_ips() {
     BAN_EXPIRES_SECS=$(date -d "$BAN_EXPIRES" +%s)
     # Calculate the time remaining until the IP is unbanned
     local BAN_REMAINING_SECS=$((BAN_EXPIRES_SECS - CURRENT_TIME))
+    if [ "$BAN_REMAINING_SECS" -lt 0 ]; then
+      BAN_REMAINING_SECS=0
+    fi
 
     # Format the time remaining until the IP is unbanned
     local BAN_REMAINING=""
@@ -560,7 +562,8 @@ f2b_banned_ips() {
   printf "+-%-${R1W}s-+-%-${R2W}s-+-%-${R3W}s-+-%-${R4W}s-+-%-${R5W}s-+\n" \
     "" "" "" "" ""
   echo ""
-  echo "Expiration time is in days:hours:minutes format."
+  echo "Expiration time is in hours:minutes:seconds format."
+  echo "Hours may exceed 24."
   echo ""
 }
 
