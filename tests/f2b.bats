@@ -47,3 +47,15 @@ MOCK
   run "$BATS_TEST_DIRNAME/../f2b" logs sshd
   [ "$status" -eq 0 ]
 }
+
+@test "format seconds into DD:HH:MM:SS" {
+  run bash -c "source <(awk '/^f2b_secs_to_hours_minutes_seconds()/,/^}/' '$BATS_TEST_DIRNAME/../f2b'); f2b_secs_to_hours_minutes_seconds 90061"
+  [ "$status" -eq 0 ]
+  [ "$output" = "01:01:01:01" ]
+}
+
+@test "negative seconds returns error" {
+  run bash -c "source <(awk '/^f2b_secs_to_hours_minutes_seconds()/,/^}/' '$BATS_TEST_DIRNAME/../f2b'); f2b_secs_to_hours_minutes_seconds -1"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"positive integer"* ]]
+}
