@@ -482,11 +482,11 @@ f2b_banned_ips() {
     local BAN_EXPIRES_SECS=""
     BAN_EXPIRES_SECS=$(date -d "$BAN_EXPIRES" +%s)
     # Calculate the time remaining until the IP is unbanned
-    local BAN_REMAINING=$((BAN_EXPIRES_SECS - CURRENT_TIME))
+    local BAN_REMAINING_SECS=$((BAN_EXPIRES_SECS - CURRENT_TIME))
 
     # Format the time remaining until the IP is unbanned
     local BAN_REMAINING=""
-    BAN_REMAINING=$(f2b_secs_to_hours_minutes_seconds "$BAN_REMAINING")
+    BAN_REMAINING=$(f2b_secs_to_hours_minutes_seconds "$BAN_REMAINING_SECS")
 
     # Get the length of the ban number
     local BAN_NO_LENGTH=${#BAN_NO}
