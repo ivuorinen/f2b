@@ -1,0 +1,180 @@
+# golangci-lint configuration for f2b project
+# https://golangci-lint.run/usage/configuration/
+
+version: "1"
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+  go: "1.21"
+
+linters:
+  enable:
+    # Essential linters
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - typecheck
+    - unused
+
+    # Code quality linters
+    - gofmt
+    - goimports
+    - gosec
+    - misspell
+    - unconvert
+    - goconst
+    - gocyclo
+    - revive
+    - prealloc
+    - bodyclose
+    - rowserrcheck
+    - sqlclosecheck
+    - durationcheck
+    - errorlint
+    - makezero
+    - predeclared
+    - wastedassign
+    - containedctx
+    - contextcheck
+    - errname
+    - nilnil
+    - thelper
+    - usestdlibvars
+
+  disable:
+    # Disable overly strict linters for this project
+    - varnamelen # Variable name length checking
+    - tagliatelle # Struct tag format checking
+    - testpackage # Separate test package requirement
+    - paralleltest # Parallel test requirement
+    - forcetypeassert # Force type assertion
+    - ireturn # Return interface checking
+    - nlreturn # New line return checking
+    - cyclop # Cyclomatic complexity (covered by gocyclo)
+    - funlen # Function length checking
+    - gocognit # Cognitive complexity checking
+    - maintidx # Maintainability index
+    - nestif # Nested if checking
+    - lll # Line length checking
+    - godox # TODO/FIXME/etc comments
+    - wsl # Whitespace linter (too strict)
+    - gocritic # Too many style opinions
+    - whitespace # Whitespace checking
+    - stylecheck # Style checking
+    - nakedret # Naked returns
+    - nolintlint # Nolint directive checking
+    - noctx # Context checking
+
+linters-settings:
+  errcheck:
+    check-type-assertions: false
+    check-blank: false
+    exclude-functions:
+      - (*os.File).Close
+      - (io.Closer).Close
+
+  gosec:
+    excludes:
+      - G204 # Subprocess launched with variable (needed for fail2ban commands)
+      - G301 # Poor file permissions (log files might have different perms)
+      - G304 # File path provided as tainted input (expected for log files)
+
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment # Can be too strict for simple structs
+      - shadow # Variable shadowing can be acceptable
+
+  gocyclo:
+    min-complexity: 20
+
+  goconst:
+    min-len: 3
+    min-occurrences: 4
+
+  misspell:
+    locale: US
+
+  prealloc:
+    simple: true
+    range-loops: true
+    for-loops: false
+
+  revive:
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+        disabled: true # Allow unexported public functions for CLI tools
+      - name: if-return
+      - name: increment-decrement
+      - name: var-naming
+      - name: var-declaration
+      - name: package-comments
+        disabled: true # Don't require package comments
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: unexported-return
+      - name: indent-error-flow
+      - name: errorf
+      - name: empty-block
+      - name: superfluous-else
+      - name: unused-parameter
+        disabled: true # Cobra commands often have unused parameters
+      - name: unreachable-code
+      - name: redefines-builtin-id
+
+  errorlint:
+    errorf: false # Allow %v instead of %w for some cases
+
+issues:
+  exclude-use-default: false
+  exclude:
+    # Exclude some common false positives
+    - "Error return value of .* is not checked"
+    - "exported (type|method|function) .* should have comment or be unexported"
+    - "should have a package comment"
+    - "unused-parameter.*cmd.*cobra.Command" # Cobra command parameters
+    - "G204.*fail2ban" # Allow subprocess calls for fail2ban
+    - "shadow.*err" # Allow error variable shadowing
+
+  exclude-rules:
+    # Exclude gosec G204 and G304 for fail2ban command execution and file operations
+    - path: fail2ban/fail2ban.go
+      linters:
+        - gosec
+      text: "G204|G304"
+
+    # Exclude some linters for test files
+    - path: _test\.go
+      linters:
+        - gosec
+        - errcheck
+        - goconst
+        - unparam
+        - funlen
+        - gocyclo
+        - revive
+
+    # Exclude main.go from some checks
+    - path: main\.go
+      linters:
+        - goconst
+
+    # Exclude command files from unused parameter checks
+    - path: cmd/.*\.go
+      linters:
+        - revive
+      text: "unused-parameter.*cmd.*cobra.Command"
+
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  new: false
+  fix: false
