@@ -513,6 +513,9 @@ func (c *RealClient) ListFilters() ([]string, error) {
 }
 
 func TestFilter(filter string) (string, error) {
+	if !isValidFilter(filter) {
+		return "", fmt.Errorf("invalid filter name")
+	}
 	path := filterDir + "/" + filter + ".conf"
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -544,6 +547,9 @@ func TestFilter(filter string) (string, error) {
 }
 
 func (c *RealClient) TestFilter(filter string) (string, error) {
+	if !isValidFilter(filter) {
+		return "", fmt.Errorf("invalid filter name")
+	}
 	path := filterDir + "/" + filter + ".conf"
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -572,6 +578,22 @@ func (c *RealClient) TestFilter(filter string) (string, error) {
 
 	output, err := currentRunner.CombinedOutputWithSudo("fail2ban-regex", logPath, path)
 	return string(output), err
+}
+
+// isValidFilter validates a filter name to prevent path traversal
+func isValidFilter(filter string) bool {
+	if filter == "" {
+		return false
+	}
+	if strings.Contains(filter, "..") || strings.ContainsAny(filter, "/\\") {
+		return false
+	}
+	for _, r := range filter {
+		if !(r >= 'a' && r <= 'z') && !(r >= 'A' && r <= 'Z') && !(r >= '0' && r <= '9') && r != '-' && r != '_' && r != '.' {
+			return false
+		}
+	}
+	return true
 }
 
 // isValidIP validates an IP address string
