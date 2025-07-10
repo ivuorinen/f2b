@@ -46,12 +46,10 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	} else {
-		// Use a no-op client for skip-only commands to prevent nil-pointer dereferences
-		client = fail2ban.NewNoOpClient()
-	} else {
-		// Use a no-op client for skip-only commands to prevent nil-pointer dereferences
-		client = fail2ban.NewNoOpClient()
+} else {
+	// Use a no-op client for skip-only commands to prevent nil-pointer dereferences
+	client = fail2ban.NewNoOpClient()
+}
 
 	// Set log/filter dir globally for fail2ban logic
 	fail2ban.SetLogDir(config.LogDir)
