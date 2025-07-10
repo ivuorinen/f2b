@@ -22,7 +22,8 @@ jobs:
       - name: Build
         run: |
           GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} \
-            go build -o f2b_${{ matrix.os }}_${{ matrix.arch }} ./...
+            go build -ldflags "-X github.com/ivuorinen/f2b/cmd.version=${{ github.ref_name }}" \
+            -o f2b_${{ matrix.os }}_${{ matrix.arch }} ./...
       - name: Create GitHub Release
         id: create_release
         uses: actions/create-release@0cb9c9b65d5d1901c1f53e5e66eaf4afd303e70e # v1.1.4

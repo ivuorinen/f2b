@@ -22,7 +22,8 @@ A modern, secure, and extensible Go CLI tool for managing [Fail2Ban](https://www
 # Clone and build
 git clone https://github.com/ivuorinen/f2b.git
 cd f2b
-go build -o f2b .
+# set version information via ldflags if desired
+go build -ldflags "-X github.com/ivuorinen/f2b/cmd.version=1.2.3" -o f2b .
 
 # Or install globally
 go install github.com/ivuorinen/f2b@latest
