@@ -1,3 +1,7 @@
 *.log
 f2b
 coverage.*
+.env*
+*.exe
+*.dll
+.DS_Store
