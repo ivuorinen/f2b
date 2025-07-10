@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -249,8 +250,17 @@ func (m *MockClient) TestFilter(filter string) (string, error) {
 
 // Mock validation functions (simplified versions of the real ones)
 func isValidIPMock(ip string) bool {
-	// Simple validation - just check for basic format
-	return len(ip) > 6 && strings.Contains(ip, ".")
+	parts := strings.Split(ip, ".")
+	if len(parts) != 4 {
+		return false
+	}
+	for _, p := range parts {
+		n, err := strconv.Atoi(p)
+		if err != nil || n < 0 || n > 255 {
+			return false
+		}
+	}
+	return true
 }
 
 func isValidJailMock(jail string) bool {
