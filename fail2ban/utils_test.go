@@ -337,7 +337,7 @@ func TestBanRecordFormatting(t *testing.T) {
 
 	fail2ban.SetRunner(mock)
 
-	client, err := fail2ban.NewClient()
+	client, err := fail2ban.NewClient(fail2ban.DefaultLogDir, fail2ban.DefaultFilterDir)
 	if err != nil {
 		t.Fatalf("failed to create client: %v", err)
 	}
@@ -433,7 +433,7 @@ func TestVersionComparisonEdgeCases(t *testing.T) {
 			}
 			fail2ban.SetRunner(mock)
 
-			_, err := fail2ban.NewClient()
+			_, err := fail2ban.NewClient(fail2ban.DefaultLogDir, fail2ban.DefaultFilterDir)
 
 			if tt.expectError && err == nil {
 				t.Fatal("expected error but got none")
@@ -501,7 +501,7 @@ func TestClientInitializationEdgeCases(t *testing.T) {
 			tt.setupMock(mock)
 			fail2ban.SetRunner(mock)
 
-			_, err := fail2ban.NewClient()
+			_, err := fail2ban.NewClient(fail2ban.DefaultLogDir, fail2ban.DefaultFilterDir)
 
 			if tt.expectError && err == nil {
 				t.Fatal("expected error but got none")
@@ -530,7 +530,7 @@ func TestConcurrentAccess(t *testing.T) {
 	mock.SetResponse("fail2ban-client banned 192.168.1.100", []byte(`["sshd"]`))
 	fail2ban.SetRunner(mock)
 
-	client, err := fail2ban.NewClient()
+	client, err := fail2ban.NewClient(fail2ban.DefaultLogDir, fail2ban.DefaultFilterDir)
 	if err != nil {
 		t.Fatalf("failed to create client: %v", err)
 	}
@@ -584,7 +584,7 @@ func TestMemoryUsage(t *testing.T) {
 
 	// Create and destroy many clients
 	for i := 0; i < 1000; i++ {
-		client, err := fail2ban.NewClient()
+		client, err := fail2ban.NewClient(fail2ban.DefaultLogDir, fail2ban.DefaultFilterDir)
 		if err != nil {
 			t.Fatalf("failed to create client: %v", err)
 		}

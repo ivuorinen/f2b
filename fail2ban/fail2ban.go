@@ -18,12 +18,14 @@ import (
 const (
 	// DefaultLogDir is the default directory for fail2ban logs
 	DefaultLogDir = "/var/log"
+	// DefaultFilterDir is the default directory for fail2ban filters
+	DefaultFilterDir = "/etc/fail2ban/filter.d"
 	// AllFilter represents all jails/IPs filter
 	AllFilter = "all"
 )
 
 var logDir = DefaultLogDir // base directory for fail2ban logs
-var filterDir = "/etc/fail2ban/filter.d"
+var filterDir = DefaultFilterDir
 
 func SetLogDir(dir string) {
 	logDir = dir
@@ -443,7 +445,7 @@ func formatDuration(sec int64) string {
 }
 
 func (c *RealClient) GetLogLines(jail, ip string) ([]string, error) {
-	pattern := filepath.Join("/var/log", "fail2ban.log*")
+	pattern := filepath.Join(c.LogDir, "fail2ban.log*")
 	files, err := filepath.Glob(pattern)
 	if err != nil {
 		return nil, err
@@ -498,7 +500,7 @@ func ListFilters() ([]string, error) {
 }
 
 func (c *RealClient) ListFilters() ([]string, error) {
-	entries, err := os.ReadDir(filterDir)
+	entries, err := os.ReadDir(c.FilterDir)
 	if err != nil {
 		return nil, fmt.Errorf("could not list filters: %v", err)
 	}
@@ -550,7 +552,7 @@ func (c *RealClient) TestFilter(filter string) (string, error) {
 	if !isValidFilter(filter) {
 		return "", fmt.Errorf("invalid filter name")
 	}
-	path := filterDir + "/" + filter + ".conf"
+	path := filepath.Join(c.FilterDir, filter+".conf")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", fmt.Errorf("filter not found: %v", err)
