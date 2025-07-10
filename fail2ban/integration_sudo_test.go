@@ -78,7 +78,7 @@ func TestSudoIntegrationWithClient(t *testing.T) {
 			SetRunner(mockRunner)
 
 			// Test client creation
-			client, err := NewClient()
+			client, err := NewClient(DefaultLogDir, DefaultFilterDir)
 
 			if tt.expectClientError {
 				if err == nil {

@@ -36,8 +36,10 @@ type Client interface {
 
 // RealClient is the default implementation of Client, using the local fail2ban-client binary.
 type RealClient struct {
-	Path  string   // Path to fail2ban-client
-	Jails []string // List of available jails
+	Path      string // Path to fail2ban-client
+	Jails     []string
+	LogDir    string
+	FilterDir string
 }
 
 // BanRecord represents a single ban entry with jail, IP, ban time, and remaining duration.
@@ -52,7 +54,7 @@ type BanRecord struct {
 // It checks for fail2ban-client in PATH, ensures the service is running, checks sudo privileges,
 // and loads available jails. Returns an error if fail2ban is not available, not running, or
 // user lacks sudo privileges.
-func NewClient() (*RealClient, error) {
+func NewClient(logDir, filterDir string) (*RealClient, error) {
 	// Check sudo privileges first (skip in test environment unless forced)
 	if !isTest() || os.Getenv("F2B_TEST_SUDO") == "true" {
 		if err := CheckSudoRequirements(); err != nil {
@@ -69,7 +71,14 @@ func NewClient() (*RealClient, error) {
 			return nil, errors.New("fail2ban-client not found in PATH")
 		}
 	}
-	rc := &RealClient{Path: path}
+	if logDir == "" {
+		logDir = DefaultLogDir
+	}
+	if filterDir == "" {
+		filterDir = DefaultFilterDir
+	}
+
+	rc := &RealClient{Path: path, LogDir: logDir, FilterDir: filterDir}
 
 	// Version check - use sudo if needed
 	out, err := RunnerCombinedOutputWithSudo(path, "-V")
