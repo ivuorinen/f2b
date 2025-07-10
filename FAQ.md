@@ -23,7 +23,7 @@ See the README for full instructions. In short:
 ```bash
 git clone https://github.com/ivuorinen/f2b.git
 cd f2b
-go build -o f2b .
+go build -ldflags "-X github.com/ivuorinen/f2b/cmd.version=1.2.3" -o f2b .
 ```
 
 Or install globally:

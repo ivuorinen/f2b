@@ -785,7 +785,7 @@ func TestVersionCommand(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	expectedOut := "f2b version 1.0.0\n"
+	expectedOut := fmt.Sprintf("f2b version %s\n", version)
 	if output != expectedOut {
 		t.Errorf("expected output %q, got %q", expectedOut, output)
 	}
