@@ -14,8 +14,8 @@ import (
 
 // TestSetLogDir tests the log directory setting functionality
 func TestSetLogDir(t *testing.T) {
-	// Save original log directory
-	originalLogDir := "/var/log"
+	// Save original log directory using GetLogDir to avoid test pollution
+	originalLogDir := fail2ban.GetLogDir()
 
 	// Test setting a new log directory
 	testDir := "/tmp/test-logs"
