@@ -54,11 +54,6 @@ func (r *OSRunner) CombinedOutput(name string, args ...string) ([]byte, error) {
 
 // CombinedOutputWithSudo executes a command with sudo if needed.
 func (r *OSRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte, error) {
-	// In test environment, prevent real execution by delegating to mock
-	if isTest() {
-		// This should not be called in tests - the mock runner should be used instead
-		return nil, fmt.Errorf("OSRunner should not be used in tests")
-	}
 
 	checker := GetSudoChecker()
 
