@@ -35,7 +35,7 @@ func main() {
 	}
 
 	if !skip {
-		client, err = fail2ban.NewClient()
+		client, err = fail2ban.NewClient(config.LogDir, config.FilterDir)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "Error:", err)
 			// Check if this is a sudo privilege error
@@ -49,8 +49,6 @@ func main() {
 		// Use a no-op client for skip-only commands to prevent nil-pointer dereferences
 		client = fail2ban.NewNoOpClient()
 	}
-	fail2ban.SetLogDir(config.LogDir)
-	fail2ban.SetFilterDir(config.FilterDir)
 
 	if err := cmd.Execute(client, config); err != nil {
 		os.Exit(1)
