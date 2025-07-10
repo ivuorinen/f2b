@@ -31,6 +31,7 @@ jobs:
         run: go vet ./...
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v7
+         with:
           args: --timeout=5m
       - name: Run integration tests and collect coverage
         run: |
