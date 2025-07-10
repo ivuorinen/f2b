@@ -28,6 +28,11 @@ var filterDir = "/etc/fail2ban/filter.d"
 func SetLogDir(dir string) {
 	logDir = dir
 }
+
+// GetLogDir returns the current log directory path
+func GetLogDir() string {
+	return logDir
+}
 func SetFilterDir(dir string) {
 	filterDir = dir
 }
