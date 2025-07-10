@@ -68,6 +68,16 @@ func BanCmd(client fail2ban.Client, config *Config) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringP("format", "f", "", "Output format: plain or json")
+	// Read the format flag and override config.Format if set
+	format, _ := cmd.Flags().GetString("format")
+	if format != "" {
+		config.Format = format
+	}
+	// Output results
+	if (config != nil && config.Format == JSONFormat) || format == JSONFormat {
+		// existing JSON output logic...
+	} else {
+		// existing plain output logic...
+	}
 	return cmd
 }
