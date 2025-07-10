@@ -50,8 +50,6 @@ func main() {
 	// Use a no-op client for skip-only commands to prevent nil-pointer dereferences
 	client = fail2ban.NewNoOpClient()
 }
-
-	// Set log/filter dir globally for fail2ban logic
 	fail2ban.SetLogDir(config.LogDir)
 	fail2ban.SetFilterDir(config.FilterDir)
 
