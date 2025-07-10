@@ -1,5 +1,5 @@
 *.log
-f2b
+/f2b*
 coverage.*
 .env*
 *.exe
