@@ -978,3 +978,18 @@ logpath = /var/log/auth.log
 		t.Logf("TestFilter result: %s", result)
 	}
 }
+
+func TestIsValidFilter(t *testing.T) {
+	valid := []string{"sshd", "nginx-error", "custom.filter"}
+	invalid := []string{"../evil", "bad/name", "bad\\name", "", ".."}
+	for _, f := range valid {
+		if !isValidFilter(f) {
+			t.Errorf("expected filter %s to be valid", f)
+		}
+	}
+	for _, f := range invalid {
+		if isValidFilter(f) {
+			t.Errorf("expected filter %s to be invalid", f)
+		}
+	}
+}
