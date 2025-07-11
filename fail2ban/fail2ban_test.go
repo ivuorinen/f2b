@@ -62,7 +62,7 @@ func TestNewClient(t *testing.T) {
 			}
 			SetRunner(mockRunner)
 
-			client, err := NewClient()
+			client, err := NewClient(DefaultLogDir, DefaultFilterDir)
 
 			if tt.expectError {
 				if err == nil {
@@ -145,14 +145,14 @@ func TestListJails(t *testing.T) {
 
 			if tt.expectError {
 				// For error cases, we expect NewClient to fail
-				_, err := NewClient()
+				_, err := NewClient(DefaultLogDir, DefaultFilterDir)
 				if err == nil {
 					t.Fatal("expected error but got none")
 				}
 				return
 			}
 
-			client, err := NewClient()
+			client, err := NewClient(DefaultLogDir, DefaultFilterDir)
 			if err != nil {
 				t.Fatalf("failed to create client: %v", err)
 			}
@@ -198,7 +198,7 @@ func TestStatusAll(t *testing.T) {
 
 	SetRunner(mock)
 
-	client, err := NewClient()
+	client, err := NewClient(DefaultLogDir, DefaultFilterDir)
 	if err != nil {
 		t.Fatalf("failed to create client: %v", err)
 	}
@@ -237,7 +237,7 @@ func TestStatusJail(t *testing.T) {
 
 	SetRunner(mock)
 
-	client, err := NewClient()
+	client, err := NewClient(DefaultLogDir, DefaultFilterDir)
 	if err != nil {
 		t.Fatalf("failed to create client: %v", err)
 	}
@@ -316,7 +316,7 @@ func TestBanIP(t *testing.T) {
 
 			SetRunner(mock)
 
-			client, err := NewClient()
+			client, err := NewClient(DefaultLogDir, DefaultFilterDir)
 			if err != nil {
 				t.Fatalf("failed to create client: %v", err)
 			}
@@ -392,7 +392,7 @@ func TestUnbanIP(t *testing.T) {
 
 			SetRunner(mock)
 
-			client, err := NewClient()
+			client, err := NewClient(DefaultLogDir, DefaultFilterDir)
 			if err != nil {
 				t.Fatalf("failed to create client: %v", err)
 			}
@@ -478,7 +478,7 @@ func TestBannedIn(t *testing.T) {
 
 			SetRunner(mock)
 
-			client, err := NewClient()
+			client, err := NewClient(DefaultLogDir, DefaultFilterDir)
 			if err != nil {
 				t.Fatalf("failed to create client: %v", err)
 			}
@@ -537,7 +537,7 @@ func TestGetBanRecords(t *testing.T) {
 
 	SetRunner(mock)
 
-	client, err := NewClient()
+	client, err := NewClient(DefaultLogDir, DefaultFilterDir)
 	if err != nil {
 		t.Fatalf("failed to create client: %v", err)
 	}
@@ -654,7 +654,7 @@ func TestListFilters(t *testing.T) {
 	mock.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
 	SetRunner(mock)
 
-	client, err := NewClient()
+	client, err := NewClient(DefaultLogDir, DefaultFilterDir)
 	if err != nil {
 		t.Fatalf("failed to create client: %v", err)
 	}
@@ -705,7 +705,7 @@ logpath = /var/log/auth.log`
 
 	SetRunner(mock)
 
-	client, err := NewClient()
+	client, err := NewClient(DefaultLogDir, DefaultFilterDir)
 	if err != nil {
 		t.Fatalf("failed to create client: %v", err)
 	}
@@ -764,7 +764,7 @@ func TestVersionComparison(t *testing.T) {
 			}
 			SetRunner(mock)
 
-			_, err := NewClient()
+			_, err := NewClient(DefaultLogDir, DefaultFilterDir)
 
 			if tt.expectError && err == nil {
 				t.Fatal("expected error but got none")
@@ -976,5 +976,20 @@ logpath = /var/log/auth.log
 		t.Logf("TestFilter failed as expected: %v", err)
 	} else {
 		t.Logf("TestFilter result: %s", result)
+	}
+}
+
+func TestIsValidFilter(t *testing.T) {
+	valid := []string{"sshd", "nginx-error", "custom.filter"}
+	invalid := []string{"../evil", "bad/name", "bad\\name", "", ".."}
+	for _, f := range valid {
+		if !isValidFilter(f) {
+			t.Errorf("expected filter %s to be valid", f)
+		}
+	}
+	for _, f := range invalid {
+		if isValidFilter(f) {
+			t.Errorf("expected filter %s to be invalid", f)
+		}
 	}
 }

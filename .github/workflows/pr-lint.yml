@@ -25,15 +25,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - name: Install golangci-lint
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.52.2
       - name: Run go fmt
         run: go fmt ./...
       - name: Run go vet
         run: go vet ./...
       - name: Run golangci-lint
-        run: golangci-lint run
+        uses: golangci/golangci-lint-action@v7
+        with:
+          args: --timeout=5m
       - name: Run integration tests and collect coverage
         run: |
           go test -coverprofile=coverage.out ./...
