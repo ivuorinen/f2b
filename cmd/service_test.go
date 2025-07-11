@@ -104,11 +104,15 @@ func TestServiceCmd(t *testing.T) {
 			err := cmd.Execute()
 
 			// Restore stdout and get output
-			w.Close()
+			if err := w.Close(); err != nil {
+				t.Fatalf("failed to close writer: %v", err)
+			}
 			os.Stdout = oldStdout
 
 			var stdoutBuf bytes.Buffer
-			stdoutBuf.ReadFrom(r)
+			if _, err := stdoutBuf.ReadFrom(r); err != nil {
+				t.Fatalf("failed to read output: %v", err)
+			}
 			output := stdoutBuf.String() + errBuf.String()
 
 			if tt.expectError {
@@ -156,11 +160,18 @@ func TestServiceCmdWithJSONFormat(t *testing.T) {
 	err := cmd.Execute()
 
 	// Restore stdout and get output
-	w.Close()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("failed to close writer: %v", err)
+	}
 	os.Stdout = oldStdout
 
 	var stdoutBuf bytes.Buffer
-	stdoutBuf.ReadFrom(r)
+	if _, err := stdoutBuf.ReadFrom(r); err != nil {
+		t.Fatalf("failed to read output: %v", err)
+	}
 	output := stdoutBuf.String()
 
 	if err != nil {
@@ -264,11 +275,15 @@ func TestServiceCmdValidActions(t *testing.T) {
 			err := cmd.Execute()
 
 			// Restore stdout and get output
-			w.Close()
+			if err := w.Close(); err != nil {
+				t.Fatalf("failed to close writer: %v", err)
+			}
 			os.Stdout = oldStdout
 
 			var stdoutBuf bytes.Buffer
-			stdoutBuf.ReadFrom(r)
+			if _, err := stdoutBuf.ReadFrom(r); err != nil {
+				t.Fatalf("failed to read output: %v", err)
+			}
 			output := stdoutBuf.String()
 
 			if err != nil {
@@ -312,11 +327,15 @@ func TestServiceCmdMultipleArgs(t *testing.T) {
 	err := cmd.Execute()
 
 	// Restore stdout and get output
-	w.Close()
+	if err := w.Close(); err != nil {
+		t.Fatalf("failed to close writer: %v", err)
+	}
 	os.Stdout = oldStdout
 
 	var stdoutBuf bytes.Buffer
-	stdoutBuf.ReadFrom(r)
+	if _, err := stdoutBuf.ReadFrom(r); err != nil {
+		t.Fatalf("failed to read output: %v", err)
+	}
 	output := stdoutBuf.String()
 
 	if err != nil {
@@ -356,11 +375,15 @@ func TestServiceCmdEmptyResponse(t *testing.T) {
 	err := cmd.Execute()
 
 	// Restore stdout and get output
-	w.Close()
+	if err := w.Close(); err != nil {
+		t.Fatalf("failed to close writer: %v", err)
+	}
 	os.Stdout = oldStdout
 
 	var stdoutBuf bytes.Buffer
-	stdoutBuf.ReadFrom(r)
+	if _, err := stdoutBuf.ReadFrom(r); err != nil {
+		t.Fatalf("failed to read output: %v", err)
+	}
 	output := stdoutBuf.String()
 
 	if err != nil {
@@ -409,14 +432,20 @@ func BenchmarkServiceCmd(b *testing.B) {
 		os.Stdout = w
 
 		cmd.SetArgs([]string{"status"})
-		_ = cmd.Execute()
+		if err := cmd.Execute(); err != nil {
+			b.Fatalf("execute failed: %v", err)
+		}
 
 		// Restore stdout
-		w.Close()
+		if err := w.Close(); err != nil {
+			b.Fatalf("failed to close writer: %v", err)
+		}
 		os.Stdout = oldStdout
 
 		// Read and discard output
 		var stdoutBuf bytes.Buffer
-		stdoutBuf.ReadFrom(r)
+		if _, err := stdoutBuf.ReadFrom(r); err != nil {
+			b.Fatalf("failed to read output: %v", err)
+		}
 	}
 }

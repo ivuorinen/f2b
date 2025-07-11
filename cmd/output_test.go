@@ -58,11 +58,15 @@ func TestPrintOutput(t *testing.T) {
 
 			PrintOutput(tt.data, tt.format)
 
-			w.Close()
+			if err := w.Close(); err != nil {
+				t.Fatalf("unexpected close error: %v", err)
+			}
 			os.Stdout = oldStdout
 
 			var buf bytes.Buffer
-			buf.ReadFrom(r)
+			if _, err := buf.ReadFrom(r); err != nil {
+				t.Fatalf("failed to read output: %v", err)
+			}
 			output := buf.String()
 
 			if output != tt.expected {
@@ -164,12 +168,16 @@ func TestPrintError(t *testing.T) {
 
 			PrintError(tt.err)
 
-			w.Close()
+			if err := w.Close(); err != nil {
+				t.Fatalf("failed to close pipe writer: %v", err)
+			}
 			os.Stderr = oldStderr
 			Logger.SetOutput(oldOutput)
 
 			var stderrBuf bytes.Buffer
-			stderrBuf.ReadFrom(r)
+			if _, err := stderrBuf.ReadFrom(r); err != nil {
+				t.Fatalf("failed to read stderr: %v", err)
+			}
 			stderrOutput := stderrBuf.String()
 			logOutput := logBuf.String()
 
@@ -202,12 +210,16 @@ func TestPrintErrorf(t *testing.T) {
 
 	PrintErrorf("formatted error: %s %d", "test", 42)
 
-	w.Close()
+	if err := w.Close(); err != nil {
+		t.Fatalf("failed to close pipe writer: %v", err)
+	}
 	os.Stderr = oldStderr
 	Logger.SetOutput(oldOutput)
 
 	var stderrBuf bytes.Buffer
-	stderrBuf.ReadFrom(r)
+	if _, err := stderrBuf.ReadFrom(r); err != nil {
+		t.Fatalf("failed to read stderr: %v", err)
+	}
 	stderrOutput := stderrBuf.String()
 	logOutput := logBuf.String()
 
@@ -387,8 +399,15 @@ func BenchmarkPrintError(b *testing.B) {
 	oldStderr := os.Stderr
 	oldOutput := Logger.Out
 
-	devNull, _ := os.Open(os.DevNull)
-	defer devNull.Close()
+	devNull, derr := os.Open(os.DevNull)
+	if derr != nil {
+		b.Fatalf("failed to open dev null: %v", derr)
+	}
+	defer func() {
+		if cerr := devNull.Close(); cerr != nil {
+			b.Fatalf("failed to close dev null: %v", cerr)
+		}
+	}()
 
 	os.Stderr = devNull
 	Logger.SetOutput(devNull)
