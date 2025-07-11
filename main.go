@@ -15,16 +15,7 @@ func main() {
 	var err error
 
 	// Build config from env/flags
-	config := cmd.Config{}
-	config.LogDir = os.Getenv("F2B_LOG_DIR")
-	if config.LogDir == "" {
-		config.LogDir = "/var/log"
-	}
-	config.FilterDir = os.Getenv("F2B_FILTER_DIR")
-	if config.FilterDir == "" {
-		config.FilterDir = "/etc/fail2ban/filter.d"
-	}
-	config.Format = "plain"
+	config := cmd.NewConfigFromEnv()
 
 	skip := false
 	if len(args) > 1 {

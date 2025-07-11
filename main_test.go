@@ -539,7 +539,6 @@ func TestMainConfigurationParsing(t *testing.T) {
 			if config.FilterDir == "" {
 				config.FilterDir = "/etc/fail2ban/filter.d"
 			}
-			config.Format = "plain"
 
 			if config.LogDir != tt.expectedLogDir {
 				t.Errorf("expected LogDir=%q, got %q", tt.expectedLogDir, config.LogDir)
