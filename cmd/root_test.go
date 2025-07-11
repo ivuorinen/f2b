@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"strings"
 	"testing"
@@ -516,7 +517,7 @@ func TestCompletionCmdExecution(t *testing.T) {
 			testRoot.AddCommand(UnbanCmd(mockClient, &testConfig))
 			testRoot.AddCommand(TestIPCmd(mockClient, testConfig.Format))
 			testRoot.AddCommand(LogsCmd(mockClient, &testConfig))
-			testRoot.AddCommand(LogsWatchCmd(mockClient, &testConfig))
+			testRoot.AddCommand(LogsWatchCmd(context.Background(), mockClient, &testConfig))
 			testRoot.AddCommand(ServiceCmd(&testConfig))
 			testRoot.AddCommand(VersionCmd(testConfig.Format))
 			testRoot.AddCommand(TestFilterCmd(mockClient, &testConfig))

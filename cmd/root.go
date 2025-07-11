@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -27,6 +28,7 @@ var (
 
 func Execute(client fail2ban.Client, config Config) error {
 	cfg = config
+	ctx := context.Background()
 	rootCmd.AddCommand(ListJailsCmd(client))
 	rootCmd.AddCommand(StatusCmd(client, &cfg))
 	rootCmd.AddCommand(BannedCmd(client, cfg.Format))
@@ -34,7 +36,7 @@ func Execute(client fail2ban.Client, config Config) error {
 	rootCmd.AddCommand(UnbanCmd(client, &cfg))
 	rootCmd.AddCommand(TestIPCmd(client, cfg.Format))
 	rootCmd.AddCommand(LogsCmd(client, &cfg))
-	rootCmd.AddCommand(LogsWatchCmd(client, &cfg))
+	rootCmd.AddCommand(LogsWatchCmd(ctx, client, &cfg))
 	rootCmd.AddCommand(ServiceCmd(&cfg))
 	rootCmd.AddCommand(VersionCmd(cfg.Format))
 	rootCmd.AddCommand(TestFilterCmd(client, &cfg))

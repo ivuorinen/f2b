@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strconv"
 	"testing"
@@ -68,7 +69,7 @@ func TestLogsWatchCmd(t *testing.T) {
 			}
 
 			config := &Config{Format: "plain"}
-			cmd := LogsWatchCmd(mock, config)
+			cmd := LogsWatchCmd(context.Background(), mock, config)
 
 			// Set up command flags
 			if tt.limit > 0 {
@@ -117,7 +118,7 @@ func TestLogsWatchCmdJSON(t *testing.T) {
 	}
 
 	config := &Config{Format: JSONFormat}
-	cmd := LogsWatchCmd(mock, config)
+	cmd := LogsWatchCmd(context.Background(), mock, config)
 
 	var outBuf bytes.Buffer
 	cmd.SetOut(&outBuf)
@@ -147,7 +148,7 @@ func TestLogsWatchCmdLimit(t *testing.T) {
 	}
 
 	config := &Config{Format: "plain"}
-	cmd := LogsWatchCmd(mock, config)
+	cmd := LogsWatchCmd(context.Background(), mock, config)
 
 	// Set limit flag
 	if err := cmd.Flags().Set("limit", "3"); err != nil {
@@ -240,7 +241,7 @@ func TestLogsWatchCmdFlags(t *testing.T) {
 	}
 
 	config := &Config{Format: "plain"}
-	cmd := LogsWatchCmd(mock, config)
+	cmd := LogsWatchCmd(context.Background(), mock, config)
 
 	// Test that the limit flag is properly defined
 	limitFlag := cmd.Flags().Lookup("limit")
@@ -254,6 +255,18 @@ func TestLogsWatchCmdFlags(t *testing.T) {
 
 	if limitFlag.DefValue != "10" {
 		t.Errorf("expected limit flag default value to be '10', got %q", limitFlag.DefValue)
+	}
+
+	// Test that the interval flag is properly defined
+	intervalFlag := cmd.Flags().Lookup("interval")
+	if intervalFlag == nil {
+		t.Fatal("interval flag should be defined")
+	}
+	if intervalFlag.Shorthand != "i" {
+		t.Errorf("expected interval flag shorthand to be 'i', got %q", intervalFlag.Shorthand)
+	}
+	if intervalFlag.DefValue != "5s" {
+		t.Errorf("expected interval flag default value to be '5s', got %q", intervalFlag.DefValue)
 	}
 }
 
