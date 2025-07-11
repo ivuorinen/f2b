@@ -54,6 +54,7 @@ Welcome, AI agents and large language models! This document provides context and
 - Test privilege scenarios: privileged users, unprivileged users, and edge cases.
 - Set `F2B_TEST_SUDO=true` when testing sudo validation behavior.
 - Ensure all tests pass (`go test ./...`) before submitting changes.
+- Run `pre-commit run --all-files` and fix any issues. MegaLinter requires Docker and does not work with Podman.
 
 #### f. Pull Requests
 
