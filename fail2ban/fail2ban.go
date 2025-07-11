@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 const (
@@ -597,7 +598,7 @@ func isValidFilter(filter string) bool {
 		return false
 	}
 	for _, r := range filter {
-		if !(r >= 'a' && r <= 'z') && !(r >= 'A' && r <= 'Z') && !(r >= '0' && r <= '9') && r != '-' && r != '_' && r != '.' {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' && r != '.' {
 			return false
 		}
 	}
@@ -633,13 +634,13 @@ func isValidJail(jail string) bool {
 	// First character should be alphanumeric
 	if len(jail) > 0 {
 		first := rune(jail[0])
-		if !((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z') || (first >= '0' && first <= '9')) {
+		if !unicode.IsLetter(first) && !unicode.IsDigit(first) {
 			return false
 		}
 	}
 	// Rest can be alphanumeric, dash, underscore, or dot
 	for _, r := range jail {
-		if !(r >= 'a' && r <= 'z') && !(r >= 'A' && r <= 'Z') && !(r >= '0' && r <= '9') && r != '-' && r != '_' && r != '.' {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' && r != '.' {
 			return false
 		}
 	}

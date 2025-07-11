@@ -104,7 +104,7 @@ func TestLogsWatchCmd(t *testing.T) {
 			// Test that the limit flag exists
 			limitFlag := cmd.Flags().Lookup("limit")
 			if limitFlag == nil {
-				t.Errorf("limit flag should exist")
+				t.Fatalf("limit flag should exist")
 			}
 		})
 	}
@@ -133,7 +133,7 @@ func TestLogsWatchCmdJSON(t *testing.T) {
 	// Test that the limit flag exists and has correct default
 	limitFlag := cmd.Flags().Lookup("limit")
 	if limitFlag == nil {
-		t.Errorf("limit flag should exist")
+		t.Fatalf("limit flag should exist")
 	}
 	if limitFlag.DefValue != "10" {
 		t.Errorf("expected default limit of 10, got %s", limitFlag.DefValue)

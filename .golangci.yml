@@ -13,6 +13,7 @@ linters:
     - errcheck
     - govet
     - ineffassign
+    - staticcheck
     - unused
 
     # Code quality linters
@@ -38,7 +39,6 @@ linters:
     # Disable overly strict linters for this project
     - varnamelen # Variable name length checking
     - tagliatelle # Struct tag format checking
-    - staticcheck
     - makezero
     - testpackage # Separate test package requirement
     - paralleltest # Parallel test requirement
