@@ -140,7 +140,9 @@ func TestLogFileReading(t *testing.T) {
 			// Clean up previous files
 			files, _ := filepath.Glob(filepath.Join(tempDir, "fail2ban.log*"))
 			for _, f := range files {
-				os.Remove(f)
+				if err := os.Remove(f); err != nil {
+					t.Fatalf("failed to remove file: %v", err)
+				}
 			}
 
 			// Create test file
@@ -151,14 +153,20 @@ func TestLogFileReading(t *testing.T) {
 				if err != nil {
 					t.Fatalf("failed to create file: %v", err)
 				}
-				defer file.Close()
+				defer func() {
+					if err := file.Close(); err != nil {
+						t.Fatalf("failed to close file: %v", err)
+					}
+				}()
 
 				gzWriter := gzip.NewWriter(file)
 				_, err = gzWriter.Write([]byte(tt.content))
 				if err != nil {
 					t.Fatalf("failed to write compressed content: %v", err)
 				}
-				gzWriter.Close()
+				if err := gzWriter.Close(); err != nil {
+					t.Fatalf("failed to close gzip writer: %v", err)
+				}
 			} else {
 				err := os.WriteFile(filePath, []byte(tt.content), 0644)
 				if err != nil {

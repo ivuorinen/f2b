@@ -104,10 +104,18 @@ func TestEnvironmentVariableSetup(t *testing.T) {
 
 	defer func() {
 		// Restore original environment
-		os.Setenv("F2B_LOG_DIR", originalLogDir)
-		os.Setenv("F2B_FILTER_DIR", originalFilterDir)
-		os.Setenv("F2B_LOG_LEVEL", originalLogLevel)
-		os.Setenv("F2B_LOG_FILE", originalLogFile)
+		if err := os.Setenv("F2B_LOG_DIR", originalLogDir); err != nil {
+			t.Fatalf("failed to restore F2B_LOG_DIR: %v", err)
+		}
+		if err := os.Setenv("F2B_FILTER_DIR", originalFilterDir); err != nil {
+			t.Fatalf("failed to restore F2B_FILTER_DIR: %v", err)
+		}
+		if err := os.Setenv("F2B_LOG_LEVEL", originalLogLevel); err != nil {
+			t.Fatalf("failed to restore F2B_LOG_LEVEL: %v", err)
+		}
+		if err := os.Setenv("F2B_LOG_FILE", originalLogFile); err != nil {
+			t.Fatalf("failed to restore F2B_LOG_FILE: %v", err)
+		}
 	}()
 
 	tests := []struct {
@@ -145,7 +153,9 @@ func TestEnvironmentVariableSetup(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Set environment variable
-			os.Setenv(tt.envVar, tt.envValue)
+			if err := os.Setenv(tt.envVar, tt.envValue); err != nil {
+				t.Fatalf("failed to set %s: %v", tt.envVar, err)
+			}
 
 			// Get the value
 			result := os.Getenv(tt.envVar)
@@ -261,15 +271,23 @@ func TestDefaultValues(t *testing.T) {
 	originalLogDir := os.Getenv("F2B_LOG_DIR")
 	originalFilterDir := os.Getenv("F2B_FILTER_DIR")
 
-	os.Unsetenv("F2B_LOG_DIR")
-	os.Unsetenv("F2B_FILTER_DIR")
+	if err := os.Unsetenv("F2B_LOG_DIR"); err != nil {
+		t.Fatalf("failed to unset F2B_LOG_DIR: %v", err)
+	}
+	if err := os.Unsetenv("F2B_FILTER_DIR"); err != nil {
+		t.Fatalf("failed to unset F2B_FILTER_DIR: %v", err)
+	}
 
 	defer func() {
 		if originalLogDir != "" {
-			os.Setenv("F2B_LOG_DIR", originalLogDir)
+			if err := os.Setenv("F2B_LOG_DIR", originalLogDir); err != nil {
+				t.Fatalf("failed to restore F2B_LOG_DIR: %v", err)
+			}
 		}
 		if originalFilterDir != "" {
-			os.Setenv("F2B_FILTER_DIR", originalFilterDir)
+			if err := os.Setenv("F2B_FILTER_DIR", originalFilterDir); err != nil {
+				t.Fatalf("failed to restore F2B_FILTER_DIR: %v", err)
+			}
 		}
 	}()
 
@@ -334,13 +352,17 @@ func TestExecute(t *testing.T) {
 			err := Execute(client, tt.config)
 
 			// Restore stdout
-			w.Close()
+			if err := w.Close(); err != nil {
+				t.Fatalf("failed to close writer: %v", err)
+			}
 			os.Stdout = oldStdout
 			os.Args = originalArgs
 
 			// Read and discard output
 			var buf bytes.Buffer
-			buf.ReadFrom(r)
+			if _, err := buf.ReadFrom(r); err != nil {
+				t.Fatalf("failed to read output: %v", err)
+			}
 
 			if tt.expectError && err == nil {
 				t.Errorf("expected error but got none")
@@ -380,14 +402,18 @@ func TestExecuteWithRealCommands(t *testing.T) {
 	err := Execute(client, config)
 
 	// Restore
-	w.Close()
+	if err := w.Close(); err != nil {
+		t.Fatalf("failed to close writer: %v", err)
+	}
 	os.Stdout = oldStdout
 	os.Args = originalArgs
 	rootCmd = originalRootCmd
 
 	// Read output
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatalf("failed to read output: %v", err)
+	}
 	output := buf.String()
 
 	if err != nil {
@@ -565,8 +591,16 @@ func TestPersistentPreRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
 	}
-	defer os.Remove(tmpFile.Name())
-	defer tmpFile.Close()
+	defer func() {
+		if err := os.Remove(tmpFile.Name()); err != nil {
+			t.Fatalf("failed to remove temp file: %v", err)
+		}
+	}()
+	defer func() {
+		if err := tmpFile.Close(); err != nil {
+			t.Fatalf("failed to close temp file: %v", err)
+		}
+	}()
 
 	// Test with log file flag
 	cmd := &cobra.Command{}
@@ -620,11 +654,15 @@ func TestPersistentPreRunWithInvalidLogFile(t *testing.T) {
 	// This should handle the error gracefully
 	rootCmd.PersistentPreRun(cmd, []string{})
 
-	w.Close()
+	if err := w.Close(); err != nil {
+		t.Fatalf("failed to close writer: %v", err)
+	}
 	os.Stderr = oldStderr
 
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatalf("failed to read output: %v", err)
+	}
 	output := buf.String()
 
 	// Should contain error message about failed to open log file
@@ -709,12 +747,20 @@ func TestExecuteIntegration(t *testing.T) {
 				Format:    "plain",
 			},
 			setupEnv: func() {
-				os.Setenv("F2B_LOG_DIR", "/tmp/test")
-				os.Setenv("F2B_FILTER_DIR", "/tmp/filters")
+				if err := os.Setenv("F2B_LOG_DIR", "/tmp/test"); err != nil {
+					t.Fatalf("failed to set F2B_LOG_DIR: %v", err)
+				}
+				if err := os.Setenv("F2B_FILTER_DIR", "/tmp/filters"); err != nil {
+					t.Fatalf("failed to set F2B_FILTER_DIR: %v", err)
+				}
 			},
 			cleanup: func() {
-				os.Unsetenv("F2B_LOG_DIR")
-				os.Unsetenv("F2B_FILTER_DIR")
+				if err := os.Unsetenv("F2B_LOG_DIR"); err != nil {
+					t.Fatalf("failed to unset F2B_LOG_DIR: %v", err)
+				}
+				if err := os.Unsetenv("F2B_FILTER_DIR"); err != nil {
+					t.Fatalf("failed to unset F2B_FILTER_DIR: %v", err)
+				}
 			},
 		},
 	}
@@ -741,13 +787,17 @@ func TestExecuteIntegration(t *testing.T) {
 			err := Execute(client, tt.config)
 
 			// Restore
-			w.Close()
+			if err := w.Close(); err != nil {
+				t.Fatalf("failed to close writer: %v", err)
+			}
 			os.Stdout = oldStdout
 			os.Args = originalArgs
 
 			// Read and verify we don't get errors
 			var buf bytes.Buffer
-			buf.ReadFrom(r)
+			if _, err := buf.ReadFrom(r); err != nil {
+				t.Fatalf("failed to read output: %v", err)
+			}
 
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
@@ -798,8 +848,15 @@ func BenchmarkExecute(b *testing.B) {
 
 	// Suppress output
 	oldStdout := os.Stdout
-	devNull, _ := os.Open(os.DevNull)
-	defer devNull.Close()
+	devNull, err := os.Open(os.DevNull)
+	if err != nil {
+		b.Fatalf("failed to open dev null: %v", err)
+	}
+	defer func() {
+		if cerr := devNull.Close(); cerr != nil {
+			b.Fatalf("failed to close dev null: %v", cerr)
+		}
+	}()
 	os.Stdout = devNull
 
 	defer func() {
@@ -814,6 +871,8 @@ func BenchmarkExecute(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		os.Args = []string{"f2b", "version"}
-		Execute(client, config)
+		if err := Execute(client, config); err != nil {
+			b.Fatalf("execute failed: %v", err)
+		}
 	}
 }

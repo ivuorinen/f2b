@@ -148,7 +148,7 @@ func TestIntegration_ListJailsAndStatus(t *testing.T) {
 
 	// List jails
 	out, err := executeCobraCommand(root, "list-jails")
-	if err != nil || !(strings.Contains(out, "sshd") && strings.Contains(out, "apache")) {
+	if err != nil || !strings.Contains(out, "sshd") || !strings.Contains(out, "apache") {
 		t.Errorf("expected jails in output, got: %s", out)
 	}
 

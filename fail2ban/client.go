@@ -83,7 +83,7 @@ func NewClient(logDir, filterDir string) (*RealClient, error) {
 	// Version check - use sudo if needed
 	out, err := RunnerCombinedOutputWithSudo(path, "-V")
 	if err != nil {
-		return nil, fmt.Errorf("version check failed: %v", err)
+		return nil, fmt.Errorf("version check failed: %w", err)
 	}
 	if compareVersions(strings.TrimSpace(string(out)), "0.11.0") < 0 {
 		return nil, fmt.Errorf("fail2ban >=0.11.0 required, got %s", out)

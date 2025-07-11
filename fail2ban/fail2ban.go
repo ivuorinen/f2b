@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 const (
@@ -179,6 +180,9 @@ func isTest() bool {
 }
 
 // skipTest logs a skip message but doesn't exit the program.
+// skipTest is used in tests to indicate skipping scenarios.
+//
+//nolint:unused
 func skipTest(msg string) {
 	// Log the skip message but don't exit - this was causing unexpected program termination
 	fmt.Fprintln(os.Stderr, "SKIP:", msg)
@@ -199,6 +203,9 @@ func (m *MockRunner) GetCalls() []string {
 	return m.CallLog
 }
 
+// runnerCombinedRun is used in tests to run commands without sudo.
+//
+//nolint:unused
 func runnerCombinedRun(name string, args ...string) error {
 	runnerMutex.RLock()
 	currentRunner := runner
@@ -313,7 +320,7 @@ func (c *RealClient) BanIP(ip, jail string) (int, error) {
 
 	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "set", jail, "banip", ip)
 	if err != nil {
-		return 0, fmt.Errorf("failed to ban IP %s in jail %s: %v", ip, jail, err)
+		return 0, fmt.Errorf("failed to ban IP %s in jail %s: %w", ip, jail, err)
 	}
 	code := strings.TrimSpace(string(out))
 	if code == "0" {
@@ -351,7 +358,7 @@ func (c *RealClient) UnbanIP(ip, jail string) (int, error) {
 
 	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "set", jail, "unbanip", ip)
 	if err != nil {
-		return 0, fmt.Errorf("failed to unban IP %s in jail %s: %v", ip, jail, err)
+		return 0, fmt.Errorf("failed to unban IP %s in jail %s: %w", ip, jail, err)
 	}
 	code := strings.TrimSpace(string(out))
 	if code == "0" {
@@ -374,7 +381,7 @@ func (c *RealClient) BannedIn(ip string) ([]string, error) {
 
 	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "banned", ip)
 	if err != nil {
-		return nil, fmt.Errorf("failed to check if IP %s is banned: %v", ip, err)
+		return nil, fmt.Errorf("failed to check if IP %s is banned: %w", ip, err)
 	}
 	s := strings.Trim(string(out), "[]")
 	if s == "" {
@@ -502,7 +509,7 @@ func ListFilters() ([]string, error) {
 func (c *RealClient) ListFilters() ([]string, error) {
 	entries, err := os.ReadDir(c.FilterDir)
 	if err != nil {
-		return nil, fmt.Errorf("could not list filters: %v", err)
+		return nil, fmt.Errorf("could not list filters: %w", err)
 	}
 	filters := []string{}
 	for _, entry := range entries {
@@ -521,7 +528,7 @@ func TestFilter(filter string) (string, error) {
 	path := filterDir + "/" + filter + ".conf"
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return "", fmt.Errorf("filter not found: %v", err)
+		return "", fmt.Errorf("filter not found: %w", err)
 	}
 	content := string(data)
 	var logPath string
@@ -555,7 +562,7 @@ func (c *RealClient) TestFilter(filter string) (string, error) {
 	path := filepath.Join(c.FilterDir, filter+".conf")
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return "", fmt.Errorf("filter not found: %v", err)
+		return "", fmt.Errorf("filter not found: %w", err)
 	}
 	content := string(data)
 	var logPath string
@@ -591,7 +598,7 @@ func isValidFilter(filter string) bool {
 		return false
 	}
 	for _, r := range filter {
-		if !(r >= 'a' && r <= 'z') && !(r >= 'A' && r <= 'Z') && !(r >= '0' && r <= '9') && r != '-' && r != '_' && r != '.' {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' && r != '.' {
 			return false
 		}
 	}
@@ -627,13 +634,13 @@ func isValidJail(jail string) bool {
 	// First character should be alphanumeric
 	if len(jail) > 0 {
 		first := rune(jail[0])
-		if !((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z') || (first >= '0' && first <= '9')) {
+		if !unicode.IsLetter(first) && !unicode.IsDigit(first) {
 			return false
 		}
 	}
 	// Rest can be alphanumeric, dash, underscore, or dot
 	for _, r := range jail {
-		if !(r >= 'a' && r <= 'z') && !(r >= 'A' && r <= 'Z') && !(r >= '0' && r <= '9') && r != '-' && r != '_' && r != '.' {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' && r != '.' {
 			return false
 		}
 	}
