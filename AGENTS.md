@@ -9,6 +9,7 @@ Define clear instructions so AI or human contributors keep changes consistent an
 - **Semantic Commits**: use `type(scope): message` (for example `feat(cli): add ban command`). Match PR titles to this style.
 - **Formatting**: run `go fmt ./...` and `goimports -w .` before committing.
 - **Linting**: read `.golangci.yml` and `.editorconfig` before changing code. Run `golangci-lint run` for any code change and correct all issues across the project, not just touched files. Use additional static analysis tools if needed.
+- **Config Verification**: whenever modifying `.golangci.yml` or updating `golangci-lint`, run `golangci-lint config verify` to ensure the configuration remains valid.
 - **Tests**: run `go test ./...` after linting whenever code changes. Skip when editing comments or docs only.
 - **Package Manager**: always use `yarn` if installing npm packages.
 

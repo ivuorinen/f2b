@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://json.schemastore.org/golangci-lint.json
 # golangci-lint configuration for f2b project
 # https://golangci-lint.run/usage/configuration/
 
@@ -59,69 +60,36 @@ linters:
     - nolintlint # Nolint directive checking
     - noctx # Context checking
 
-linters-settings:
-  errcheck:
-    check-type-assertions: false
-    check-blank: false
-    exclude-functions:
-      - (*os.File).Close
-      - (io.Closer).Close
+  settings:
+    errcheck:
+      check-type-assertions: false
+      check-blank: false
+      exclude-functions:
+        - (*os.File).Close
+        - (io.Closer).Close
 
 
-  govet:
-    enable-all: true
-    disable:
-      - fieldalignment # Can be too strict for simple structs
-      - shadow # Variable shadowing can be acceptable
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment # Can be too strict for simple structs
+        - shadow # Variable shadowing can be acceptable
 
-  gocyclo:
-    min-complexity: 20
+    gocyclo:
+      min-complexity: 20
 
-  misspell:
-    locale: US
+    misspell:
+      locale: US
 
-  prealloc:
-    simple: true
-    range-loops: true
-    for-loops: false
+    prealloc:
+      simple: true
+      range-loops: true
+      for-loops: false
 
-  errorlint:
-    errorf: false # Allow %v instead of %w for some cases
+    errorlint:
+      errorf: false # Allow %v instead of %w for some cases
 
 issues:
-  exclude-use-default: false
-  exclude:
-    # Exclude some common false positives
-    - "Error return value of .* is not checked"
-    - "exported (type|method|function) .* should have comment or be unexported"
-    - "should have a package comment"
-    - "unused-parameter.*cmd.*cobra.Command" # Cobra command parameters
-    - "G204.*fail2ban" # Allow subprocess calls for fail2ban
-    - "shadow.*err" # Allow error variable shadowing
-
-  exclude-rules:
-    - path: fail2ban/fail2ban.go
-      linters:
-        - errcheck
-      text: "G204|G304"
-
-    # Exclude some linters for test files
-    - path: _test\.go
-      linters:
-        - errcheck
-        - unparam
-        - funlen
-        - gocyclo
-
-    # Exclude main.go from some checks
-    - path: main\.go
-      linters:
-
-    # Exclude command files from unused parameter checks
-    - path: cmd/.*\.go
-      linters:
-      text: "unused-parameter.*cmd.*cobra.Command"
-
   max-issues-per-linter: 0
   max-same-issues: 0
   new: false
