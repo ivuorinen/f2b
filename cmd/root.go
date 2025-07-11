@@ -44,15 +44,7 @@ func Execute(client fail2ban.Client, config Config) error {
 
 func init() {
 	// Set defaults from env
-	cfg.LogDir = os.Getenv("F2B_LOG_DIR")
-	if cfg.LogDir == "" {
-		cfg.LogDir = "/var/log"
-	}
-	cfg.FilterDir = os.Getenv("F2B_FILTER_DIR")
-	if cfg.FilterDir == "" {
-		cfg.FilterDir = "/etc/fail2ban/filter.d"
-	}
-	cfg.Format = "plain"
+	cfg = NewConfigFromEnv()
 
 	rootCmd.PersistentFlags().StringVar(&cfg.LogDir, "log-dir", cfg.LogDir, "Fail2Ban log directory")
 	rootCmd.PersistentFlags().StringVar(&cfg.FilterDir, "filter-dir", cfg.FilterDir, "Fail2Ban filter directory")
