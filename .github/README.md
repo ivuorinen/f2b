@@ -294,6 +294,22 @@ go test -coverprofile=coverage.out ./...
 F2B_TEST_SUDO=true go test ./fail2ban -run TestSudo
 ```
 
+### Pre-commit Hooks
+
+This project uses [pre-commit](https://pre-commit.com/) to automate linting and formatting.
+Install the hooks after cloning:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+MegaLinter requires Docker and does not currently work with Podman. Run the hooks before committing:
+
+```bash
+pre-commit run --all-files
+```
+
 ### Integration Examples
 
 ```bash

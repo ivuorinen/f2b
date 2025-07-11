@@ -12,6 +12,7 @@ Define clear instructions so AI or human contributors keep changes consistent an
 - **Config Verification**: whenever modifying `.golangci.yml` or updating `golangci-lint`, run `golangci-lint config verify` to ensure the configuration remains valid.
 - **Tests**: run `go test ./...` after linting whenever code changes. Skip when editing comments or docs only.
 - **Package Manager**: always use `yarn` if installing npm packages.
+- **Pre-commit**: run `pre-commit run --all-files` and fix every issue before committing. MegaLinter requires Docker and doesn't support Podman.
 
 ## Best Practices
 
