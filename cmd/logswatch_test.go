@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 	"testing"
 
 	"github.com/ivuorinen/f2b/fail2ban"
@@ -71,7 +72,9 @@ func TestLogsWatchCmd(t *testing.T) {
 
 			// Set up command flags
 			if tt.limit > 0 {
-				cmd.Flags().Set("limit", string(rune(tt.limit+'0')))
+				if err := cmd.Flags().Set("limit", strconv.Itoa(tt.limit)); err != nil {
+					t.Fatalf("failed to set limit flag: %v", err)
+				}
 			}
 
 			// Capture output
@@ -101,7 +104,7 @@ func TestLogsWatchCmd(t *testing.T) {
 			// Test that the limit flag exists
 			limitFlag := cmd.Flags().Lookup("limit")
 			if limitFlag == nil {
-				t.Errorf("limit flag should exist")
+				t.Fatalf("limit flag should exist")
 			}
 		})
 	}
@@ -130,7 +133,7 @@ func TestLogsWatchCmdJSON(t *testing.T) {
 	// Test that the limit flag exists and has correct default
 	limitFlag := cmd.Flags().Lookup("limit")
 	if limitFlag == nil {
-		t.Errorf("limit flag should exist")
+		t.Fatalf("limit flag should exist")
 	}
 	if limitFlag.DefValue != "10" {
 		t.Errorf("expected default limit of 10, got %s", limitFlag.DefValue)
@@ -147,7 +150,9 @@ func TestLogsWatchCmdLimit(t *testing.T) {
 	cmd := LogsWatchCmd(mock, config)
 
 	// Set limit flag
-	cmd.Flags().Set("limit", "3")
+	if err := cmd.Flags().Set("limit", "3"); err != nil {
+		t.Fatalf("failed to set limit flag: %v", err)
+	}
 
 	var outBuf bytes.Buffer
 	cmd.SetOut(&outBuf)

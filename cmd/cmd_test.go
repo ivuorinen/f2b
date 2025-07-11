@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/ivuorinen/f2b/fail2ban"
 	"github.com/spf13/cobra"
@@ -269,7 +270,7 @@ func isValidJailMock(jail string) bool {
 		return false
 	}
 	for _, r := range jail {
-		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_') {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' {
 			return false
 		}
 	}

@@ -153,7 +153,9 @@ PowerShell:
 			case "powershell":
 				_ = root.GenPowerShellCompletionWithDesc(cmd.OutOrStdout())
 			default:
-				fmt.Fprintf(cmd.ErrOrStderr(), "Unsupported shell type: %s\n", args[0])
+				if _, err := fmt.Fprintf(cmd.ErrOrStderr(), "Unsupported shell type: %s\n", args[0]); err != nil {
+					Logger.WithError(err).Error("failed to write unsupported shell type")
+				}
 			}
 		},
 	}
