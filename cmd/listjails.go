@@ -17,10 +17,14 @@ func ListJailsCmd(client fail2ban.Client) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			jails, err := client.ListJails()
 			if err != nil {
-				fmt.Fprintln(GetCmdError(cmd), "Error:", err)
+				if _, ferr := fmt.Fprintln(GetCmdError(cmd), "Error:", err); ferr != nil {
+					return ferr
+				}
 				return err
 			}
-			fmt.Fprintln(GetCmdOutput(cmd), strings.Join(jails, " "))
+			if _, err := fmt.Fprintln(GetCmdOutput(cmd), strings.Join(jails, " ")); err != nil {
+				return err
+			}
 			return nil
 		},
 	}

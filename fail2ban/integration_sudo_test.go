@@ -45,8 +45,14 @@ func TestSudoIntegrationWithClient(t *testing.T) {
 			defer SetSudoChecker(originalChecker)
 
 			// Set environment variable to force sudo checking in tests
-			os.Setenv("F2B_TEST_SUDO", "true")
-			defer os.Unsetenv("F2B_TEST_SUDO")
+			if err := os.Setenv("F2B_TEST_SUDO", "true"); err != nil {
+				t.Fatalf("failed to set F2B_TEST_SUDO: %v", err)
+			}
+			defer func() {
+				if err := os.Unsetenv("F2B_TEST_SUDO"); err != nil {
+					t.Fatalf("failed to unset F2B_TEST_SUDO: %v", err)
+				}
+			}()
 
 			// Set mock checker
 			mock := NewMockSudoCheckerWithPrivileges(tt.hasPrivileges)

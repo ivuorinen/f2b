@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 	"testing"
 
 	"github.com/ivuorinen/f2b/fail2ban"
@@ -71,7 +72,9 @@ func TestLogsWatchCmd(t *testing.T) {
 
 			// Set up command flags
 			if tt.limit > 0 {
-				cmd.Flags().Set("limit", string(rune(tt.limit+'0')))
+				if err := cmd.Flags().Set("limit", strconv.Itoa(tt.limit)); err != nil {
+					t.Fatalf("failed to set limit flag: %v", err)
+				}
 			}
 
 			// Capture output
@@ -147,7 +150,9 @@ func TestLogsWatchCmdLimit(t *testing.T) {
 	cmd := LogsWatchCmd(mock, config)
 
 	// Set limit flag
-	cmd.Flags().Set("limit", "3")
+	if err := cmd.Flags().Set("limit", "3"); err != nil {
+		t.Fatalf("failed to set limit flag: %v", err)
+	}
 
 	var outBuf bytes.Buffer
 	cmd.SetOut(&outBuf)

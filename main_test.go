@@ -378,13 +378,19 @@ func TestMainFunctionLogic(t *testing.T) {
 
 			// Set test env vars
 			for key, value := range tt.envVars {
-				os.Setenv(key, value)
+				if err := os.Setenv(key, value); err != nil {
+					t.Fatalf("failed to set %s: %v", key, err)
+				}
 			}
 
 			// Restore env vars after test
 			defer func() {
-				os.Setenv("F2B_LOG_DIR", originalLogDir)
-				os.Setenv("F2B_FILTER_DIR", originalFilterDir)
+				if err := os.Setenv("F2B_LOG_DIR", originalLogDir); err != nil {
+					t.Fatalf("failed to restore F2B_LOG_DIR: %v", err)
+				}
+				if err := os.Setenv("F2B_FILTER_DIR", originalFilterDir); err != nil {
+					t.Fatalf("failed to restore F2B_FILTER_DIR: %v", err)
+				}
 			}()
 
 			// Test the main function's logic
@@ -478,27 +484,43 @@ func TestMainConfigurationParsing(t *testing.T) {
 
 			// Set test env vars
 			if tt.logDirEnv != "" {
-				os.Setenv("F2B_LOG_DIR", tt.logDirEnv)
+				if err := os.Setenv("F2B_LOG_DIR", tt.logDirEnv); err != nil {
+					t.Fatalf("failed to set F2B_LOG_DIR: %v", err)
+				}
 			} else {
-				os.Unsetenv("F2B_LOG_DIR")
+				if err := os.Unsetenv("F2B_LOG_DIR"); err != nil {
+					t.Fatalf("failed to unset F2B_LOG_DIR: %v", err)
+				}
 			}
 			if tt.filterDirEnv != "" {
-				os.Setenv("F2B_FILTER_DIR", tt.filterDirEnv)
+				if err := os.Setenv("F2B_FILTER_DIR", tt.filterDirEnv); err != nil {
+					t.Fatalf("failed to set F2B_FILTER_DIR: %v", err)
+				}
 			} else {
-				os.Unsetenv("F2B_FILTER_DIR")
+				if err := os.Unsetenv("F2B_FILTER_DIR"); err != nil {
+					t.Fatalf("failed to unset F2B_FILTER_DIR: %v", err)
+				}
 			}
 
 			// Restore env vars after test
 			defer func() {
 				if originalLogDir != "" {
-					os.Setenv("F2B_LOG_DIR", originalLogDir)
+					if err := os.Setenv("F2B_LOG_DIR", originalLogDir); err != nil {
+						t.Fatalf("failed to restore F2B_LOG_DIR: %v", err)
+					}
 				} else {
-					os.Unsetenv("F2B_LOG_DIR")
+					if err := os.Unsetenv("F2B_LOG_DIR"); err != nil {
+						t.Fatalf("failed to unset F2B_LOG_DIR: %v", err)
+					}
 				}
 				if originalFilterDir != "" {
-					os.Setenv("F2B_FILTER_DIR", originalFilterDir)
+					if err := os.Setenv("F2B_FILTER_DIR", originalFilterDir); err != nil {
+						t.Fatalf("failed to restore F2B_FILTER_DIR: %v", err)
+					}
 				} else {
-					os.Unsetenv("F2B_FILTER_DIR")
+					if err := os.Unsetenv("F2B_FILTER_DIR"); err != nil {
+						t.Fatalf("failed to unset F2B_FILTER_DIR: %v", err)
+					}
 				}
 			}()
 
@@ -655,11 +677,15 @@ func TestMainErrorHandling(t *testing.T) {
 		t.Fatalf("failed to write to stderr: %v", err)
 	}
 
-	w.Close()
+	if err := w.Close(); err != nil {
+		t.Fatalf("failed to close writer: %v", err)
+	}
 	os.Stderr = oldStderr
 
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatalf("failed to read output: %v", err)
+	}
 	output := buf.String()
 
 	if !strings.Contains(output, "Error: "+mockError) {
@@ -770,14 +796,20 @@ func TestMainEnvironmentVariables(t *testing.T) {
 			original := os.Getenv(tt.envVar)
 
 			// Set test value
-			os.Setenv(tt.envVar, tt.value)
+			if err := os.Setenv(tt.envVar, tt.value); err != nil {
+				t.Fatalf("failed to set %s: %v", tt.envVar, err)
+			}
 
 			// Restore after test
 			defer func() {
 				if original != "" {
-					os.Setenv(tt.envVar, original)
+					if err := os.Setenv(tt.envVar, original); err != nil {
+						t.Fatalf("failed to restore %s: %v", tt.envVar, err)
+					}
 				} else {
-					os.Unsetenv(tt.envVar)
+					if err := os.Unsetenv(tt.envVar); err != nil {
+						t.Fatalf("failed to unset %s: %v", tt.envVar, err)
+					}
 				}
 			}()
 

@@ -62,7 +62,9 @@ func BanCmd(client fail2ban.Client, config *Config) *cobra.Command {
 				PrintOutputTo(GetCmdOutput(cmd), results, JSONFormat)
 			} else {
 				for _, r := range results {
-					fmt.Fprintf(GetCmdOutput(cmd), "%s %s in %s\n", r.Status, r.IP, r.Jail)
+					if _, err := fmt.Fprintf(GetCmdOutput(cmd), "%s %s in %s\n", r.Status, r.IP, r.Jail); err != nil {
+						return err
+					}
 				}
 			}
 			return nil

@@ -50,7 +50,9 @@ func PrintOutputTo(w io.Writer, data interface{}, format string) {
 			Logger.WithError(err).Error("Failed to encode JSON output")
 		}
 	default:
-		fmt.Fprintln(w, data)
+		if _, err := fmt.Fprintln(w, data); err != nil {
+			Logger.WithError(err).Error("Failed to write plain output")
+		}
 	}
 }
 

@@ -2,6 +2,7 @@ package fail2ban
 
 import (
 	"compress/gzip"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -9,6 +10,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/sirupsen/logrus"
 )
 
 /*
@@ -27,7 +30,7 @@ func GetLogLines(jailFilter string, ipFilter string) ([]string, error) {
 	pattern := filepath.Join(logDir, "fail2ban.log*")
 	files, err := filepath.Glob(pattern)
 	if err != nil {
-		return nil, fmt.Errorf("error listing log files: %v", err)
+		return nil, fmt.Errorf("error listing log files: %w", err)
 	}
 	if len(files) == 0 {
 		return []string{}, nil
@@ -119,12 +122,16 @@ func readLogFile(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() {
+		if cerr := f.Close(); cerr != nil {
+			logrus.WithError(cerr).Error("failed to close log file")
+		}
+	}()
 
 	// Check if file is gzip compressed by reading magic bytes
 	var magic [2]byte
 	n, err := f.Read(magic[:])
-	if err != nil && err != io.EOF {
+	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, err
 	}
 
@@ -140,7 +147,11 @@ func readLogFile(path string) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer gz.Close()
+		defer func() {
+			if cerr := gz.Close(); cerr != nil {
+				logrus.WithError(cerr).Error("failed to close gzip reader")
+			}
+		}()
 		return io.ReadAll(gz)
 	}
 

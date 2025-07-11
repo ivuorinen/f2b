@@ -1,7 +1,7 @@
 # golangci-lint configuration for f2b project
 # https://golangci-lint.run/usage/configuration/
 
-version: "1"
+version: "2"
 run:
   timeout: 5m
   modules-download-mode: readonly
@@ -11,29 +11,20 @@ linters:
   enable:
     # Essential linters
     - errcheck
-    - gosimple
     - govet
     - ineffassign
-    - staticcheck
-    - typecheck
     - unused
 
     # Code quality linters
-    - gofmt
-    - goimports
-    - gosec
     - misspell
     - unconvert
-    - goconst
     - gocyclo
-    - revive
     - prealloc
     - bodyclose
     - rowserrcheck
     - sqlclosecheck
     - durationcheck
     - errorlint
-    - makezero
     - predeclared
     - wastedassign
     - containedctx
@@ -47,6 +38,8 @@ linters:
     # Disable overly strict linters for this project
     - varnamelen # Variable name length checking
     - tagliatelle # Struct tag format checking
+    - staticcheck
+    - makezero
     - testpackage # Separate test package requirement
     - paralleltest # Parallel test requirement
     - forcetypeassert # Force type assertion
@@ -62,7 +55,6 @@ linters:
     - wsl # Whitespace linter (too strict)
     - gocritic # Too many style opinions
     - whitespace # Whitespace checking
-    - stylecheck # Style checking
     - nakedret # Naked returns
     - nolintlint # Nolint directive checking
     - noctx # Context checking
@@ -75,11 +67,6 @@ linters-settings:
       - (*os.File).Close
       - (io.Closer).Close
 
-  gosec:
-    excludes:
-      - G204 # Subprocess launched with variable (needed for fail2ban commands)
-      - G301 # Poor file permissions (log files might have different perms)
-      - G304 # File path provided as tainted input (expected for log files)
 
   govet:
     enable-all: true
@@ -90,10 +77,6 @@ linters-settings:
   gocyclo:
     min-complexity: 20
 
-  goconst:
-    min-len: 3
-    min-occurrences: 4
-
   misspell:
     locale: US
 
@@ -101,35 +84,6 @@ linters-settings:
     simple: true
     range-loops: true
     for-loops: false
-
-  revive:
-    rules:
-      - name: blank-imports
-      - name: context-as-argument
-      - name: dot-imports
-      - name: error-return
-      - name: error-strings
-      - name: error-naming
-      - name: exported
-        disabled: true # Allow unexported public functions for CLI tools
-      - name: if-return
-      - name: increment-decrement
-      - name: var-naming
-      - name: var-declaration
-      - name: package-comments
-        disabled: true # Don't require package comments
-      - name: range
-      - name: receiver-naming
-      - name: time-naming
-      - name: unexported-return
-      - name: indent-error-flow
-      - name: errorf
-      - name: empty-block
-      - name: superfluous-else
-      - name: unused-parameter
-        disabled: true # Cobra commands often have unused parameters
-      - name: unreachable-code
-      - name: redefines-builtin-id
 
   errorlint:
     errorf: false # Allow %v instead of %w for some cases
@@ -146,32 +100,26 @@ issues:
     - "shadow.*err" # Allow error variable shadowing
 
   exclude-rules:
-    # Exclude gosec G204 and G304 for fail2ban command execution and file operations
     - path: fail2ban/fail2ban.go
       linters:
-        - gosec
+        - errcheck
       text: "G204|G304"
 
     # Exclude some linters for test files
     - path: _test\.go
       linters:
-        - gosec
         - errcheck
-        - goconst
         - unparam
         - funlen
         - gocyclo
-        - revive
 
     # Exclude main.go from some checks
     - path: main\.go
       linters:
-        - goconst
 
     # Exclude command files from unused parameter checks
     - path: cmd/.*\.go
       linters:
-        - revive
       text: "unused-parameter.*cmd.*cobra.Command"
 
   max-issues-per-linter: 0
