@@ -23,4 +23,4 @@ jobs:
       issues: write
       pull-requests: write
     steps:
-      - uses: ivuorinen/actions/stale@9480614ba2231013d99dd5b9c730d2b105b9e160 # 25.6.25
+      - uses: ivuorinen/actions/stale@625c37446b1c7e219755a40807f825c9283f6e05 # 25.7.7
