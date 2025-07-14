@@ -9,11 +9,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 	"unicode"
+
+	"github.com/hashicorp/go-version"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -231,24 +233,15 @@ func runnerCombinedRunWithSudo(name string, args ...string) error {
 }
 
 func compareVersions(v1, v2 string) int {
-	p1 := strings.Split(v1, ".")
-	p2 := strings.Split(v2, ".")
-	for len(p1) < 3 {
-		p1 = append(p1, "0")
+	version1, err1 := version.NewVersion(v1)
+	version2, err2 := version.NewVersion(v2)
+
+	// If either version is invalid, fall back to string comparison
+	if err1 != nil || err2 != nil {
+		return strings.Compare(v1, v2)
 	}
-	for len(p2) < 3 {
-		p2 = append(p2, "0")
-	}
-	for i := 0; i < 3; i++ {
-		n1, _ := strconv.Atoi(p1[i])
-		n2, _ := strconv.Atoi(p2[i])
-		if n1 < n2 {
-			return -1
-		} else if n1 > n2 {
-			return 1
-		}
-	}
-	return 0
+
+	return version1.Compare(version2)
 }
 
 func (c *RealClient) fetchJails() ([]string, error) {
@@ -426,8 +419,29 @@ func (c *RealClient) GetBanRecords(jails []string) ([]BanRecord, error) {
 				// Format: IP BANNED_DATE BANNED_TIME + UNBAN_DATE UNBAN_TIME
 				bannedStr := fields[1] + " " + fields[2]
 				unbanStr := fields[4] + " " + fields[5]
-				tBan, _ := time.Parse("2006-01-02 15:04:05", bannedStr)
-				tUnban, _ := time.Parse("2006-01-02 15:04:05", unbanStr)
+
+				tBan, err := time.Parse("2006-01-02 15:04:05", bannedStr)
+				if err != nil {
+					logrus.WithFields(logrus.Fields{
+						"jail":      j,
+						"ip":        ip,
+						"bannedStr": bannedStr,
+					}).Warnf("Failed to parse ban time: %v", err)
+					// Skip this entry if we can't parse the ban time
+					continue
+				}
+
+				tUnban, err := time.Parse("2006-01-02 15:04:05", unbanStr)
+				if err != nil {
+					logrus.WithFields(logrus.Fields{
+						"jail":     j,
+						"ip":       ip,
+						"unbanStr": unbanStr,
+					}).Warnf("Failed to parse unban time: %v", err)
+					// Use current time as fallback for unban time calculation
+					tUnban = time.Now().Add(24 * time.Hour) // Assume 24h remaining
+				}
+
 				rem := tUnban.Unix() - time.Now().Unix()
 				if rem < 0 {
 					rem = 0

@@ -53,7 +53,7 @@ No! f2b is smart about privileges:
 
 If you lack privileges for privileged operations, f2b will show a clear error message:
 
-```
+```text
 Error: fail2ban operations require sudo privileges. Current user: username (UID: 1000).
 Please run with sudo or ensure user is in sudo group
 Hint: Try running with 'sudo' or ensure your user is in the sudo group
@@ -217,6 +217,7 @@ f2b test 192.168.1.100 --format=json
    ```
 
 4. **Verify fail2ban permissions:**
+
    ```bash
    ls -la /etc/fail2ban/
    sudo fail2ban-client ping

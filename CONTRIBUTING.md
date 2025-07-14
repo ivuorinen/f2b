@@ -31,7 +31,8 @@ whether you are fixing bugs, adding features, improving documentation, or helpin
 ### 4. Run Tests
 
 - Ensure all tests pass before submitting:
-  ```
+
+  ```bash
   go test ./...
   ```
 
@@ -107,5 +108,5 @@ defer os.Unsetenv("F2B_TEST_SUDO")
 
 Thank you for helping make **f2b** better!
 
-[effective_go](https://golang.org/doc/effective_go.html)
+[effective_go]: https://golang.org/doc/effective_go.html
 [contributing](CONTRIBUTING.md)

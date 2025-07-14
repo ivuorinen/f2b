@@ -999,3 +999,171 @@ func TestIsValidFilter(t *testing.T) {
 		}
 	}
 }
+
+func TestCompareVersions(t *testing.T) {
+	tests := []struct {
+		name     string
+		v1       string
+		v2       string
+		expected int
+	}{
+		{
+			name:     "equal versions",
+			v1:       "1.0.0",
+			v2:       "1.0.0",
+			expected: 0,
+		},
+		{
+			name:     "v1 less than v2",
+			v1:       "0.11.0",
+			v2:       "1.0.0",
+			expected: -1,
+		},
+		{
+			name:     "v1 greater than v2",
+			v1:       "1.2.0",
+			v2:       "1.0.0",
+			expected: 1,
+		},
+		{
+			name:     "patch version difference",
+			v1:       "1.0.1",
+			v2:       "1.0.2",
+			expected: -1,
+		},
+		{
+			name:     "prerelease versions",
+			v1:       "1.0.0-alpha",
+			v2:       "1.0.0",
+			expected: -1,
+		},
+		{
+			name:     "invalid version strings fallback to string comparison",
+			v1:       "invalid.version",
+			v2:       "another.invalid",
+			expected: 1, // "invalid.version" > "another.invalid" lexicographically
+		},
+		{
+			name:     "mixed valid and invalid",
+			v1:       "1.0.0",
+			v2:       "invalid",
+			expected: -1, // string comparison: "1.0.0" < "invalid"
+		},
+		{
+			name:     "version with build metadata",
+			v1:       "1.0.0+build.1",
+			v2:       "1.0.0+build.2",
+			expected: 0, // build metadata should be ignored in semantic versioning
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := compareVersions(tt.v1, tt.v2)
+			if result != tt.expected {
+				t.Errorf("compareVersions(%q, %q) = %d, expected %d", tt.v1, tt.v2, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestGetBanRecordsWithInvalidTimes(t *testing.T) {
+	// Set up mock runner and sudo checker
+	originalRunner := runner
+	originalChecker := GetSudoChecker()
+	defer func() {
+		SetRunner(originalRunner)
+		SetSudoChecker(originalChecker)
+	}()
+
+	mockRunner := NewMockRunner()
+	SetRunner(mockRunner)
+	mockChecker := NewMockSudoCheckerWithPrivileges(true)
+	SetSudoChecker(mockChecker)
+
+	// Create client
+	client := &RealClient{
+		Path:      "fail2ban-client",
+		Jails:     []string{"sshd"},
+		LogDir:    "/var/log",
+		FilterDir: "/etc/fail2ban/filter.d",
+	}
+
+	tests := []struct {
+		name          string
+		mockResponse  string
+		expectedCount int
+		expectSkipped bool
+	}{
+		{
+			name: "valid times",
+			mockResponse: "192.168.1.100 2023-01-01 12:00:00 + 2023-01-01 13:00:00 extra field\n" +
+				"192.168.1.101 2023-01-01 14:00:00 + 2023-01-01 15:00:00 extra field",
+			expectedCount: 2,
+			expectSkipped: false,
+		},
+		{
+			name: "invalid ban time - entry should be skipped",
+			mockResponse: "192.168.1.100 invalid-date 12:00:00 + 2023-01-01 13:00:00 extra field\n" +
+				"192.168.1.101 2023-01-01 14:00:00 + 2023-01-01 15:00:00 extra field",
+			expectedCount: 1,
+			expectSkipped: true,
+		},
+		{
+			name: "invalid unban time - entry should use fallback",
+			mockResponse: "192.168.1.100 2023-01-01 12:00:00 + invalid-time 13:00:00 extra field\n" +
+				"192.168.1.101 2023-01-01 14:00:00 + 2023-01-01 15:00:00 extra field",
+			expectedCount: 2,
+			expectSkipped: false,
+		},
+		{
+			name: "both times invalid - entry should be skipped",
+			mockResponse: "192.168.1.100 invalid-date 12:00:00 + invalid-time 13:00:00 extra field\n" +
+				"192.168.1.101 2023-01-01 14:00:00 + 2023-01-01 15:00:00 extra field",
+			expectedCount: 1,
+			expectSkipped: true,
+		},
+		{
+			name: "short format fallback",
+			mockResponse: "192.168.1.100 banned extra field\n" +
+				"192.168.1.101 also banned extra",
+			expectedCount: 2,
+			expectSkipped: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set up mock response (the command uses sudo)
+			mockRunner.SetResponse("sudo fail2ban-client get sshd banip --with-time", []byte(tt.mockResponse))
+
+			// Get ban records
+			records, err := client.GetBanRecords([]string{"sshd"})
+			if err != nil {
+				t.Fatalf("GetBanRecords failed: %v", err)
+			}
+
+			// Check count
+			if len(records) != tt.expectedCount {
+				t.Errorf("expected %d records, got %d", tt.expectedCount, len(records))
+			}
+
+			// For entries with invalid unban time (but valid ban time), verify fallback worked
+			if tt.name == "invalid unban time - entry should use fallback" && len(records) > 0 {
+				// The first record should have a reasonable remaining time (not zero)
+				if records[0].Remaining == "00:00:00:00" {
+					t.Errorf("expected fallback time calculation, got zero remaining time")
+				}
+			}
+
+			// For entries using short format fallback
+			if tt.name == "short format fallback" && len(records) > 0 {
+				for _, record := range records {
+					if record.Remaining != "unknown" {
+						t.Errorf("expected 'unknown' remaining time for short format, got %s", record.Remaining)
+					}
+				}
+			}
+		})
+	}
+}

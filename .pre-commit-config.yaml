@@ -1,10 +1,13 @@
 repos:
-  - repo: https://github.com/oxsecurity/megalinter
-    rev: v8.4.2 # Git tag specifying the hook, not mega-linter-runner, version
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
     hooks:
-      - id: megalinter-incremental # Faster, less thorough
-        stages:
-          - pre-commit
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-merge-conflict
+
   - repo: https://github.com/tekwizely/pre-commit-golang
     rev: v1.0.0-rc.1
     hooks:
@@ -14,3 +17,33 @@ repos:
         alias: tidy
       - id: go-fmt
         alias: fmt
+      - id: go-vet
+        alias: vet
+
+  - repo: local
+    hooks:
+      - id: golangci-lint
+        name: golangci-lint
+        entry: golangci-lint
+        args: [run, --timeout=5m]
+        language: system
+        files: \.go$
+        pass_filenames: false
+
+      - id: markdownlint
+        name: Markdown Lint
+        entry: markdownlint
+        language: node
+        files: \.md$
+
+      - id: yamllint
+        name: YAML Lint
+        entry: yamllint
+        language: python
+        files: \.ya?ml$
+
+      - id: actionlint
+        name: GitHub Actions Lint
+        entry: actionlint
+        language: system
+        files: ^\.github/workflows/.*\.ya?ml$

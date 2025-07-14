@@ -19,4 +19,3 @@ Define clear instructions so AI or human contributors keep changes consistent an
 - Match the project's Go style and configurations.
 - Fix lint warnings or formatting issues on all reported files, not just the ones modified.
 - Keep PRs focused and well described.
-
