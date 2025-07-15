@@ -681,15 +681,78 @@ func isValidFilter(filter string) bool {
 	if filter == "" {
 		return false
 	}
-	if strings.Contains(filter, "..") || strings.ContainsAny(filter, "/\\") {
+
+	// Check length limits to prevent buffer overflow attacks
+	if len(filter) > 255 {
 		return false
 	}
+
+	// Check for null bytes
+	if strings.Contains(filter, "\x00") {
+		return false
+	}
+
+	// Enhanced path traversal detection
+	if containsPathTraversalPatterns(filter) {
+		return false
+	}
+
+	// Character validation - only allow safe characters
 	for _, r := range filter {
-		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' && r != '.' {
+		if !isValidFilterChar(r) {
 			return false
 		}
 	}
+
+	// Additional validation: ensure filter doesn't start/end with dangerous patterns
+	if strings.HasPrefix(filter, ".") || strings.HasSuffix(filter, ".") {
+		// Allow single extension like ".conf" but not ".." or "..."
+		if strings.Contains(filter, "..") {
+			return false
+		}
+	}
+
 	return true
+}
+
+// containsPathTraversalPatterns checks for various path traversal patterns in filter names
+func containsPathTraversalPatterns(filter string) bool {
+	// Path separators and traversal patterns
+	if strings.ContainsAny(filter, "/\\") {
+		return false
+	}
+
+	// Various representations of ".."
+	dangerousPatterns := []string{
+		"..",
+		"%2e%2e",       // URL encoded ..
+		"%2f",          // URL encoded /
+		"%5c",          // URL encoded \
+		"\u002e\u002e", // Unicode ..
+		"\uff0e\uff0e", // Full-width Unicode ..
+	}
+
+	filterLower := strings.ToLower(filter)
+	for _, pattern := range dangerousPatterns {
+		if strings.Contains(filterLower, strings.ToLower(pattern)) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// isValidFilterChar checks if a character is allowed in filter names
+func isValidFilterChar(r rune) bool {
+	// Allow letters, digits, and safe punctuation
+	return unicode.IsLetter(r) ||
+		unicode.IsDigit(r) ||
+		r == '-' ||
+		r == '_' ||
+		r == '.' ||
+		r == '@' || // Allow @ for email-like patterns
+		r == '+' || // Allow + for variations
+		r == '~' // Allow ~ for common naming
 }
 
 // isValidIP validates an IP address string

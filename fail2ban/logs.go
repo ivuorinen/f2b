@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -227,18 +228,218 @@ func streamLogFile(path string, config LogReadConfig) ([]string, error) {
 	return scanLogLines(scanner, config)
 }
 
-// validateLogPath validates and sanitizes the log file path
+// PathSecurityConfig holds configuration for path security validation
+type PathSecurityConfig struct {
+	AllowedBasePaths []string // List of allowed base directories
+	MaxPathLength    int      // Maximum allowed path length (0 = unlimited)
+	AllowSymlinks    bool     // Whether to allow symlinks
+	ResolveSymlinks  bool     // Whether to resolve symlinks before validation
+}
+
+// validateLogPath validates and sanitizes the log file path with comprehensive security checks
 func validateLogPath(path string) (string, error) {
+	config := PathSecurityConfig{
+		AllowedBasePaths: []string{logDir}, // Use configured log directory
+		MaxPathLength:    4096,             // Reasonable path length limit
+		AllowSymlinks:    false,            // Disable symlinks for security
+		ResolveSymlinks:  true,             // Resolve symlinks before validation
+	}
+
+	return validatePathWithSecurity(path, config)
+}
+
+// validatePathWithSecurity performs comprehensive path security validation
+func validatePathWithSecurity(path string, config PathSecurityConfig) (string, error) {
+	if path == "" {
+		return "", fmt.Errorf("empty path not allowed")
+	}
+
+	// Check path length limits
+	if config.MaxPathLength > 0 && len(path) > config.MaxPathLength {
+		return "", fmt.Errorf("path too long: %d characters (max: %d)", len(path), config.MaxPathLength)
+	}
+
+	// Detect and prevent null byte injection
+	if strings.Contains(path, "\x00") {
+		return "", fmt.Errorf("path contains null byte")
+	}
+
+	// Decode URL-encoded path traversal attempts
+	if decodedPath, err := url.QueryUnescape(path); err == nil && decodedPath != path {
+		logrus.WithField("original", path).WithField("decoded", decodedPath).
+			Warn("Detected URL-encoded path, using decoded version for validation")
+		path = decodedPath
+	}
+
+	// Normalize unicode characters to prevent bypass attempts
+	path = normalizeUnicode(path)
+
+	// Basic path traversal detection (before cleaning)
+	if containsPathTraversal(path) {
+		return "", fmt.Errorf("path contains path traversal patterns")
+	}
+
+	// Clean and resolve the path
 	cleanPath, err := filepath.Abs(filepath.Clean(path))
 	if err != nil {
-		return "", fmt.Errorf("invalid log file path: %w", err)
+		return "", fmt.Errorf("invalid path: %w", err)
 	}
 
-	if strings.Contains(cleanPath, "..") {
-		return "", fmt.Errorf("invalid log file path: contains path traversal")
+	// Additional check after cleaning (double-check for sophisticated attacks)
+	if containsPathTraversal(cleanPath) {
+		return "", fmt.Errorf("path contains path traversal patterns after normalization")
 	}
 
-	return cleanPath, nil
+	// Handle symlinks according to configuration
+	finalPath, err := handleSymlinks(cleanPath, config)
+	if err != nil {
+		return "", err
+	}
+
+	// Validate against allowed base paths
+	if err := validateBasePath(finalPath, config.AllowedBasePaths); err != nil {
+		return "", err
+	}
+
+	// Check if path points to a device file or other dangerous file types
+	if err := validateFileType(finalPath); err != nil {
+		return "", err
+	}
+
+	return finalPath, nil
+}
+
+// containsPathTraversal detects various path traversal patterns
+func containsPathTraversal(path string) bool {
+	// Check for various path traversal patterns
+	dangerousPatterns := []string{
+		"..",
+		"./",
+		".\\",
+		"//",
+		"\\\\",
+		"/../",
+		"\\..\\",
+		"%2e%2e",       // URL encoded ..
+		"%2f",          // URL encoded /
+		"%5c",          // URL encoded \
+		"\u002e\u002e", // Unicode ..
+		"\u2024\u2024", // Unicode bullet points (can look like ..)
+		"\uff0e\uff0e", // Full-width Unicode ..
+	}
+
+	pathLower := strings.ToLower(path)
+	for _, pattern := range dangerousPatterns {
+		if strings.Contains(pathLower, strings.ToLower(pattern)) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// normalizeUnicode normalizes unicode characters to prevent bypass attempts
+func normalizeUnicode(path string) string {
+	// Replace various Unicode representations of dots and slashes
+	replacements := map[string]string{
+		"\u002e": ".",  // Unicode dot
+		"\u2024": ".",  // Unicode bullet (one dot leader)
+		"\uff0e": ".",  // Full-width dot
+		"\u002f": "/",  // Unicode slash
+		"\u2044": "/",  // Unicode fraction slash
+		"\uff0f": "/",  // Full-width slash
+		"\u005c": "\\", // Unicode backslash
+		"\uff3c": "\\", // Full-width backslash
+	}
+
+	result := path
+	for unicode, ascii := range replacements {
+		result = strings.ReplaceAll(result, unicode, ascii)
+	}
+
+	return result
+}
+
+// handleSymlinks resolves or validates symlinks according to configuration
+func handleSymlinks(path string, config PathSecurityConfig) (string, error) {
+	// Check if the path is a symlink
+	if info, err := os.Lstat(path); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			if !config.AllowSymlinks {
+				return "", fmt.Errorf("symlinks not allowed: %s", path)
+			}
+
+			if config.ResolveSymlinks {
+				resolved, err := filepath.EvalSymlinks(path)
+				if err != nil {
+					return "", fmt.Errorf("failed to resolve symlink: %w", err)
+				}
+				return resolved, nil
+			}
+		}
+	} else if !os.IsNotExist(err) {
+		return "", fmt.Errorf("failed to check file info: %w", err)
+	}
+
+	return path, nil
+}
+
+// validateBasePath ensures the path is within allowed base directories
+func validateBasePath(path string, allowedBasePaths []string) error {
+	if len(allowedBasePaths) == 0 {
+		return nil // No restrictions if no base paths configured
+	}
+
+	for _, basePath := range allowedBasePaths {
+		cleanBasePath, err := filepath.Abs(filepath.Clean(basePath))
+		if err != nil {
+			continue
+		}
+
+		// Check if path starts with allowed base path
+		if strings.HasPrefix(path, cleanBasePath+string(filepath.Separator)) ||
+			path == cleanBasePath {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("path outside allowed directories: %s", path)
+}
+
+// validateFileType checks for dangerous file types (devices, named pipes, etc.)
+func validateFileType(path string) error {
+	// Check if file exists
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return nil // File doesn't exist yet, allow it
+	}
+	if err != nil {
+		return fmt.Errorf("failed to stat file: %w", err)
+	}
+
+	mode := info.Mode()
+
+	// Block device files
+	if mode&os.ModeDevice != 0 {
+		return fmt.Errorf("device files not allowed: %s", path)
+	}
+
+	// Block named pipes (FIFOs)
+	if mode&os.ModeNamedPipe != 0 {
+		return fmt.Errorf("named pipes not allowed: %s", path)
+	}
+
+	// Block socket files
+	if mode&os.ModeSocket != 0 {
+		return fmt.Errorf("socket files not allowed: %s", path)
+	}
+
+	// Block irregular files (anything that's not a regular file or directory)
+	if !mode.IsRegular() && !mode.IsDir() {
+		return fmt.Errorf("irregular file type not allowed: %s", path)
+	}
+
+	return nil
 }
 
 // shouldSkipFile checks if a file should be skipped due to size limits

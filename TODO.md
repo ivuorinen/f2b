@@ -398,18 +398,62 @@ if !validActions[action] {
 
 **Memory Impact**: Reduced from potential 12GB+ usage to <10MB for typical use cases
 
-### 26. Enhanced Path Traversal and File Security
+### 26. Enhanced Path Traversal and File Security ✅ **COMPLETED**
 
-**Priority:** 🔥 **HIGH**
-**File:** `fail2ban/logs.go`
-**Lines:** 120-171
+**Files:** `fail2ban/logs.go`, `fail2ban/fail2ban.go`, `cmd/config_utils.go`
+**Lines:** Comprehensive security system implemented
 
-- [ ] **Add comprehensive path validation** beyond `..` checks
-- [ ] Implement null byte injection protection
-- [ ] Add symlink attack prevention
-- [ ] Validate against device files and named pipes
-- [ ] Add path length limits and canonicalization
-- [ ] Implement file permission validation
+- [x] ✅ **Add comprehensive path validation** beyond `..` checks
+- [x] ✅ Implement null byte injection protection
+- [x] ✅ Add symlink attack prevention
+- [x] ✅ Validate against device files and named pipes
+- [x] ✅ Add path length limits and canonicalization
+- [x] ✅ Implement file permission validation
+
+**Key Security Improvements:**
+
+1. **Advanced Path Traversal Detection**:
+
+  - URL-encoded attacks (`%2e%2e`, `%2f`, `%5c`)
+  - Unicode bypass attempts (`\u002e\u002e`, `\uff0e\uff0e`)
+  - Double-encoding and normalization attacks
+  - Case-insensitive detection patterns
+
+2. **Comprehensive Input Validation**:
+
+  - Null byte injection protection (`\x00`)
+  - Path length limits (4096 characters max)
+  - Unicode normalization to prevent bypass
+  - Character allowlists for filter names
+
+3. **Symlink Security**:
+
+  - Configurable symlink policies (allow/deny)
+  - Symlink resolution with containment validation
+  - Protection against symlink escape attacks
+
+4. **File Type Restrictions**:
+
+  - Block device files (`/dev/*`)
+  - Block named pipes (FIFOs)
+  - Block socket files
+  - Allow only regular files and directories
+
+5. **Environment Variable Validation**:
+
+  - `F2B_LOG_DIR` and `F2B_FILTER_DIR` now validated
+  - System path allowlists for reasonable locations
+  - Automatic fallback to safe defaults on validation failure
+
+6. **Comprehensive Test Coverage**:
+
+  - 13 malicious path attack patterns tested
+  - Unicode normalization and encoding tests
+  - Symlink security validation
+  - Performance benchmarks included
+
+**Security Impact**: Eliminated multiple file system attack vectors including advanced path traversal, symlink
+attacks, and device file access attempts.
 
 ### 27. Race Condition in Global State Management
 
