@@ -70,6 +70,8 @@ func (r *OSRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte, 
 	// If command requires sudo and user has privileges, use sudo
 	if RequiresSudo(name, args...) && checker.HasSudoPrivileges() {
 		sudoArgs := append([]string{name}, args...)
+		// #nosec G204 - This is a legitimate use case for executing fail2ban-client with sudo
+		// The command name and arguments are validated by RequiresSudo() and come from controlled sources
 		return exec.Command("sudo", sudoArgs...).CombinedOutput()
 	}
 
@@ -181,15 +183,6 @@ func isTest() bool {
 	return false
 }
 
-// skipTest logs a skip message but doesn't exit the program.
-// skipTest is used in tests to indicate skipping scenarios.
-//
-//nolint:unused
-func skipTest(msg string) {
-	// Log the skip message but don't exit - this was causing unexpected program termination
-	fmt.Fprintln(os.Stderr, "SKIP:", msg)
-}
-
 // SetResponse sets a response for a command.
 func (m *MockRunner) SetResponse(cmd string, response []byte) {
 	m.Responses[cmd] = response
@@ -203,21 +196,6 @@ func (m *MockRunner) SetError(cmd string, err error) {
 // GetCalls returns the log of commands called.
 func (m *MockRunner) GetCalls() []string {
 	return m.CallLog
-}
-
-// runnerCombinedRun is used in tests to run commands without sudo.
-//
-//nolint:unused
-func runnerCombinedRun(name string, args ...string) error {
-	runnerMutex.RLock()
-	currentRunner := runner
-	runnerMutex.RUnlock()
-
-	out, err := currentRunner.CombinedOutput(name, args...)
-	if err != nil {
-		return fmt.Errorf("%s", bytes.TrimSpace(out))
-	}
-	return nil
 }
 
 func runnerCombinedRunWithSudo(name string, args ...string) error {
@@ -539,8 +517,26 @@ func TestFilter(filter string) (string, error) {
 	if !isValidFilter(filter) {
 		return "", fmt.Errorf("invalid filter name")
 	}
-	path := filterDir + "/" + filter + ".conf"
-	data, err := os.ReadFile(path)
+	path := filepath.Join(filterDir, filter+".conf")
+
+	// Additional security check: ensure path doesn't escape filter directory
+	cleanPath, err := filepath.Abs(filepath.Clean(path))
+	if err != nil {
+		return "", fmt.Errorf("invalid filter path: %w", err)
+	}
+
+	cleanFilterDir, err := filepath.Abs(filepath.Clean(filterDir))
+	if err != nil {
+		return "", fmt.Errorf("invalid filter directory: %w", err)
+	}
+
+	// Ensure the resolved path is within the filter directory
+	if !strings.HasPrefix(cleanPath, cleanFilterDir+string(filepath.Separator)) {
+		return "", fmt.Errorf("filter path outside allowed directory")
+	}
+
+	// #nosec G304 - Path is validated, sanitized, and restricted to filter directory above
+	data, err := os.ReadFile(cleanPath)
 	if err != nil {
 		return "", fmt.Errorf("filter not found: %w", err)
 	}
@@ -574,7 +570,25 @@ func (c *RealClient) TestFilter(filter string) (string, error) {
 		return "", fmt.Errorf("invalid filter name")
 	}
 	path := filepath.Join(c.FilterDir, filter+".conf")
-	data, err := os.ReadFile(path)
+
+	// Additional security check: ensure path doesn't escape filter directory
+	cleanPath, err := filepath.Abs(filepath.Clean(path))
+	if err != nil {
+		return "", fmt.Errorf("invalid filter path: %w", err)
+	}
+
+	cleanFilterDir, err := filepath.Abs(filepath.Clean(c.FilterDir))
+	if err != nil {
+		return "", fmt.Errorf("invalid filter directory: %w", err)
+	}
+
+	// Ensure the resolved path is within the filter directory
+	if !strings.HasPrefix(cleanPath, cleanFilterDir+string(filepath.Separator)) {
+		return "", fmt.Errorf("filter path outside allowed directory")
+	}
+
+	// #nosec G304 - Path is validated, sanitized, and restricted to filter directory above
+	data, err := os.ReadFile(cleanPath)
 	if err != nil {
 		return "", fmt.Errorf("filter not found: %w", err)
 	}

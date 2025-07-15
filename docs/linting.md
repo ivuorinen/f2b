@@ -4,12 +4,17 @@ This document describes the linting and code quality tools used in the f2b proje
 
 ## Overview
 
-The project uses multiple linting tools to ensure code quality, consistency, and security:
+The project uses a unified pre-commit approach for linting and code quality, ensuring consistency across development,
+CI, and pre-commit hooks.
 
-- **Go**: `gofmt`, `go vet`, `golangci-lint`
-- **Markdown**: `markdownlint`
-- **YAML**: `yamllint`
+### Supported Tools
+
+- **Go**: `gofmt`, `go-build-mod`, `go-mod-tidy`, `golangci-lint`
+- **Markdown**: `markdownlint-cli2`
+- **YAML**: `yamlfmt` (Google's YAML formatter)
 - **GitHub Actions**: `actionlint`
+- **EditorConfig**: `editorconfig-checker`
+- **Makefile**: `checkmake`
 
 ## Quick Start
 
@@ -19,72 +24,118 @@ The project uses multiple linting tools to ensure code quality, consistency, and
 make dev-deps
 ```
 
-### Run All Linters
+### Set Up Pre-commit (Recommended)
 
 ```bash
-# Non-strict mode (shows issues but doesn't fail)
+make pre-commit-setup
+# or manually:
+pip install pre-commit
+pre-commit install
+```
+
+### Run All Linters
+
+**Preferred Method (Unified Tooling):**
+
+```bash
+# Run all linting and formatting checks
 make lint
 
-# Strict mode (fails on any issues)
+# Run all linters with strict mode
 make lint-strict
 
-# Auto-fix issues where possible
+# Run linters with auto-fix
 make lint-fix
 ```
 
-### Run Individual Linters
+**Individual Pre-commit Hooks:**
 
 ```bash
-make lint-go        # Go only
-make lint-md        # Markdown only
-make lint-yaml      # YAML only
-make lint-actions   # GitHub Actions only
+# Run specific hook
+pre-commit run yamlfmt --all-files
+pre-commit run golangci-lint --all-files
+pre-commit run markdownlint-cli2 --all-files
+pre-commit run checkmake --all-files
 ```
+
+**Legacy Method (Individual Tools):**
+
+```bash
+make lint-legacy        # All tools individually
+make lint-go           # Go only
+make lint-yaml         # YAML only
+make lint-actions      # GitHub Actions only
+make lint-make         # Makefile only
+```
+
+## Configuration Files
+
+**Read these files BEFORE making changes:**
+
+- **`.editorconfig`**: Indentation, final newlines, encoding
+- **`.golangci.yml`**: Go linting rules and timeout settings
+- **`.markdownlint.json`**: Markdown formatting rules (120 char limit)
+- **`.yamlfmt.yaml`**: YAML formatting rules
+- **`.pre-commit-config.yaml`**: Pre-commit hook configuration
 
 ## Linting Tools
 
 ### Go Linting
 
-#### gofmt
+#### gofmt (via pre-commit-golang)
+
 - **Purpose**: Code formatting
 - **Configuration**: Uses Go standard formatting
-- **Usage**: `gofmt -w .`
+- **Hook**: `go-fmt`
 
-#### go vet
-- **Purpose**: Static analysis for common Go issues
-- **Configuration**: Uses Go standard checks
-- **Usage**: `go vet ./...`
+#### go-build-mod (via pre-commit-golang)
 
-#### golangci-lint
+- **Purpose**: Verify code builds
+- **Configuration**: Uses go.mod
+- **Hook**: `go-build-mod`
+
+#### go-mod-tidy (via pre-commit-golang)
+
+- **Purpose**: Clean up go.mod and go.sum
+- **Configuration**: Automatic
+- **Hook**: `go-mod-tidy`
+
+#### golangci-lint (local hook)
+
 - **Purpose**: Comprehensive Go linting with multiple analyzers
-- **Configuration**: Default configuration
-- **Usage**: `golangci-lint run --timeout=5m`
+- **Configuration**: `.golangci.yml`
+- **Features**: 50+ linters, fast caching, detailed reporting
+- **Hook**: `golangci-lint`
 
 ### Markdown Linting
 
-#### markdownlint
+#### markdownlint-cli2 (local hook)
+
 - **Purpose**: Markdown formatting and style consistency
 - **Configuration**: `.markdownlint.json`
 - **Key rules**:
   - Line length limit: 120 characters
   - Disabled: HTML tags, bare URLs, first-line heading requirement
-- **Usage**: `markdownlint *.md`
+- **Hook**: `markdownlint-cli2`
 
 ### YAML Linting
 
-#### yamllint
-- **Purpose**: YAML syntax and style checking
-- **Configuration**: `.yamllint.yml`
-- **Key rules**:
+#### yamlfmt (official Google repo)
+
+- **Purpose**: YAML formatting and linting
+- **Configuration**: `.yamlfmt.yaml`
+- **Key features**:
+  - Document start markers (`---`)
   - Line length limit: 120 characters
-  - Minimum spaces from content: 1
-  - Allows 'true'/'false'/'on'/'off' as truthy values
-  - Document start disabled
-- **Usage**: `yamllint .github/workflows/`
+  - Respects .gitignore
+  - Retains single line breaks
+  - EOF newlines
+- **Hook**: `yamlfmt`
 
 ### GitHub Actions Linting
 
-#### actionlint
+#### actionlint (local hook)
+
 - **Purpose**: GitHub Actions workflow validation
 - **Configuration**: Default configuration
 - **Features**:
@@ -92,11 +143,120 @@ make lint-actions   # GitHub Actions only
   - shellcheck integration
   - Action version checking
   - Expression validation
-- **Usage**: `actionlint .github/workflows/*.yml`
+- **Hook**: `actionlint`
 
-## Configuration Files
+### EditorConfig
+
+#### editorconfig-checker (local hook)
+
+- **Purpose**: Verify EditorConfig compliance
+- **Configuration**: `.editorconfig`
+- **Features**: Checks indentation, final newlines, encoding
+- **Hook**: `editorconfig-checker`
+
+### Makefile Linting
+
+#### checkmake (official repo)
+
+- **Purpose**: Makefile syntax and best practices validation
+- **Configuration**: Default rules (no config file needed)
+- **Features**:
+  - Checks for missing `.PHONY` declarations
+  - Validates target dependencies
+  - Enforces Makefile best practices
+  - Detects syntax errors and common mistakes
+- **Hook**: `checkmake`
+- **Manual Usage**: `checkmake Makefile`
+
+## Pre-commit Integration
+
+The project uses `.pre-commit-config.yaml` for unified tooling:
+
+### Hook Sources
+
+- **pre-commit/pre-commit-hooks**: Basic file checks
+- **tekwizely/pre-commit-golang**: Go-specific hooks
+- **google/yamlfmt**: Official YAML formatter
+- **mrtazz/checkmake**: Official Makefile linter
+- **local**: Custom hooks for project-specific tools
+
+### Automatic Setup
+
+```bash
+# Install pre-commit and hooks
+make pre-commit-setup
+
+# Hooks will run automatically on commit
+git commit -m "your changes"
+```
+
+### Manual Execution
+
+```bash
+# Run all hooks
+pre-commit run --all-files
+
+# Run specific hook
+pre-commit run yamlfmt
+pre-commit run golangci-lint
+pre-commit run checkmake
+
+# Update hook versions
+pre-commit autoupdate
+```
+
+## CI Integration
+
+### GitHub Actions
+
+Both workflows now use unified pre-commit:
+
+- **`.github/workflows/lint.yml`**: Main linting workflow
+- **`.github/workflows/pr-lint.yml`**: Pull request linting
+
+### Workflow Features
+
+- Single `pre-commit/action@v3.0.1` step
+- Automatic tool installation and caching
+- Consistent behavior with local development
+- Python and Go environment setup
+
+## Development Workflow
+
+### Before Committing
+
+1. **Read configuration files first**: `.editorconfig`, `.golangci.yml`, `.markdownlint.json`, `.yamlfmt.yaml`, `.pre-commit-config.yaml`
+2. **Apply configuration rules** during development
+3. **Run pre-commit checks**: `pre-commit run --all-files`
+4. **Fix all issues** across the project
+5. **Run tests**: `go test ./...`
+
+### Recommended IDE Setup
+
+- **Go**: Use `gopls` language server with auto-format on save
+- **Markdown**: Install markdownlint extension
+- **YAML**: Install YAML extension with yamlfmt support
+- **EditorConfig**: Install EditorConfig plugin
+
+## Configuration Details
+
+### `.yamlfmt.yaml`
+
+```yaml
+---
+# yaml-language-server: $schema=https://raw.githubusercontent.com/google/yamlfmt/main/schema.json
+formatter:
+  type: basic
+  include_document_start: true
+  gitignore_excludes: true
+  retain_line_breaks_single: true
+  eof_newline: true
+  max_line_length: 120
+  indent: 2
+```
 
 ### `.markdownlint.json`
+
 ```json
 {
   "default": true,
@@ -112,106 +272,68 @@ make lint-actions   # GitHub Actions only
 }
 ```
 
-### `.yamllint.yml`
-```yaml
-extends: default
+### `.golangci.yml`
 
-rules:
-  line-length:
-    max: 120
-  comments:
-    min-spaces-from-content: 1
-  truthy:
-    allowed-values: ['true', 'false', 'on', 'off']
-  document-start: disable
-```
+Comprehensive Go linting configuration with timeout settings and enabled/disabled linters.
 
-## Pre-commit Hooks
+## Schema Support
 
-The project includes pre-commit configuration in `.pre-commit-config.yaml`:
+All YAML files include schema references for better IDE support:
 
-### Install pre-commit
-```bash
-pip install pre-commit
-pre-commit install
-```
-
-### Manual pre-commit run
-```bash
-pre-commit run --all-files
-```
-
-## CI Integration
-
-### GitHub Actions
-
-The project includes automated linting in CI:
-
-- **`.github/workflows/lint.yml`**: Dedicated linting workflow
-- **`.github/workflows/pr-lint.yml`**: Pull request linting (includes additional checks)
-
-### Workflow Features
-- Runs on pull requests and main branch pushes
-- Parallel execution of different linters
-- Comprehensive dependency installation
-- Structured output for easy debugging
-
-## Development Workflow
-
-### Before Committing
-1. Format code: `make fmt`
-2. Run linters: `make lint`
-3. Fix any issues: `make lint-fix`
-4. Run tests: `make test`
-
-### Recommended IDE Setup
-- **Go**: Use `gopls` language server with auto-format on save
-- **Markdown**: Install markdownlint extension
-- **YAML**: Install YAML extension with yamllint support
+- **GitHub workflows**: `$schema=https://json.schemastore.org/github-workflow.json`
+- **Pre-commit config**: `$schema=https://json.schemastore.org/pre-commit-config.json`
+- **GitHub labels**: `$schema=https://json.schemastore.org/github-labels.json`
 
 ## Troubleshooting
 
 ### Common Issues
 
+#### Pre-commit hook failures
+
+**Solution**: Run `pre-commit run --all-files` locally to identify issues
+
 #### "command not found" errors
-**Solution**: Run `make dev-deps` to install missing tools
 
-#### Long lines in generated files
-**Solution**: Add files to linter ignore patterns or use `|| true` for non-critical issues
+**Solution**: Run `make dev-deps` and `make pre-commit-setup`
 
-#### YAML workflow syntax errors
-**Solution**: Use `yamllint` and `actionlint` to validate before committing
+#### YAML formatting differences
+
+**Solution**: Use `yamlfmt .` to format files consistently
 
 ### Debugging Tips
 
-1. **Run individual linters** to isolate issues
-2. **Use verbose flags** when available (`-v`, `--verbose`)
+1. **Run individual hooks** to isolate issues
+2. **Use `--verbose` flag** with pre-commit
 3. **Check configuration files** for rule customizations
-4. **Verify tool versions** if behavior differs from CI
+4. **Verify tool versions** match CI environment
 
 ## Adding New Linting Rules
 
 ### Process
-1. Update configuration files (`.markdownlint.json`, `.yamllint.yml`, etc.)
-2. Test changes locally: `make lint-strict`
-3. Update CI workflows if needed
+
+1. Update configuration files (`.markdownlint.json`, `.yamlfmt.yaml`, etc.)
+2. Test changes locally: `pre-commit run --all-files`
+3. Update `.pre-commit-config.yaml` if adding new hooks
 4. Document changes in this file
 5. Consider backward compatibility
 
 ### Best Practices
+
 - Start with warnings before making rules errors
-- Provide clear documentation for new rules
+- Use pre-commit for consistency across environments
 - Test with existing codebase before enforcing
-- Consider auto-fix capabilities when available
+- Leverage auto-fix capabilities when available
 
 ## Security Considerations
 
 ### Tool Installation
-- All tools are installed from official sources
-- Versions are pinned in CI workflows
-- Dependencies are verified before execution
+
+- All tools installed from official repositories
+- Versions pinned in `.pre-commit-config.yaml`
+- Dependencies verified before execution
 
 ### Code Analysis
+
 - Linters help identify potential security issues
 - Static analysis catches common vulnerabilities
 - Configuration validation prevents misconfigurations
@@ -219,7 +341,15 @@ The project includes automated linting in CI:
 ## Performance
 
 ### Optimization Tips
-- Use `golangci-lint` cache: `--cache-dir`
-- Run linters in parallel when possible
-- Skip linting for unchanged files in CI
-- Use incremental linting tools when available
+
+- Pre-commit caches tool installations
+- Hooks run in parallel when possible
+- Use `golangci-lint` cache for faster Go linting
+- Skip unchanged files automatically
+
+### Benefits of Pre-commit
+
+- **Consistency**: Same tools in dev, CI, and pre-commit
+- **Speed**: Cached tool installations
+- **Reliability**: No version mismatches
+- **Maintenance**: Centralized configuration

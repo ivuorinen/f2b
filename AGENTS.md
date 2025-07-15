@@ -12,13 +12,12 @@ Instructions for AI agents and human contributors to maintain consistent, secure
 
 ## Commit Rules
 
-- **Read configs FIRST**: Study `.editorconfig`, `.golangci.yml`, `.markdownlint.json`, `.yamllint.yml`
+- **Read configs FIRST**: Study `.editorconfig`, `.golangci.yml`, `.markdownlint.json`, `.yamlfmt.yaml`, `.pre-commit-config.yaml`
 - **Semantic Commits**: `type(scope): message` (e.g., `feat(cli): add ban command`)
-- **Formatting**: Run `go fmt ./...` and `goimports -w .` before committing
-- **Linting**: Run `golangci-lint run` and fix ALL issues for any code changes
-- **Config Verification**: Run `golangci-lint config verify` when modifying linting config
+- **Preferred Workflow**: Use `pre-commit run --all-files` for unified linting and formatting
+- **Pre-commit Setup**: Run `pre-commit install` for automatic hooks on commit
 - **Tests**: Run `go test ./...` after linting for code changes
-- **Pre-commit**: Run `pre-commit run --all-files` and fix all issues (requires Docker)
+- **Alternative**: Individual tools available but pre-commit is preferred for consistency
 
 ## Security Rules
 
@@ -37,7 +36,10 @@ Instructions for AI agents and human contributors to maintain consistent, secure
 - **`.editorconfig`**: Indentation (tabs for Go, 2 spaces for others), final newlines, encoding
 - **`.golangci.yml`**: Go linting rules, enabled/disabled checks, timeout settings
 - **`.markdownlint.json`**: Markdown formatting rules, line length (120 chars), disabled rules
-- **`.yamllint.yml`**: YAML linting rules for workflow files
+- **`.yamlfmt.yaml`**: YAML formatting rules for all YAML files
+- **`.pre-commit-config.yaml`**: Pre-commit hook configuration
+
+For detailed information about all linting tools and configuration, see [docs/linting.md](docs/linting.md).
 
 ## Code Standards
 
@@ -59,11 +61,11 @@ Instructions for AI agents and human contributors to maintain consistent, secure
 
 ## Development Workflow
 
-1. **Read configuration files first**: `.editorconfig`, `.golangci.yml`, `.markdownlint.json`, `.yamllint.yml`
+1. **Read configuration files first**: `.editorconfig`, `.golangci.yml`, `.markdownlint.json`, `.yamlfmt.yaml`, `.pre-commit-config.yaml`
 2. **Study existing code patterns** and project structure before making changes
 3. **Apply configuration rules** during development to avoid style violations
 4. **Implement changes** following security and testing requirements
-5. **Run complete lint and test suite** to catch any remaining issues
+5. **Run pre-commit checks**: `pre-commit run --all-files` to catch all issues
 6. **Fix all issues** across the project, not just modified files
 7. **Keep PRs focused** with clear descriptions
 

@@ -31,6 +31,23 @@ go test -tags=integration ./...
 
 ### Code Quality
 
+**Preferred Method (Unified Tooling):**
+
+```bash
+# Run all linting and formatting checks
+pre-commit run --all-files
+
+# Run specific hook
+pre-commit run yamlfmt --all-files
+pre-commit run golangci-lint --all-files
+pre-commit run checkmake --all-files
+
+# Install pre-commit hooks (one-time setup)
+pre-commit install
+```
+
+**Individual Tools (if needed):**
+
 ```bash
 # Format code
 gofmt -w .
@@ -46,6 +63,12 @@ editorconfig-checker
 
 # Check markdown files
 markdownlint-cli2 "*.md"
+
+# Run yamlfmt (YAML formatter/linter)
+yamlfmt -lint .
+
+# Run checkmake (Makefile linter)
+checkmake Makefile
 ```
 
 ### Testing with Mock Environment

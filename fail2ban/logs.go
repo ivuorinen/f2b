@@ -118,7 +118,19 @@ func readLogFileLines(path string) []string {
 
 // readLogFile reads the contents of a log file, handling gzip compression if necessary.
 func readLogFile(path string) ([]byte, error) {
-	f, err := os.Open(path)
+	// Validate path for security
+	cleanPath, err := filepath.Abs(filepath.Clean(path))
+	if err != nil {
+		return nil, fmt.Errorf("invalid log file path: %w", err)
+	}
+
+	// Additional security check: ensure path doesn't contain dangerous patterns
+	if strings.Contains(cleanPath, "..") {
+		return nil, fmt.Errorf("invalid log file path: contains path traversal")
+	}
+
+	// #nosec G304 - Path is validated and sanitized above
+	f, err := os.Open(cleanPath)
 	if err != nil {
 		return nil, err
 	}

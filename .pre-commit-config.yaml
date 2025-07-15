@@ -1,3 +1,5 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/pre-commit-config.json
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.4.0
@@ -17,8 +19,21 @@ repos:
         alias: tidy
       - id: go-fmt
         alias: fmt
-      - id: go-vet
+      - id: go-revive-mod
+        alias: revive
+      - id: go-vet-mod
         alias: vet
+      - id: go-test-mod
+        alias: test
+      - id: go-staticcheck-mod
+        alias: staticcheck
+      - id: go-sec-mod
+        alias: gosec
+
+  - repo: https://github.com/google/yamlfmt
+    rev: v0.17.0
+    hooks:
+      - id: yamlfmt
 
   - repo: local
     hooks:
@@ -30,20 +45,27 @@ repos:
         files: \.go$
         pass_filenames: false
 
-      - id: markdownlint
+      - id: markdownlint-cli2
         name: Markdown Lint
-        entry: markdownlint
+        entry: markdownlint-cli2
         language: node
         files: \.md$
-
-      - id: yamllint
-        name: YAML Lint
-        entry: yamllint
-        language: python
-        files: \.ya?ml$
 
       - id: actionlint
         name: GitHub Actions Lint
         entry: actionlint
         language: system
         files: ^\.github/workflows/.*\.ya?ml$
+
+      - id: editorconfig-checker
+        name: EditorConfig Checker
+        entry: editorconfig-checker
+        language: system
+        files: .
+
+  - repo: https://github.com/mrtazz/checkmake
+    rev: 0.2.2
+    hooks:
+      - id: checkmake
+        name: Makefile Linter
+        files: ^Makefile$

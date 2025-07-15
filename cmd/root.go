@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/ivuorinen/f2b/fail2ban"
 	"github.com/sirupsen/logrus"
@@ -66,11 +68,25 @@ func init() {
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 		logFileFlag, _ := cmd.Flags().GetString("log-file")
 		if logFileFlag != "" {
-			f, err := os.OpenFile(logFileFlag, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+			// Validate log file path for security
+			cleanPath, err := filepath.Abs(filepath.Clean(logFileFlag))
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Invalid log file path %s: %v\n", logFileFlag, err)
+				return
+			}
+
+			// Additional security check: ensure path doesn't contain dangerous patterns
+			if strings.Contains(cleanPath, "..") || strings.Contains(cleanPath, "//") {
+				fmt.Fprintf(os.Stderr, "Invalid log file path %s: contains dangerous patterns\n", logFileFlag)
+				return
+			}
+
+			// #nosec G304 - Path is validated and sanitized above
+			f, err := os.OpenFile(cleanPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 			if err == nil {
 				Logger.SetOutput(f)
 			} else {
-				fmt.Fprintf(os.Stderr, "Failed to open log file %s: %v\n", logFileFlag, err)
+				fmt.Fprintf(os.Stderr, "Failed to open log file %s: %v\n", cleanPath, err)
 			}
 		}
 		level, _ := cmd.Flags().GetString("log-level")

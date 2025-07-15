@@ -1,10 +1,11 @@
 # f2b - Modern Fail2Ban CLI Wrapper
 
-A modern, secure, and extensible Go CLI tool for managing [Fail2Ban](https://www.fail2ban.org/) jails and bans. Built with Go, featuring automatic sudo privilege management, shell completion, and comprehensive security.
+A modern, secure, and extensible Go CLI tool for managing [Fail2Ban](https://www.fail2ban.org/) jails and bans.
+Built with Go, featuring automatic sudo privilege management, shell completion, and comprehensive security.
 
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://choosealicense.com/licenses/mit/)
 [![Go Version](https://img.shields.io/badge/Go-%3E%3D1.20-blue.svg)](https://golang.org/)
-[![Build Status](https://img.shields.io/badge/tests-passing-brightgreen.svg)]()
+[![Build Status](https://img.shields.io/badge/tests-passing-brightgreen.svg)](https://github.com/ivuorinen/f2b/actions)
 
 ---
 
@@ -188,7 +189,7 @@ f2b intelligently manages sudo requirements:
 
 ### Error Guidance
 
-```
+```text
 Error: fail2ban operations require sudo privileges. Current user: username (UID: 1000).
 Please run with sudo or ensure user is in sudo group
 Hint: Try running with 'sudo' or ensure your user is in the sudo group
@@ -294,21 +295,28 @@ go test -coverprofile=coverage.out ./...
 F2B_TEST_SUDO=true go test ./fail2ban -run TestSudo
 ```
 
-### Pre-commit Hooks
+### Code Quality & Linting
 
-This project uses [pre-commit](https://pre-commit.com/) to automate linting and formatting.
-Install the hooks after cloning:
-
-```bash
-pip install pre-commit
-pre-commit install
-```
-
-MegaLinter requires Docker and does not currently work with Podman. Run the hooks before committing:
+This project uses [pre-commit](https://pre-commit.com/) for unified linting and formatting.
+Install the development dependencies and hooks:
 
 ```bash
-pre-commit run --all-files
+make dev-deps
+make pre-commit-setup
 ```
+
+Run all linters:
+
+```bash
+# Preferred method (unified tooling)
+make lint
+
+# Run specific hooks
+pre-commit run yamlfmt --all-files
+pre-commit run golangci-lint --all-files
+```
+
+For detailed information about linting tools and configuration, see [docs/linting.md](../docs/linting.md).
 
 ### Integration Examples
 

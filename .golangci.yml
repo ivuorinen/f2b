@@ -1,3 +1,4 @@
+---
 # yaml-language-server: $schema=https://json.schemastore.org/golangci-lint.json
 # golangci-lint configuration for f2b project
 # https://golangci-lint.run/usage/configuration/
@@ -67,7 +68,6 @@ linters:
       exclude-functions:
         - (*os.File).Close
         - (io.Closer).Close
-
 
     govet:
       enable-all: true

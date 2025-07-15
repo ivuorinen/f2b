@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Install development tooling for the f2b project.
-# This script installs Go-based tools used for linting and formatting.
+# This script installs all tools required for development and CI/CD.
 set -euo pipefail
 
 # Determine Go environment
@@ -9,12 +9,12 @@ if ! command -v go >/dev/null; then
   exit 1
 fi
 
-# Install goimports for formatting
-echo "Installing goimports..."
-go install golang.org/x/tools/cmd/goimports@latest
+echo "Installing all development dependencies using Makefile..."
 
-# Install golangci-lint for linting
-echo "Installing golangci-lint..."
-go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+# Use make dev-deps for all tool installation - this handles:
+# - golangci-lint, markdownlint-cli2, yamlfmt, actionlint
+# - goimports, editorconfig-checker, gosec, staticcheck, revive, checkmake
+make dev-deps
 
-echo "Tool installation complete."
+echo "All development tools installed successfully!"
+echo "Run 'make check-deps' to verify all dependencies are available."

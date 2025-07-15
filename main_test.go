@@ -9,6 +9,20 @@ import (
 	"github.com/ivuorinen/f2b/fail2ban"
 )
 
+// shouldSkipClientInit determines if client initialization should be skipped
+// based on the command arguments. Returns true for commands that don't require
+// fail2ban client initialization.
+func shouldSkipClientInit(args []string) bool {
+	if len(args) <= 1 {
+		return false
+	}
+	switch args[1] {
+	case "service", "version", "test-filter", "completion", "help":
+		return true
+	}
+	return false
+}
+
 func TestMain(m *testing.M) {
 	// Set up mock sudo checker with privileges for all tests
 	originalChecker := fail2ban.GetSudoChecker()
@@ -81,21 +95,9 @@ func TestMainFunction(t *testing.T) {
 
 			// Test that the skip logic works correctly
 			args := os.Args
-			skip := false
-			if len(args) > 1 {
-				switch args[1] {
-				case "service", "version", "test-filter", "completion", "help":
-					skip = true
-				}
-			}
+			skip := shouldSkipClientInit(args)
 
-			expectedSkip := false
-			if len(tt.args) > 1 {
-				switch tt.args[1] {
-				case "service", "version", "test-filter", "completion", "help":
-					expectedSkip = true
-				}
-			}
+			expectedSkip := shouldSkipClientInit(tt.args)
 
 			if skip != expectedSkip {
 				t.Errorf("expected skip=%t, got skip=%t for args %v", expectedSkip, skip, tt.args)
@@ -170,13 +172,7 @@ func TestArgumentParsing(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			args := tt.args
-			skip := false
-			if len(args) > 1 {
-				switch args[1] {
-				case "service", "version", "test-filter", "completion", "help":
-					skip = true
-				}
-			}
+			skip := shouldSkipClientInit(args)
 
 			if skip != tt.shouldSkip {
 				t.Errorf("expected skip=%t, got skip=%t for args %v", tt.shouldSkip, skip, tt.args)
@@ -200,13 +196,7 @@ func TestClientInitializationLogic(t *testing.T) {
 	for _, cmd := range skipCommands {
 		t.Run("skip_"+cmd, func(t *testing.T) {
 			args := []string{"f2b", cmd}
-			skip := false
-			if len(args) > 1 {
-				switch args[1] {
-				case "service", "version", "test-filter", "completion", "help":
-					skip = true
-				}
-			}
+			skip := shouldSkipClientInit(args)
 			if !skip {
 				t.Errorf("expected to skip client initialization for command %s", cmd)
 			}
@@ -216,13 +206,7 @@ func TestClientInitializationLogic(t *testing.T) {
 	for _, cmd := range regularCommands {
 		t.Run("dont_skip_"+cmd, func(t *testing.T) {
 			args := []string{"f2b", cmd}
-			skip := false
-			if len(args) > 1 {
-				switch args[1] {
-				case "service", "version", "test-filter", "completion", "help":
-					skip = true
-				}
-			}
+			skip := shouldSkipClientInit(args)
 			if skip {
 				t.Errorf("expected NOT to skip client initialization for command %s", cmd)
 			}
@@ -285,13 +269,7 @@ func TestEdgeCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			args := tt.args
-			skip := false
-			if len(args) > 1 {
-				switch args[1] {
-				case "service", "version", "test-filter", "completion", "help":
-					skip = true
-				}
-			}
+			skip := shouldSkipClientInit(args)
 
 			if skip != tt.shouldSkip {
 				t.Errorf("expected skip=%t, got skip=%t for args %v", tt.shouldSkip, skip, tt.args)
@@ -414,13 +392,7 @@ func TestMainFunctionLogic(t *testing.T) {
 			config.Format = "plain"
 
 			// Test skip logic
-			skip := false
-			if len(args) > 1 {
-				switch args[1] {
-				case "service", "version", "test-filter", "completion", "help":
-					skip = true
-				}
-			}
+			skip := shouldSkipClientInit(args)
 
 			if skip != tt.expectSkip {
 				t.Errorf("expected skip=%t, got skip=%t", tt.expectSkip, skip)
@@ -558,13 +530,7 @@ func TestMainClientInitialization(t *testing.T) {
 	for _, cmd := range skipCommands {
 		t.Run("skip_"+cmd, func(t *testing.T) {
 			args := []string{"f2b", cmd}
-			skip := false
-			if len(args) > 1 {
-				switch args[1] {
-				case "service", "version", "test-filter", "completion", "help":
-					skip = true
-				}
-			}
+			skip := shouldSkipClientInit(args)
 			if !skip {
 				t.Errorf("expected to skip client initialization for command %s", cmd)
 			}
@@ -574,13 +540,7 @@ func TestMainClientInitialization(t *testing.T) {
 	for _, cmd := range regularCommands {
 		t.Run("require_"+cmd, func(t *testing.T) {
 			args := []string{"f2b", cmd}
-			skip := false
-			if len(args) > 1 {
-				switch args[1] {
-				case "service", "version", "test-filter", "completion", "help":
-					skip = true
-				}
-			}
+			skip := shouldSkipClientInit(args)
 			if skip {
 				t.Errorf("expected NOT to skip client initialization for command %s", cmd)
 			}
@@ -749,13 +709,7 @@ func TestMainArgumentValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			args := tt.args
-			skip := false
-			if len(args) > 1 {
-				switch args[1] {
-				case "service", "version", "test-filter", "completion", "help":
-					skip = true
-				}
-			}
+			skip := shouldSkipClientInit(args)
 
 			if strings.Contains(tt.expected, "should skip") && !skip {
 				t.Errorf("expected to skip client init for args %v", args)
@@ -874,13 +828,7 @@ func TestMainIntegration(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Simulate the main function's argument parsing logic
 			args := tc.args
-			skip := false
-			if len(args) > 1 {
-				switch args[1] {
-				case "service", "version", "test-filter", "completion", "help":
-					skip = true
-				}
-			}
+			skip := shouldSkipClientInit(args)
 
 			if strings.Contains(tc.expected, "skip") && !skip {
 				t.Errorf("expected to skip client initialization for %v", tc.args)
@@ -908,13 +856,7 @@ func BenchmarkArgumentParsing(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for _, args := range testArgs {
-			skip := false
-			if len(args) > 1 {
-				switch args[1] {
-				case "service", "version", "test-filter", "completion", "help":
-					skip = true
-				}
-			}
+			skip := shouldSkipClientInit(args)
 			_ = skip // Use the result to prevent optimization
 		}
 	}
@@ -935,13 +877,7 @@ func BenchmarkMainLogic(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		for _, args := range testArgs {
 			// Simulate main function logic
-			skip := false
-			if len(args) > 1 {
-				switch args[1] {
-				case "service", "version", "test-filter", "completion", "help":
-					skip = true
-				}
-			}
+			skip := shouldSkipClientInit(args)
 
 			// Simulate config building
 			config := struct {

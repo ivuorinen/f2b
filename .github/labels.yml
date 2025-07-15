@@ -1,4 +1,5 @@
 ---
+# yaml-language-server: $schema=https://json.schemastore.org/github-labels.json
 - name: "breaking-change"
   color: ee0701
   description: "A breaking change for existing users."
