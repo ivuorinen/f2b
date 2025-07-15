@@ -345,21 +345,34 @@ func (c *RealClient) BanIPParallel(ip string, jails []string) ([]BanResult, erro
 
 ## 🚨 Additional Critical Security Issues (July 2025)
 
-### 24. Service Command Injection Vulnerability ⚠️ **CRITICAL - IMMEDIATE FIX**
+### 24. Service Command Injection Vulnerability ✅ **COMPLETED**
 
 **File:** `cmd/service.go`
-**Lines:** 20-21
+**Lines:** 20-37
 
-- [ ] **URGENT: Add strict validation for service actions**
-- [ ] Implement allowlist-based validation for action parameter
-- [ ] Prevent command injection via crafted service action names
-- [ ] Add input sanitization before sudo execution
-- [ ] Add comprehensive security tests for service command
+- [x] ✅ **URGENT: Add strict validation for service actions**
+- [x] ✅ Implement allowlist-based validation for action parameter
+- [x] ✅ Prevent command injection via crafted service action names
+- [x] ✅ Add input sanitization before sudo execution
+- [x] ✅ Add comprehensive security tests for service command
+
+**Fixed Implementation:**
 
 ```go
+// Validate action to prevent command injection
 validActions := map[string]bool{
-    "start": true, "stop": true, "restart": true, "status": true,
-    "reload": true, "enable": true, "disable": true,
+    "start":   true,
+    "stop":    true,
+    "restart": true,
+    "status":  true,
+    "reload":  true,
+    "enable":  true,
+    "disable": true,
+}
+
+if !validActions[action] {
+    PrintError(fmt.Errorf("invalid service action: %s. Valid actions: start, stop, restart, status, reload, enable, disable", action))
+    return nil
 }
 ```
 
@@ -458,7 +471,8 @@ validActions := map[string]bool{
 **Critical Issues Verified Still Open:** 3 critical issues (Context Support, Memory Limits, Sudo Timeouts)
 **Security Priority:** Elevated due to verified ongoing vulnerability discoveries
 
-### Verification Status (July 2025):
+### Verification Status (July 2025)
+
 - **Item 0 (Sudo Timeout):** ✅ **FIXED** - CanUseSudo() now has 5-second timeout with context
 - **Item 21 (Context Support):** 🔴 **MINIMAL PROGRESS** - Only 1/9 commands support context
 - **Item 22 (Memory Limits):** 🔴 **CONFIRMED NOT STARTED** - logs.go still uses io.ReadAll()

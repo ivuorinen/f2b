@@ -54,8 +54,7 @@ func TestServiceCmd(t *testing.T) {
 		{
 			name:        "invalid action",
 			args:        []string{"invalid"},
-			mockError:   &testServiceError{"invalid action"},
-			expectError: true,
+			expectError: false, // PrintError is called but returns nil error
 		},
 	}
 
@@ -402,6 +401,222 @@ type testServiceError struct {
 
 func (e *testServiceError) Error() string {
 	return e.message
+}
+
+// TestServiceCmdSecurityValidation tests that command injection attempts are blocked
+func TestServiceCmdSecurityValidation(t *testing.T) {
+	maliciousActions := []string{
+		"start; touch /tmp/test",
+		"status && whoami",
+		"restart | curl example.com",
+		"stop`whoami`",
+		"status$(id)",
+		"start'||'curl example.com",
+		"../../../etc/passwd",
+		"start\ntouch /tmp/test",
+		"status\techo test",
+		"reload;curl example.com",
+		"enable & echo test",
+		"disable || curl example.com",
+	}
+
+	// Save original checker and set up mock with privileges
+	originalChecker := fail2ban.GetSudoChecker()
+	defer fail2ban.SetSudoChecker(originalChecker)
+	mockChecker := fail2ban.NewMockSudoCheckerWithPrivileges(true)
+	fail2ban.SetSudoChecker(mockChecker)
+
+	// Create mock runner - shouldn't be called for invalid actions
+	mock := &fail2ban.MockRunner{
+		Responses: make(map[string][]byte),
+		Errors:    make(map[string]error),
+	}
+	fail2ban.SetRunner(mock)
+
+	config := &Config{Format: "plain"}
+
+	for _, maliciousAction := range maliciousActions {
+		t.Run("malicious_action", func(t *testing.T) {
+			cmd := ServiceCmd(config)
+
+			// Capture stderr where PrintError writes
+			oldStderr := os.Stderr
+			errR, errW, _ := os.Pipe()
+			os.Stderr = errW
+
+			// Capture logger output
+			var logBuf bytes.Buffer
+			originalLogOutput := Logger.Out
+			Logger.SetOutput(&logBuf)
+
+			// Capture stdout
+			oldStdout := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			cmd.SetArgs([]string{maliciousAction})
+			err := cmd.Execute()
+
+			// Close writers and restore
+			if err := w.Close(); err != nil {
+				t.Fatalf("failed to close stdout writer: %v", err)
+			}
+			if err := errW.Close(); err != nil {
+				t.Fatalf("failed to close stderr writer: %v", err)
+			}
+			os.Stdout = oldStdout
+			os.Stderr = oldStderr
+			Logger.SetOutput(originalLogOutput)
+
+			// Read captured output
+			var stdoutBuf bytes.Buffer
+			if _, err := stdoutBuf.ReadFrom(r); err != nil {
+				t.Fatalf("failed to read stdout: %v", err)
+			}
+
+			var stderrBuf bytes.Buffer
+			if _, err := stderrBuf.ReadFrom(errR); err != nil {
+				t.Fatalf("failed to read stderr: %v", err)
+			}
+
+			allOutput := stdoutBuf.String() + stderrBuf.String() + logBuf.String()
+
+			// Should not return error (PrintError is called but command returns nil)
+			if err != nil {
+				t.Errorf("unexpected error for malicious action: %v", err)
+			}
+
+			// Should contain error message about invalid action
+			if !strings.Contains(allOutput, "invalid service action") {
+				t.Errorf("expected error message for malicious action, got output: %q", allOutput)
+			}
+
+			// Verify that the mock runner was not called (no actual command execution)
+			if len(mock.GetCalls()) > 0 {
+				t.Errorf("malicious action should not have executed any commands, but got calls: %v", mock.GetCalls())
+			}
+		})
+	}
+}
+
+// TestServiceCmdValidActionsOnly ensures only valid actions are accepted
+func TestServiceCmdValidActionsOnly(t *testing.T) {
+	validActions := []string{"start", "stop", "restart", "status", "reload", "enable", "disable"}
+	invalidActions := []string{"invalid", "badaction", "test", "debug", "config", "init"}
+
+	// Save original checker and set up mock with privileges
+	originalChecker := fail2ban.GetSudoChecker()
+	defer fail2ban.SetSudoChecker(originalChecker)
+	mockChecker := fail2ban.NewMockSudoCheckerWithPrivileges(true)
+	fail2ban.SetSudoChecker(mockChecker)
+
+	// Create mock runner
+	mock := &fail2ban.MockRunner{
+		Responses: make(map[string][]byte),
+		Errors:    make(map[string]error),
+	}
+
+	// Set up responses only for valid actions
+	for _, action := range validActions {
+		command := "sudo service fail2ban " + action
+		mock.SetResponse(command, []byte("Action "+action+" completed"))
+	}
+
+	fail2ban.SetRunner(mock)
+	config := &Config{Format: "plain"}
+
+	// Test valid actions
+	for _, action := range validActions {
+		t.Run("valid_action_"+action, func(t *testing.T) {
+			cmd := ServiceCmd(config)
+
+			// Capture stdout
+			oldStdout := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			cmd.SetArgs([]string{action})
+			err := cmd.Execute()
+
+			// Restore stdout
+			if err := w.Close(); err != nil {
+				t.Fatalf("failed to close writer: %v", err)
+			}
+			os.Stdout = oldStdout
+
+			var stdoutBuf bytes.Buffer
+			if _, err := stdoutBuf.ReadFrom(r); err != nil {
+				t.Fatalf("failed to read output: %v", err)
+			}
+			output := stdoutBuf.String()
+
+			if err != nil {
+				t.Errorf("valid action %q should not fail: %v", action, err)
+			}
+
+			expectedOutput := "Action " + action + " completed"
+			if !strings.Contains(output, expectedOutput) {
+				t.Errorf("valid action %q should execute, expected %q in output: %q", action, expectedOutput, output)
+			}
+		})
+	}
+
+	// Test invalid actions
+	for _, action := range invalidActions {
+		t.Run("invalid_action_"+action, func(t *testing.T) {
+			cmd := ServiceCmd(config)
+
+			// Capture stderr where PrintError writes
+			oldStderr := os.Stderr
+			errR, errW, _ := os.Pipe()
+			os.Stderr = errW
+
+			// Capture logger output
+			var logBuf bytes.Buffer
+			originalLogOutput := Logger.Out
+			Logger.SetOutput(&logBuf)
+
+			// Capture stdout
+			oldStdout := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			cmd.SetArgs([]string{action})
+			err := cmd.Execute()
+
+			// Close writers and restore
+			if err := w.Close(); err != nil {
+				t.Fatalf("failed to close stdout writer: %v", err)
+			}
+			if err := errW.Close(); err != nil {
+				t.Fatalf("failed to close stderr writer: %v", err)
+			}
+			os.Stdout = oldStdout
+			os.Stderr = oldStderr
+			Logger.SetOutput(originalLogOutput)
+
+			// Read captured output
+			var stdoutBuf bytes.Buffer
+			if _, err := stdoutBuf.ReadFrom(r); err != nil {
+				t.Fatalf("failed to read stdout: %v", err)
+			}
+
+			var stderrBuf bytes.Buffer
+			if _, err := stderrBuf.ReadFrom(errR); err != nil {
+				t.Fatalf("failed to read stderr: %v", err)
+			}
+
+			allOutput := stdoutBuf.String() + stderrBuf.String() + logBuf.String()
+
+			if err != nil {
+				t.Errorf("invalid action %q should not return error (PrintError is used): %v", action, err)
+			}
+
+			if !strings.Contains(allOutput, "invalid service action") {
+				t.Errorf("invalid action %q should show error message, got output: %q", action, allOutput)
+			}
+		})
+	}
 }
 
 // BenchmarkServiceCmd benchmarks the service command execution
