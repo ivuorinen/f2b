@@ -38,6 +38,9 @@ go vet ./...
 
 # Run golangci-lint (if available)
 golangci-lint run --timeout=5m
+
+# Check editorconfig compliance
+editorconfig-checker
 ```
 
 ### Testing with Mock Environment
@@ -54,17 +57,17 @@ F2B_TEST_SUDO=true go test ./...
 1. **Main Entry Point** (`main.go`): Initializes the fail2ban client and handles privilege checks before delegating to cmd package.
 
 2. **Command Layer** (`cmd/`):
-   - Uses Cobra for CLI structure
-   - Handles argument parsing and validation
-   - Manages configuration from environment variables and flags
-   - Provides JSON and plain text output formats
+  - Uses Cobra for CLI structure
+  - Handles argument parsing and validation
+  - Manages configuration from environment variables and flags
+  - Provides JSON and plain text output formats
 
 3. **Fail2Ban Client** (`fail2ban/`):
-   - **Client Interface**: Defines operations for jail/ban management
-   - **RealClient**: Production implementation using fail2ban-client
-   - **MockClient/NoOpClient**: Testing implementations
-   - **Runner Interface**: Abstracts command execution (with/without sudo)
-   - **SudoChecker**: Handles privilege detection and validation
+  - **Client Interface**: Defines operations for jail/ban management
+  - **RealClient**: Production implementation using fail2ban-client
+  - **MockClient/NoOpClient**: Testing implementations
+  - **Runner Interface**: Abstracts command execution (with/without sudo)
+  - **SudoChecker**: Handles privilege detection and validation
 
 ### Key Design Patterns
 

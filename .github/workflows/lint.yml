@@ -42,28 +42,24 @@ jobs:
         with:
           args: --timeout=5m
 
-      - name: Setup Node.js
-        uses: actions/setup-node@60edb5dd545a775178f52524783378180af0d1f8 # v4.0.2
+      - name: Run markdownlint
+        uses: DavidAnson/markdownlint-cli2-action@b7c9edd8dcdc93928ccb82cff44a3d0e616a9684 # v18.0.1
         with:
-          node-version: '18'
+          globs: '*.md'
+          continue-on-error: true
 
-      - name: Install and run markdownlint
-        run: |
-          npm install -g markdownlint-cli
-          markdownlint ./*.md || true
-
-      - name: Setup Python
-        uses: actions/setup-python@82c7e631bb3cdc910f68e0081d67478d79c6982d # v5.1.0
+      - name: Run yamllint
+        uses: ibiqlik/action-yamllint@2576378a8e339169678f9939646ee3ee325e845c # v3.1.1
         with:
-          python-version: '3.x'
+          file_or_dir: .github/workflows/
+          strict: false
 
-      - name: Install and run yamllint
-        run: |
-          pip install yamllint
-          yamllint .github/workflows/ || true
+      - name: Run actionlint
+        uses: rhymond/actionlint-action@b30931e8f832b5ca47b369c1b51c19df6a121b86 # v1.1.17
+        with:
+          fail-on-error: false
 
-      - name: Install and run actionlint
-        run: |
-          bash <(curl https://raw.githubusercontent.com/rhymond/actionlint/main/scripts/download-actionlint.bash)
-          sudo mv ./actionlint /usr/local/bin/
-          actionlint .github/workflows/*.yml || true
+      - name: Run editorconfig-checker
+        uses: editorconfig-checker/action-editorconfig-checker@d4fca16fc71adef10fdbe825e4a3a4374a2c4199 # v2.0.3
+        with:
+          continue-on-error: true

@@ -3,7 +3,11 @@ root = true
 [*]
 indent_style = space
 indent_size = 2
+insert_final_newline = true
 
 [*.go]
 indent_style = tab
 indent_width = 2
+
+[{Makefile,go.mod,go.sum}]
+indent_style = tab

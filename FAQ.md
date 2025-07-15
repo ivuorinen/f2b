@@ -200,28 +200,28 @@ f2b test 192.168.1.100 --format=json
 
 1. **Check current user info:**
 
-   ```bash
-   f2b --log-level=debug version
-   ```
+  ```bash
+  f2b --log-level=debug version
+  ```
 
 2. **Test sudo access:**
 
-   ```bash
-   sudo -n true && echo "Can use sudo" || echo "Cannot use sudo"
-   ```
+  ```bash
+  sudo -n true && echo "Can use sudo" || echo "Cannot use sudo"
+  ```
 
 3. **Check group membership:**
 
-   ```bash
-   groups $USER
-   ```
+  ```bash
+  groups $USER
+  ```
 
 4. **Verify fail2ban permissions:**
 
-   ```bash
-   ls -la /etc/fail2ban/
-   sudo fail2ban-client ping
-   ```
+  ```bash
+  ls -la /etc/fail2ban/
+  sudo fail2ban-client ping
+  ```
 
 ---
 

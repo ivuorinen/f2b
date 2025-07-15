@@ -107,28 +107,28 @@ func completionCmd() *cobra.Command {
 
 Bash:
 
-  $ source <(f2b completion bash)
+	$ source <(f2b completion bash)
 
-  # To load completions for each session, execute once:
-  # Linux:
-  $ f2b completion bash > /etc/bash_completion.d/f2b
-  # macOS:
-  $ f2b completion bash > /usr/local/etc/bash_completion.d/f2b
+	# To load completions for each session, execute once:
+	# Linux:
+	$ f2b completion bash > /etc/bash_completion.d/f2b
+	# macOS:
+	$ f2b completion bash > /usr/local/etc/bash_completion.d/f2b
 
 Zsh:
 
-  $ echo "autoload -U compinit; compinit" >> ~/.zshrc
-  $ f2b completion zsh > "${fpath[1]}/_f2b"
+	$ echo "autoload -U compinit; compinit" >> ~/.zshrc
+	$ f2b completion zsh > "${fpath[1]}/_f2b"
 
 Fish:
 
-  $ f2b completion fish | source
-  $ f2b completion fish > ~/.config/fish/completions/f2b.fish
+	$ f2b completion fish | source
+	$ f2b completion fish > ~/.config/fish/completions/f2b.fish
 
 PowerShell:
 
-  PS> f2b completion powershell | Out-String | Invoke-Expression
-  PS> f2b completion powershell > f2b.ps1
+	PS> f2b completion powershell | Out-String | Invoke-Expression
+	PS> f2b completion powershell > f2b.ps1
 `,
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
