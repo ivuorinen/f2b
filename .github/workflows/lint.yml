@@ -60,6 +60,7 @@ jobs:
           fail_on_error: false
 
       - name: Run editorconfig-checker
-        uses: editorconfig-checker/action-editorconfig-checker@d4fca16fc71adef10fdbe825e4a3a4374a2c4199 # v2.0.3
+        uses: wow-rp-addons/actions-editorconfig-check@5655d399e0bd89b5dbd705762265046d830d4377 # v1
         with:
-          continue-on-error: true
+          args: -config .
+        continue-on-error: true

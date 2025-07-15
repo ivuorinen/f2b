@@ -50,7 +50,9 @@ jobs:
       - name: Run actionlint
         uses: reviewdog/action-actionlint@a5524e1c19e62881d79c1f1b9b6f09f16356e281 # v1.65.2
       - name: Run editorconfig-checker
-        uses: editorconfig-checker/action-editorconfig-checker@d4fca16fc71adef10fdbe825e4a3a4374a2c4199 # v2.0.3
+        uses: wow-rp-addons/actions-editorconfig-check@5655d399e0bd89b5dbd705762265046d830d4377 # v1
+        with:
+          args: -config .
       - name: Run integration tests and collect coverage
         run: |
           go test -coverprofile=coverage.out ./...
