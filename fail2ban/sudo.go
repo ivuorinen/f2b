@@ -1,10 +1,12 @@
 package fail2ban
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"os/user"
+	"time"
 )
 
 // SudoChecker provides methods to check sudo privileges
@@ -89,8 +91,13 @@ func (r *RealSudoChecker) CanUseSudo() bool {
 	if isTest() {
 		return false // Default to false in tests unless mocked
 	}
+
+	// Create a context with 5-second timeout to prevent hanging processes
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	// Try to run 'sudo -n true' (non-interactive) to test sudo access
-	cmd := exec.Command("sudo", "-n", "true")
+	cmd := exec.CommandContext(ctx, "sudo", "-n", "true")
 	err := cmd.Run()
 	return err == nil
 }

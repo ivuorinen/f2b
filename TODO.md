@@ -4,16 +4,18 @@ This document tracks technical debt, improvements, and issues identified through
 
 ## 🚨 Critical Security Issues (Priority: IMMEDIATE)
 
-### 0. NEW: Sudo Command Timeout Vulnerability
+### 0. Sudo Command Timeout Vulnerability ✅ **COMPLETED**
 
 **File:** `fail2ban/sudo.go`
-**Lines:** 87-96
+**Lines:** 88-103
 
-- [ ] **URGENT: Add timeout handling for sudo commands**
-- [ ] Implement context.WithTimeout for CanUseSudo() function
-- [ ] Add 5-second timeout to prevent hanging processes
-- [ ] Consider retry logic for transient failures
-- [ ] Add logging for timeout scenarios
+- [x] ✅ **URGENT: Add timeout handling for sudo commands**
+- [x] ✅ Implement context.WithTimeout for CanUseSudo() function
+- [x] ✅ Add 5-second timeout to prevent hanging processes
+- [ ] Consider retry logic for transient failures - enhancement
+- [ ] Add logging for timeout scenarios - enhancement
+
+**Fixed Implementation:**
 
 ```go
 func (r *RealSudoChecker) CanUseSudo() bool {
@@ -341,6 +343,75 @@ func (c *RealClient) BanIPParallel(ip string, jails []string) ([]BanResult, erro
 - [ ] Implement log rotation
 - [ ] Add audit logging for security operations
 
+## 🚨 Additional Critical Security Issues (July 2025)
+
+### 24. Service Command Injection Vulnerability ⚠️ **CRITICAL - IMMEDIATE FIX**
+
+**File:** `cmd/service.go`
+**Lines:** 20-21
+
+- [ ] **URGENT: Add strict validation for service actions**
+- [ ] Implement allowlist-based validation for action parameter
+- [ ] Prevent command injection via crafted service action names
+- [ ] Add input sanitization before sudo execution
+- [ ] Add comprehensive security tests for service command
+
+```go
+validActions := map[string]bool{
+    "start": true, "stop": true, "restart": true, "status": true,
+    "reload": true, "enable": true, "disable": true,
+}
+```
+
+### 25. Memory Exhaustion in Log Watch Operations
+
+**Priority:** 🔥 **HIGH**
+**File:** `cmd/logswatch.go`
+**Lines:** 42-61
+
+- [ ] **Implement incremental log reading** instead of full file reads
+- [ ] Add memory usage limits for log watch operations
+- [ ] Replace inefficient `equal()` comparison with checksums
+- [ ] Add protection against log file size attacks
+- [ ] Implement streaming-based log monitoring
+
+### 26. Enhanced Path Traversal and File Security
+
+**Priority:** 🔥 **HIGH**
+**File:** `fail2ban/logs.go`
+**Lines:** 120-171
+
+- [ ] **Add comprehensive path validation** beyond `..` checks
+- [ ] Implement null byte injection protection
+- [ ] Add symlink attack prevention
+- [ ] Validate against device files and named pipes
+- [ ] Add path length limits and canonicalization
+- [ ] Implement file permission validation
+
+### 27. Race Condition in Global State Management
+
+**Priority:** 🔥 **HIGH**
+**File:** `fail2ban/fail2ban.go`
+**Lines:** 82-105
+
+- [ ] **Eliminate race conditions** in global runner management
+- [ ] Implement atomic operations for state changes
+- [ ] Add proper synchronization for concurrent operations
+- [ ] Consider removing global state entirely
+- [ ] Add comprehensive concurrency tests
+
+### 28. Information Disclosure in Error Messages
+
+**Priority:** 🛠️ **MEDIUM**
+**File:** `main.go`
+**Lines:** 32-36
+
+- [ ] **Sanitize error messages** to prevent information disclosure
+- [ ] Remove sensitive command line arguments from error output
+- [ ] Implement secure error reporting that doesn't leak paths
+- [ ] Add configurable error verbosity levels
+- [ ] Review all error messages for information leakage
+
 ## 🚀 Future Enhancements
 
 ### 19. Feature Improvements
@@ -384,8 +455,15 @@ func (c *RealClient) BanIPParallel(ip string, jails []string) ([]BanResult, erro
 
 **Completed Items:** 4 major items (Configuration Management, Documentation, Performance Testing, Integration Testing)
 **Partially Completed:** 4 items (Path Traversal Protection, Input Validation, Error Handling, Test Organization)
-**Critical Issues Added:** 3 new critical issues (Context Support, Memory Limits, Sudo Timeouts)
-**Security Priority:** Elevated due to new vulnerability discoveries
+**Critical Issues Verified Still Open:** 3 critical issues (Context Support, Memory Limits, Sudo Timeouts)
+**Security Priority:** Elevated due to verified ongoing vulnerability discoveries
+
+### Verification Status (July 2025):
+- **Item 0 (Sudo Timeout):** ✅ **FIXED** - CanUseSudo() now has 5-second timeout with context
+- **Item 21 (Context Support):** 🔴 **MINIMAL PROGRESS** - Only 1/9 commands support context
+- **Item 22 (Memory Limits):** 🔴 **CONFIRMED NOT STARTED** - logs.go still uses io.ReadAll()
+- **Item 23 (Structured Logging):** 🔴 **CONFIRMED NOT STARTED** - Still using logrus throughout
+- **Items 24-28:** 🆕 **NEW CRITICAL SECURITY ISSUES IDENTIFIED** - Require immediate attention
 
 ## Contributing
 
