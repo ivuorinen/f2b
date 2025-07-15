@@ -2,20 +2,97 @@
 
 ## Purpose
 
-Define clear instructions so AI or human contributors keep changes consistent and easy to review. Keep commits small and messages short.
+Instructions for AI agents and human contributors to maintain consistent, secure, and reviewable code changes.
+
+## Project Context
+
+- **f2b**: Modern, secure Go CLI for managing Fail2Ban jails and bans
+- **Stack**: Go >=1.20, Cobra CLI, logrus logging, dependency injection
+- **Principles**: Security-first, testability, maintainability, privilege safety
 
 ## Commit Rules
 
-- **Semantic Commits**: use `type(scope): message` (for example `feat(cli): add ban command`). Match PR titles to this style.
-- **Formatting**: run `go fmt ./...` and `goimports -w .` before committing.
-- **Linting**: read `.golangci.yml` and `.editorconfig` before changing code. Run `golangci-lint run` for any code change and correct all issues across the project, not just touched files. Use additional static analysis tools if needed.
-- **Config Verification**: whenever modifying `.golangci.yml` or updating `golangci-lint`, run `golangci-lint config verify` to ensure the configuration remains valid.
-- **Tests**: run `go test ./...` after linting whenever code changes. Skip when editing comments or docs only.
-- **Package Manager**: always use `yarn` if installing npm packages.
-- **Pre-commit**: run `pre-commit run --all-files` and fix every issue before committing. MegaLinter requires Docker and doesn't support Podman.
+- **Read configs FIRST**: Study `.editorconfig`, `.golangci.yml`, `.markdownlint.json`, `.yamllint.yml`
+- **Semantic Commits**: `type(scope): message` (e.g., `feat(cli): add ban command`)
+- **Formatting**: Run `go fmt ./...` and `goimports -w .` before committing
+- **Linting**: Run `golangci-lint run` and fix ALL issues for any code changes
+- **Config Verification**: Run `golangci-lint config verify` when modifying linting config
+- **Tests**: Run `go test ./...` after linting for code changes
+- **Pre-commit**: Run `pre-commit run --all-files` and fix all issues (requires Docker)
 
-## Best Practices
+## Security Rules
 
-- Match the project's Go style and configurations.
-- Fix lint warnings or formatting issues on all reported files, not just the ones modified.
-- Keep PRs focused and well described.
+- **NEVER** execute real sudo commands in tests - always use MockRunner
+- **ALWAYS** validate input before privilege escalation
+- **ALWAYS** use argument arrays, never shell string concatenation
+- **ALWAYS** test both privileged and unprivileged scenarios
+- Validate IPs, jail names, and filter names to prevent injection
+- Use `MockSudoChecker` and `MockRunner` in tests
+- Handle privilege errors gracefully with helpful messages
+
+## Configuration Files
+
+**Read these files BEFORE making ANY changes to ensure proper code style:**
+
+- **`.editorconfig`**: Indentation (tabs for Go, 2 spaces for others), final newlines, encoding
+- **`.golangci.yml`**: Go linting rules, enabled/disabled checks, timeout settings
+- **`.markdownlint.json`**: Markdown formatting rules, line length (120 chars), disabled rules
+- **`.yamllint.yml`**: YAML linting rules for workflow files
+
+## Code Standards
+
+- Generate idiomatic, readable Go code following project structure
+- Use dependency injection and interfaces for testability
+- Prefer explicit error handling with logrus logging
+- Use `PrintOutput` and `PrintError` helpers for CLI output
+- Support both `plain` and `json` output formats
+- Handle sudo privileges using established patterns
+- **Follow .editorconfig rules**: Use tabs for Go, 2 spaces for other files, add final newlines
+
+## Testing Requirements
+
+- Use `F2B_TEST_SUDO=true` when testing sudo validation
+- Mock all system interactions with dependency injection
+- Test privilege scenarios: privileged, unprivileged, and edge cases
+- Co-locate tests with source files (`*_test.go`)
+- Use `integration_test.go` naming for integration tests
+
+## Development Workflow
+
+1. **Read configuration files first**: `.editorconfig`, `.golangci.yml`, `.markdownlint.json`, `.yamllint.yml`
+2. **Study existing code patterns** and project structure before making changes
+3. **Apply configuration rules** during development to avoid style violations
+4. **Implement changes** following security and testing requirements
+5. **Run complete lint and test suite** to catch any remaining issues
+6. **Fix all issues** across the project, not just modified files
+7. **Keep PRs focused** with clear descriptions
+
+## AI-Specific Guidelines
+
+- Prioritize user intent and project maintainability
+- Avoid large, sweeping changes unless explicitly requested
+- Ask for clarification when in doubt
+- Include appropriate test coverage for security-sensitive changes
+- Respect project's Code of Conduct and community standards
+
+## Common Pitfalls
+
+1. **Testing Sudo Operations**: Always use mocks, never real sudo
+2. **Input Validation**: Validate all user input to prevent injection
+3. **Path Traversal**: Filter names are validated to prevent directory traversal
+4. **Privilege Checking**: Use SudoChecker interface, don't check directly
+5. **Command Execution**: Use RunnerCombinedOutputWithSudo for sudo commands
+
+## Environment Variables
+
+- `F2B_LOG_DIR`: Fail2Ban log directory (default: `/var/log`)
+- `F2B_FILTER_DIR`: Fail2Ban filter directory (default: `/etc/fail2ban/filter.d`)
+- `F2B_LOG_LEVEL`: Application log level (debug, info, warn, error)
+- `F2B_TEST_SUDO`: Enable sudo checking in tests (set to "true")
+
+## Contact
+
+For questions about AI-generated contributions:
+
+- [@ivuorinen](https://github.com/ivuorinen)
+- ismo@ivuorinen.net

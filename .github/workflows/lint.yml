@@ -29,6 +29,8 @@ jobs:
 
       - name: Run Go linters
         run: |
+          # Check Go formatting using temporary file approach
+          # -l flag lists files that need formatting
           gofmt -l . | tee /tmp/gofmt.out
           if [ -s /tmp/gofmt.out ]; then
             echo "The following files need formatting:"
@@ -46,6 +48,7 @@ jobs:
         uses: DavidAnson/markdownlint-cli2-action@992badcdf24e3b8eb7e87ff9287fe931bcb00c6e # v20.0.0
         with:
           globs: '*.md'
+          # Allow markdown linting to fail in general lint workflow
           continue-on-error: true
 
       - name: Run yamllint

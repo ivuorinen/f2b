@@ -4,7 +4,9 @@
 
 ### What is `f2b`?
 
-`f2b` is a modern, Go-based CLI tool for managing Fail2Ban jails and bans. It provides a safer, more extensible, and user-friendly alternative to Bash scripts for interacting with Fail2Ban, with automatic sudo privilege management, shell completion, and comprehensive security features.
+`f2b` is a modern, Go-based CLI tool for managing Fail2Ban jails and bans. It provides a safer, more
+extensible, and user-friendly alternative to Bash scripts for interacting with Fail2Ban, with automatic sudo
+privilege management, shell completion, and comprehensive security features.
 
 ---
 
@@ -38,7 +40,9 @@ go install github.com/ivuorinen/f2b@latest
 
 ### Why do some commands require root or sudo?
 
-Fail2Ban operations (like banning/unbanning IPs or controlling the service) often require elevated privileges. f2b automatically detects your privilege level and escalates to sudo only when necessary. Commands like `status`, `list-jails`, and `logs` typically don't require sudo.
+Fail2Ban operations (like banning/unbanning IPs or controlling the service) often require elevated privileges.
+f2b automatically detects your privilege level and escalates to sudo only when necessary. Commands like `status`,
+`list-jails`, and `logs` typically don't require sudo.
 
 ### Do I need to run everything with sudo?
 
@@ -198,30 +202,30 @@ f2b test 192.168.1.100 --format=json
 
 ### How do I troubleshoot privilege issues?
 
-1. **Check current user info:**
+#### 1. Check current user info
 
-  ```bash
-  f2b --log-level=debug version
-  ```
+```bash
+f2b --log-level=debug version
+```
 
-2. **Test sudo access:**
+#### 2. Test sudo access
 
-  ```bash
-  sudo -n true && echo "Can use sudo" || echo "Cannot use sudo"
-  ```
+```bash
+sudo -n true && echo "Can use sudo" || echo "Cannot use sudo"
+```
 
-3. **Check group membership:**
+#### 3. Check group membership
 
-  ```bash
-  groups $USER
-  ```
+```bash
+groups $USER
+```
 
-4. **Verify fail2ban permissions:**
+#### 4. Verify fail2ban permissions
 
-  ```bash
-  ls -la /etc/fail2ban/
-  sudo fail2ban-client ping
-  ```
+```bash
+ls -la /etc/fail2ban/
+sudo fail2ban-client ping
+```
 
 ---
 

@@ -21,6 +21,9 @@ jobs:
           go-version-file: go.mod
       - name: Build
         run: |
+          # Build static binary for cross-platform compatibility
+          # CGO_ENABLED=0 ensures static linking for better portability
+          # Version is injected via ldflags using the git tag name
           CGO_ENABLED=0 GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} \
             go build -ldflags "-X github.com/ivuorinen/f2b/cmd.version=${{ github.ref_name }}" \
             -o f2b_${{ matrix.os }}_${{ matrix.arch }} .
@@ -41,5 +44,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
         with:
+          # Upload all built binaries from all matrix combinations
           files: ./artifacts/*/f2b_*
+          # Auto-generate release notes from commits since last release
           generate_release_notes: true

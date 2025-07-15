@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## About f2b
 
-f2b is a modern, secure Go-based CLI tool for managing Fail2Ban jails and bans. It provides a safer, more extensible alternative to Bash scripts for interacting with Fail2Ban, with automatic sudo privilege management, shell completion, and comprehensive security features.
+f2b is a modern, secure Go-based CLI tool for managing Fail2Ban jails and bans. It provides a safer, more
+extensible alternative to Bash scripts for interacting with Fail2Ban, with automatic sudo privilege management,
+shell completion, and comprehensive security features.
 
 ## Common Development Commands
 
@@ -41,6 +43,9 @@ golangci-lint run --timeout=5m
 
 # Check editorconfig compliance
 editorconfig-checker
+
+# Check markdown files
+markdownlint-cli2 "*.md"
 ```
 
 ### Testing with Mock Environment
@@ -54,15 +59,18 @@ F2B_TEST_SUDO=true go test ./...
 
 ### Core Components
 
-1. **Main Entry Point** (`main.go`): Initializes the fail2ban client and handles privilege checks before delegating to cmd package.
+1. **Main Entry Point** (`main.go`): Initializes the fail2ban client and handles privilege checks before
+  delegating to cmd package.
 
 2. **Command Layer** (`cmd/`):
+
   - Uses Cobra for CLI structure
   - Handles argument parsing and validation
   - Manages configuration from environment variables and flags
   - Provides JSON and plain text output formats
 
 3. **Fail2Ban Client** (`fail2ban/`):
+
   - **Client Interface**: Defines operations for jail/ban management
   - **RealClient**: Production implementation using fail2ban-client
   - **MockClient/NoOpClient**: Testing implementations
@@ -134,11 +142,14 @@ mockRunner.SetResponse("fail2ban-client status", []byte("Jail list: sshd"))
 
 ## Important Security Notes
 
+**See [AGENTS.md](AGENTS.md) for comprehensive security rules and guidelines.**
+
+Key reminders:
+
 - NEVER execute real sudo commands in tests - always use MockRunner
 - Validate all input before privilege escalation
 - Use secure command execution (argument arrays, not shell strings)
 - Test both privileged and unprivileged scenarios
-- Handle privilege errors gracefully with helpful messages
 
 ## Output Formats
 
@@ -149,8 +160,8 @@ The CLI supports two output formats:
 
 ## Common Pitfalls
 
-1. **Testing Sudo Operations**: Always use mocks, never real sudo in tests
-2. **Input Validation**: Validate IPs, jail names, and filter names to prevent injection
-3. **Path Traversal**: Filter names are validated to prevent directory traversal
-4. **Privilege Checking**: Use the SudoChecker interface, don't check privileges directly
-5. **Command Execution**: Use RunnerCombinedOutputWithSudo for commands that may need sudo
+**See [AGENTS.md](AGENTS.md) for complete list of common pitfalls and how to avoid them.**
+
+## Command Shorthands
+
+- When I only say "lint", it means "Lint all files and fix all linting errors, make sure no errors are left unfixed."

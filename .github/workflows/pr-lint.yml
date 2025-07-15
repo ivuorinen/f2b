@@ -27,7 +27,9 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Check gofmt
         run: |
-          unformatted=$(gofmt -l "$(git ls-files '*.go')")
+          # Note: gofmt expects individual file paths as separate arguments, not quoted
+          # Using $(git ls-files '*.go') without quotes expands to multiple arguments
+          unformatted=$(gofmt -l $(git ls-files '*.go'))
           if [ -n "$unformatted" ]; then
             echo "The following files need formatting:" >&2
             echo "$unformatted" >&2
@@ -46,8 +48,10 @@ jobs:
       - name: Run yamllint
         uses: ibiqlik/action-yamllint@2576378a8e339169678f9939646ee3ee325e845c # v3.1.1
         with:
+          # Only lint workflow files to catch YAML syntax errors
           file_or_dir: .github/workflows/
       - name: Run actionlint
+        # Validates GitHub Actions workflow syntax and best practices
         uses: reviewdog/action-actionlint@a5524e1c19e62881d79c1f1b9b6f09f16356e281 # v1.65.2
       - name: Run editorconfig-checker
         uses: wow-rp-addons/actions-editorconfig-check@5655d399e0bd89b5dbd705762265046d830d4377 # v1
@@ -55,6 +59,7 @@ jobs:
           args: -config .
       - name: Run integration tests and collect coverage
         run: |
+          # Run all tests with coverage collection for PR analysis
           go test -coverprofile=coverage.out ./...
       - name: Upload coverage report
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -62,5 +67,6 @@ jobs:
           name: coverage-report
           path: coverage.out
       - name: Run PR Lint
+        # Custom PR linting action that performs additional PR-specific checks
         # https://github.com/ivuorinen/actions
         uses: ivuorinen/actions/pr-lint@3cfe6722c4f81d724c8c6b27be453ff4c6f14ef0 # 25.7.14
