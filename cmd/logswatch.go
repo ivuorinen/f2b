@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"context"
+	"crypto/sha256"
+	"fmt"
 	"strings"
 	"time"
 
@@ -25,36 +27,43 @@ func LogsWatchCmd(ctx context.Context, client fail2ban.Client, config *Config) *
 			if len(args) > 1 {
 				ip = args[1]
 			}
-			prev, err := client.GetLogLines(jail, ip)
+			// Use memory-efficient approach with configurable limits
+			maxLines := limit
+			if maxLines <= 0 {
+				maxLines = 1000 // Default safe limit
+			}
+
+			// Get initial log lines with memory limits
+			prev, err := getLogLinesWithLimit(client, jail, ip, maxLines)
 			if err != nil {
 				PrintError(err)
 				return err
 			}
-			if limit > 0 && len(prev) > limit {
-				prev = prev[len(prev)-limit:]
-			}
+
+			prevHash := computeHash(prev)
 			PrintOutput(strings.Join(prev, "\n"), config.Format)
+
 			if interval <= 0 {
 				interval = 5 * time.Second
 			}
 			ticker := time.NewTicker(interval)
 			defer ticker.Stop()
+
 			for {
 				select {
 				case <-ctx.Done():
 					return nil
 				case <-ticker.C:
-					curr, err := client.GetLogLines(jail, ip)
+					curr, err := getLogLinesWithLimit(client, jail, ip, maxLines)
 					if err != nil {
 						PrintError(err)
 						return err
 					}
-					if limit > 0 && len(curr) > limit {
-						curr = curr[len(curr)-limit:]
-					}
-					if !equal(prev, curr) {
+
+					currHash := computeHash(curr)
+					if prevHash != currHash {
 						PrintOutput(strings.Join(curr, "\n"), config.Format)
-						prev = curr
+						prevHash = currHash
 					}
 				}
 			}
@@ -65,6 +74,44 @@ func LogsWatchCmd(ctx context.Context, client fail2ban.Client, config *Config) *
 	return cmd
 }
 
+// getLogLinesWithLimit tries to use the new memory-efficient method if available,
+// otherwise falls back to the standard method with post-processing limits
+func getLogLinesWithLimit(client fail2ban.Client, jail, ip string, maxLines int) ([]string, error) {
+	// Try to use the new method if it's available (RealClient has GetLogLinesWithLimit)
+	if realClient, ok := client.(*fail2ban.RealClient); ok {
+		return realClient.GetLogLinesWithLimit(jail, ip, maxLines)
+	}
+
+	// Fallback to standard method with post-processing limit
+	lines, err := client.GetLogLines(jail, ip)
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply limit after the fact for other client implementations
+	if maxLines > 0 && len(lines) > maxLines {
+		lines = lines[len(lines)-maxLines:]
+	}
+
+	return lines, nil
+}
+
+// computeHash computes a SHA256 hash of the log lines for efficient comparison
+func computeHash(lines []string) string {
+	if len(lines) == 0 {
+		return ""
+	}
+
+	h := sha256.New()
+	for _, line := range lines {
+		h.Write([]byte(line))
+		h.Write([]byte("\n"))
+	}
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+// equal compares two string slices for equality (kept for compatibility)
+// DEPRECATED: Use computeHash for more efficient comparisons
 func equal(a, b []string) bool {
 	if len(a) != len(b) {
 		return false

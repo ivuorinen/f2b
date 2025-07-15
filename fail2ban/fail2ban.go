@@ -444,6 +444,65 @@ func formatDuration(sec int64) string {
 }
 
 func (c *RealClient) GetLogLines(jail, ip string) ([]string, error) {
+	return c.GetLogLinesWithLimit(jail, ip, 1000) // Default limit for safety
+}
+
+// GetLogLinesWithLimit returns log lines with configurable limits for memory management.
+func (c *RealClient) GetLogLinesWithLimit(jail, ip string, maxLines int) ([]string, error) {
+	pattern := filepath.Join(c.LogDir, "fail2ban.log*")
+	files, err := filepath.Glob(pattern)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(files) == 0 {
+		return []string{}, nil
+	}
+
+	// Sort files to read in order (current log first, then rotated logs newest to oldest)
+	sort.Strings(files)
+
+	// Use streaming approach with memory limits
+	config := LogReadConfig{
+		MaxLines:    maxLines,
+		MaxFileSize: 100 * 1024 * 1024, // 100MB file size limit
+		JailFilter:  jail,
+		IPFilter:    ip,
+	}
+
+	var allLines []string
+	totalLines := 0
+
+	for _, fpath := range files {
+		if config.MaxLines > 0 && totalLines >= config.MaxLines {
+			break
+		}
+
+		// Adjust remaining lines limit
+		remainingLines := config.MaxLines - totalLines
+		if remainingLines <= 0 {
+			break
+		}
+
+		fileConfig := config
+		fileConfig.MaxLines = remainingLines
+
+		lines, err := streamLogFile(fpath, fileConfig)
+		if err != nil {
+			logrus.WithError(err).WithField("file", fpath).Error("Failed to read log file")
+			continue
+		}
+
+		allLines = append(allLines, lines...)
+		totalLines += len(lines)
+	}
+
+	return allLines, nil
+}
+
+// GetLogLinesLegacy returns log lines using the original memory-intensive approach.
+// DEPRECATED: Use GetLogLines or GetLogLinesWithLimit instead.
+func (c *RealClient) GetLogLinesLegacy(jail, ip string) ([]string, error) {
 	pattern := filepath.Join(c.LogDir, "fail2ban.log*")
 	files, err := filepath.Glob(pattern)
 	if err != nil {
