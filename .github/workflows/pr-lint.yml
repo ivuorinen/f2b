@@ -40,7 +40,7 @@ jobs:
         with:
           args: --timeout=5m
       - name: Run markdownlint
-        uses: DavidAnson/markdownlint-cli2-action@b7c9edd8dcdc93928ccb82cff44a3d0e616a9684 # v18.0.1
+        uses: DavidAnson/markdownlint-cli2-action@992badcdf24e3b8eb7e87ff9287fe931bcb00c6e # v20.0.0
         with:
           globs: '*.md'
       - name: Run yamllint
@@ -48,7 +48,7 @@ jobs:
         with:
           file_or_dir: .github/workflows/
       - name: Run actionlint
-        uses: rhymond/actionlint-action@b30931e8f832b5ca47b369c1b51c19df6a121b86 # v1.1.17
+        uses: devops-actions/actionlint@c6744a3b9b6d96b91de5c2b6ad1c6d1e8b1b7e5a # v0.1.9
       - name: Run editorconfig-checker
         uses: editorconfig-checker/action-editorconfig-checker@d4fca16fc71adef10fdbe825e4a3a4374a2c4199 # v2.0.3
       - name: Run integration tests and collect coverage
