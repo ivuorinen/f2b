@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -247,6 +248,48 @@ func (m *MockClient) TestFilter(filter string) (string, error) {
 		return result, nil
 	}
 	return "", fmt.Errorf("filter '%s' not found", filter)
+}
+
+// Context-aware methods for MockClient
+
+func (m *MockClient) ListJailsWithContext(ctx context.Context) ([]string, error) {
+	return m.ListJails()
+}
+
+func (m *MockClient) StatusAllWithContext(ctx context.Context) (string, error) {
+	return m.StatusAll()
+}
+
+func (m *MockClient) StatusJailWithContext(ctx context.Context, jail string) (string, error) {
+	return m.StatusJail(jail)
+}
+
+func (m *MockClient) BanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
+	return m.BanIP(ip, jail)
+}
+
+func (m *MockClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
+	return m.UnbanIP(ip, jail)
+}
+
+func (m *MockClient) BannedInWithContext(ctx context.Context, ip string) ([]string, error) {
+	return m.BannedIn(ip)
+}
+
+func (m *MockClient) GetBanRecordsWithContext(ctx context.Context, jails []string) ([]fail2ban.BanRecord, error) {
+	return m.GetBanRecords(jails)
+}
+
+func (m *MockClient) GetLogLinesWithContext(ctx context.Context, jail, ip string) ([]string, error) {
+	return m.GetLogLines(jail, ip)
+}
+
+func (m *MockClient) ListFiltersWithContext(ctx context.Context) ([]string, error) {
+	return m.ListFilters()
+}
+
+func (m *MockClient) TestFilterWithContext(ctx context.Context, filter string) (string, error) {
+	return m.TestFilter(filter)
 }
 
 // Mock validation functions (simplified versions of the real ones)

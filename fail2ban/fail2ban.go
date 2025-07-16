@@ -2,6 +2,7 @@ package fail2ban
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -47,6 +48,9 @@ func SetFilterDir(dir string) {
 type Runner interface {
 	CombinedOutput(name string, args ...string) ([]byte, error)
 	CombinedOutputWithSudo(name string, args ...string) ([]byte, error)
+	// Context-aware versions for timeout and cancellation support
+	CombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error)
+	CombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error)
 }
 
 // OSRunner runs commands locally.
@@ -55,6 +59,11 @@ type OSRunner struct{}
 // CombinedOutput executes a command without sudo.
 func (r *OSRunner) CombinedOutput(name string, args ...string) ([]byte, error) {
 	return exec.Command(name, args...).CombinedOutput()
+}
+
+// CombinedOutputWithContext executes a command without sudo with context support.
+func (r *OSRunner) CombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error) {
+	return exec.CommandContext(ctx, name, args...).CombinedOutput()
 }
 
 // CombinedOutputWithSudo executes a command with sudo if needed.
@@ -77,6 +86,27 @@ func (r *OSRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte, 
 
 	// Otherwise run without sudo
 	return exec.Command(name, args...).CombinedOutput()
+}
+
+// CombinedOutputWithSudoContext executes a command with sudo if needed, with context support.
+func (r *OSRunner) CombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error) {
+	checker := GetSudoChecker()
+
+	// If already root, no need for sudo
+	if checker.IsRoot() {
+		return exec.CommandContext(ctx, name, args...).CombinedOutput()
+	}
+
+	// If command requires sudo and user has privileges, use sudo
+	if RequiresSudo(name, args...) && checker.HasSudoPrivileges() {
+		sudoArgs := append([]string{name}, args...)
+		// #nosec G204 - This is a legitimate use case for executing fail2ban-client with sudo
+		// The command name and arguments are validated by RequiresSudo() and come from controlled sources
+		return exec.CommandContext(ctx, "sudo", sudoArgs...).CombinedOutput()
+	}
+
+	// Otherwise run without sudo
+	return exec.CommandContext(ctx, name, args...).CombinedOutput()
 }
 
 // runnerManager provides thread-safe access to the global Runner.
@@ -118,6 +148,22 @@ func RunnerCombinedOutputWithSudo(name string, args ...string) ([]byte, error) {
 	runner := globalRunnerManager.runner
 	globalRunnerManager.mu.RUnlock()
 	return runner.CombinedOutputWithSudo(name, args...)
+}
+
+// RunnerCombinedOutputWithContext invokes the runner for a command with context support.
+func RunnerCombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error) {
+	globalRunnerManager.mu.RLock()
+	runner := globalRunnerManager.runner
+	globalRunnerManager.mu.RUnlock()
+	return runner.CombinedOutputWithContext(ctx, name, args...)
+}
+
+// RunnerCombinedOutputWithSudoContext invokes the runner for a command with sudo and context support.
+func RunnerCombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error) {
+	globalRunnerManager.mu.RLock()
+	runner := globalRunnerManager.runner
+	globalRunnerManager.mu.RUnlock()
+	return runner.CombinedOutputWithSudoContext(ctx, name, args...)
 }
 
 // Client defines Fail2Ban operations
@@ -212,6 +258,32 @@ func (m *MockRunner) SetError(cmd string, err error) {
 // GetCalls returns the log of commands called.
 func (m *MockRunner) GetCalls() []string {
 	return m.CallLog
+}
+
+// CombinedOutputWithContext returns a mocked response or error for a command with context support.
+func (m *MockRunner) CombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error) {
+	// Check if context is canceled
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
+	// Delegate to the non-context version for simplicity in tests
+	return m.CombinedOutput(name, args...)
+}
+
+// CombinedOutputWithSudoContext returns a mocked response for sudo commands with context support.
+func (m *MockRunner) CombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error) {
+	// Check if context is canceled
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
+	// Delegate to the non-context version for simplicity in tests
+	return m.CombinedOutputWithSudo(name, args...)
 }
 
 func runnerCombinedRunWithSudo(name string, args ...string) error {
@@ -640,6 +712,180 @@ func TestFilter(filter string) (string, error) {
 	return string(output), err
 }
 
+// Context-aware implementations for RealClient
+
+func (c *RealClient) ListJailsWithContext(ctx context.Context) ([]string, error) {
+	// ListJails doesn't require external commands, so just delegate
+	return c.ListJails()
+}
+
+func (c *RealClient) StatusAllWithContext(ctx context.Context) (string, error) {
+	globalRunnerManager.mu.RLock()
+	currentRunner := globalRunnerManager.runner
+	globalRunnerManager.mu.RUnlock()
+
+	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, c.Path, "status")
+	return string(out), err
+}
+
+func (c *RealClient) StatusJailWithContext(ctx context.Context, jail string) (string, error) {
+	globalRunnerManager.mu.RLock()
+	currentRunner := globalRunnerManager.runner
+	globalRunnerManager.mu.RUnlock()
+
+	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, c.Path, "status", jail)
+	return string(out), err
+}
+
+func (c *RealClient) BanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
+	if !isValidIP(ip) {
+		return 0, fmt.Errorf("invalid IP address: %s", ip)
+	}
+	if !isValidJail(jail) {
+		return 0, fmt.Errorf("invalid jail name: %s", jail)
+	}
+
+	globalRunnerManager.mu.RLock()
+	currentRunner := globalRunnerManager.runner
+	globalRunnerManager.mu.RUnlock()
+
+	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, c.Path, "set", jail, "banip", ip)
+	if err != nil {
+		return 0, fmt.Errorf("failed to ban IP %s in jail %s: %w", ip, jail, err)
+	}
+	code := strings.TrimSpace(string(out))
+	if code == "0" {
+		return 0, nil
+	}
+	if code == "1" {
+		return 1, nil
+	}
+	return 0, fmt.Errorf("unexpected output from fail2ban-client: %s", code)
+}
+
+func (c *RealClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
+	if !isValidIP(ip) {
+		return 0, fmt.Errorf("invalid IP address: %s", ip)
+	}
+	if !isValidJail(jail) {
+		return 0, fmt.Errorf("invalid jail name: %s", jail)
+	}
+
+	globalRunnerManager.mu.RLock()
+	currentRunner := globalRunnerManager.runner
+	globalRunnerManager.mu.RUnlock()
+
+	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, c.Path, "set", jail, "unbanip", ip)
+	if err != nil {
+		return 0, fmt.Errorf("failed to unban IP %s in jail %s: %w", ip, jail, err)
+	}
+	code := strings.TrimSpace(string(out))
+	if code == "0" {
+		return 0, nil
+	}
+	if code == "1" {
+		return 1, nil
+	}
+	return 0, fmt.Errorf("unexpected output from fail2ban-client: %s", code)
+}
+
+func (c *RealClient) BannedInWithContext(ctx context.Context, ip string) ([]string, error) {
+	if !isValidIP(ip) {
+		return nil, fmt.Errorf("invalid IP address: %s", ip)
+	}
+
+	globalRunnerManager.mu.RLock()
+	currentRunner := globalRunnerManager.runner
+	globalRunnerManager.mu.RUnlock()
+
+	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, c.Path, "banned", ip)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get banned status for IP %s: %w", ip, err)
+	}
+
+	lines := strings.Split(string(out), "\n")
+	jails := []string{}
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		jails = append(jails, line)
+	}
+	return jails, nil
+}
+
+func (c *RealClient) GetBanRecordsWithContext(ctx context.Context, jails []string) ([]BanRecord, error) {
+	// For now, delegate to the non-context version since GetBanRecords is complex
+	// In a full implementation, this would use context for all internal operations
+	return c.GetBanRecords(jails)
+}
+
+func (c *RealClient) GetLogLinesWithContext(ctx context.Context, jail, ip string) ([]string, error) {
+	// For now, delegate to the non-context version since GetLogLines is complex
+	// In a full implementation, this would use context for all internal operations
+	return c.GetLogLines(jail, ip)
+}
+
+func (c *RealClient) ListFiltersWithContext(ctx context.Context) ([]string, error) {
+	// For now, delegate to the non-context version since ListFilters is complex
+	// In a full implementation, this would use context for all internal operations
+	return c.ListFilters()
+}
+
+func (c *RealClient) TestFilterWithContext(ctx context.Context, filter string) (string, error) {
+	if !isValidFilter(filter) {
+		return "", fmt.Errorf("invalid filter name")
+	}
+	path := filepath.Join(c.FilterDir, filter+".conf")
+
+	// Additional security check: ensure path doesn't escape filter directory
+	cleanPath, err := filepath.Abs(filepath.Clean(path))
+	if err != nil {
+		return "", fmt.Errorf("invalid filter path: %w", err)
+	}
+
+	cleanFilterDir, err := filepath.Abs(filepath.Clean(c.FilterDir))
+	if err != nil {
+		return "", fmt.Errorf("invalid filter directory: %w", err)
+	}
+
+	// Ensure the resolved path is within the filter directory
+	if !strings.HasPrefix(cleanPath, cleanFilterDir+string(filepath.Separator)) {
+		return "", fmt.Errorf("filter path outside allowed directory")
+	}
+
+	// #nosec G304 - Path is validated, sanitized, and restricted to filter directory above
+	data, err := os.ReadFile(cleanPath)
+	if err != nil {
+		return "", fmt.Errorf("filter not found: %w", err)
+	}
+	content := string(data)
+
+	var logPath string
+	var patterns []string
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(strings.ToLower(line), "logpath") {
+			parts := strings.SplitN(line, "=", 2)
+			logPath = strings.TrimSpace(parts[1])
+		}
+		if strings.HasPrefix(strings.ToLower(line), "failregex") {
+			parts := strings.SplitN(line, "=", 2)
+			patterns = append(patterns, strings.TrimSpace(parts[1]))
+		}
+	}
+	if logPath == "" || len(patterns) == 0 {
+		return "", errors.New("invalid filter file")
+	}
+
+	globalRunnerManager.mu.RLock()
+	currentRunner := globalRunnerManager.runner
+	globalRunnerManager.mu.RUnlock()
+
+	output, err := currentRunner.CombinedOutputWithSudoContext(ctx, "fail2ban-regex", logPath, path)
+	return string(output), err
+}
+
 func (c *RealClient) TestFilter(filter string) (string, error) {
 	if !isValidFilter(filter) {
 		return "", fmt.Errorf("invalid filter name")
@@ -692,7 +938,47 @@ func (c *RealClient) TestFilter(filter string) (string, error) {
 	return string(output), err
 }
 
-// isValidFilter validates a filter name to prevent path traversal
+// containsPathTraversalPatterns checks for various path traversal patterns in filter names
+func containsPathTraversalPatterns(filter string) bool {
+	// Path separators and traversal patterns
+	if strings.ContainsAny(filter, "/\\") {
+		return true
+	}
+
+	// Various representations of ".."
+	dangerousPatterns := []string{
+		"..",
+		"%2e%2e",       // URL encoded ..
+		"%2f",          // URL encoded /
+		"%5c",          // URL encoded \
+		"\u002e\u002e", // Unicode ..
+		"\uff0e\uff0e", // Full-width Unicode ..
+	}
+
+	filterLower := strings.ToLower(filter)
+	for _, pattern := range dangerousPatterns {
+		if strings.Contains(filterLower, strings.ToLower(pattern)) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// isValidFilterChar checks if a character is allowed in filter names
+func isValidFilterChar(r rune) bool {
+	// Allow letters, digits, and safe punctuation
+	return unicode.IsLetter(r) ||
+		unicode.IsDigit(r) ||
+		r == '-' ||
+		r == '_' ||
+		r == '.' ||
+		r == '@' || // Allow @ for email-like patterns
+		r == '+' || // Allow + for variations
+		r == '~' // Allow ~ for common naming
+}
+
+// isValidFilter validates a filter name to prevent path traversal and other attacks
 func isValidFilter(filter string) bool {
 	if filter == "" {
 		return false
@@ -729,46 +1015,6 @@ func isValidFilter(filter string) bool {
 	}
 
 	return true
-}
-
-// containsPathTraversalPatterns checks for various path traversal patterns in filter names
-func containsPathTraversalPatterns(filter string) bool {
-	// Path separators and traversal patterns
-	if strings.ContainsAny(filter, "/\\") {
-		return false
-	}
-
-	// Various representations of ".."
-	dangerousPatterns := []string{
-		"..",
-		"%2e%2e",       // URL encoded ..
-		"%2f",          // URL encoded /
-		"%5c",          // URL encoded \
-		"\u002e\u002e", // Unicode ..
-		"\uff0e\uff0e", // Full-width Unicode ..
-	}
-
-	filterLower := strings.ToLower(filter)
-	for _, pattern := range dangerousPatterns {
-		if strings.Contains(filterLower, strings.ToLower(pattern)) {
-			return true
-		}
-	}
-
-	return false
-}
-
-// isValidFilterChar checks if a character is allowed in filter names
-func isValidFilterChar(r rune) bool {
-	// Allow letters, digits, and safe punctuation
-	return unicode.IsLetter(r) ||
-		unicode.IsDigit(r) ||
-		r == '-' ||
-		r == '_' ||
-		r == '.' ||
-		r == '@' || // Allow @ for email-like patterns
-		r == '+' || // Allow + for variations
-		r == '~' // Allow ~ for common naming
 }
 
 // isValidIP validates an IP address string

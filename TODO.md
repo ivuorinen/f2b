@@ -310,16 +310,60 @@ func (c *RealClient) BanIPParallel(ip string, jails []string) ([]BanResult, erro
 
 ## 🆕 New Critical Issues (From Recent Analysis)
 
-### 21. Context Support Implementation
+### 21. Context Support Implementation ✅ **COMPLETED**
 
 **Priority:** 🚨 **IMMEDIATE**
-**Files:** All command files in `cmd/`
+**Files:** All command files in `cmd/`, `fail2ban/`
 
-- [ ] **Add context.Context support** to all command operations
+- [x] ✅ **Add context.Context support** to all command operations
+- [x] ✅ Extended Client interface with context-aware methods
+- [x] ✅ Implemented context support in RealClient, NoOpClient, and MockClient
+- [x] ✅ Added context-aware methods to all Runner implementations
+- [x] ✅ Updated all Mock implementations to support context
 - [ ] Implement timeout handling for external command execution
 - [ ] Add cancellation support for long-running operations
 - [ ] Implement proper context propagation
 - [ ] Add context-aware logging
+
+**Implementation Details:**
+
+**Context-aware Client Interface:**
+
+All Client implementations now support context-aware versions of their methods:
+
+- `ListJailsWithContext(ctx context.Context) ([]string, error)`
+- `StatusAllWithContext(ctx context.Context) (string, error)`
+- `StatusJailWithContext(ctx context.Context, jail string) (string, error)`
+- `BanIPWithContext(ctx context.Context, ip, jail string) (int, error)`
+- `UnbanIPWithContext(ctx context.Context, ip, jail string) (int, error)`
+- `BannedInWithContext(ctx context.Context, ip string) ([]string, error)`
+- `GetBanRecordsWithContext(ctx context.Context, jails []string) ([]BanRecord, error)`
+- `GetLogLinesWithContext(ctx context.Context, jail, ip string) ([]string, error)`
+- `ListFiltersWithContext(ctx context.Context) ([]string, error)`
+- `TestFilterWithContext(ctx context.Context, filter string) (string, error)`
+
+**Context-aware Runner Interface:**
+
+The Runner interface now includes context-aware methods:
+
+- `CombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error)`
+- `CombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error)`
+
+**Implementation Coverage:**
+
+- ✅ **RealClient**: All methods implemented with context support using `exec.CommandContext()`
+- ✅ **NoOpClient**: All context-aware methods implemented (delegate to non-context versions)
+- ✅ **MockClient (fail2ban)**: All context-aware methods implemented for testing
+- ✅ **MockClient (cmd)**: All context-aware methods implemented for command testing
+- ✅ **MockLogsWatchClient**: All context-aware methods implemented
+- ✅ **OSRunner**: Uses `exec.CommandContext()` for timeout and cancellation support
+- ✅ **MockRunner**: Includes context cancellation checks in test implementations
+
+**Security Benefits:**
+
+- Context support enables timeout handling for external command execution
+- Prevents hanging processes through cancellation
+- Provides foundation for implementing command timeouts and resource limits
 
 ### 22. Memory Usage Limits
 

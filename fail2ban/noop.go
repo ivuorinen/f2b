@@ -1,6 +1,7 @@
 package fail2ban
 
 import (
+	"context"
 	"errors"
 )
 
@@ -61,5 +62,57 @@ func (c *NoOpClient) ListFilters() ([]string, error) {
 
 // TestFilter returns an error indicating the client is not available
 func (c *NoOpClient) TestFilter(filter string) (string, error) {
+	return "", errors.New("fail2ban client not available for this command")
+}
+
+// Context-aware methods for NoOpClient
+
+// ListJailsWithContext returns an empty list of jails
+func (c *NoOpClient) ListJailsWithContext(ctx context.Context) ([]string, error) {
+	return []string{}, nil
+}
+
+// StatusAllWithContext returns an error indicating the client is not available
+func (c *NoOpClient) StatusAllWithContext(ctx context.Context) (string, error) {
+	return "", errors.New("fail2ban client not available for this command")
+}
+
+// StatusJailWithContext returns an error indicating the client is not available
+func (c *NoOpClient) StatusJailWithContext(ctx context.Context, jail string) (string, error) {
+	return "", errors.New("fail2ban client not available for this command")
+}
+
+// BanIPWithContext returns an error indicating the client is not available
+func (c *NoOpClient) BanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
+	return 0, errors.New("fail2ban client not available for this command")
+}
+
+// UnbanIPWithContext returns an error indicating the client is not available
+func (c *NoOpClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
+	return 0, errors.New("fail2ban client not available for this command")
+}
+
+// BannedInWithContext returns an empty list
+func (c *NoOpClient) BannedInWithContext(ctx context.Context, ip string) ([]string, error) {
+	return []string{}, nil
+}
+
+// GetBanRecordsWithContext returns an empty list of ban records
+func (c *NoOpClient) GetBanRecordsWithContext(ctx context.Context, jails []string) ([]BanRecord, error) {
+	return []BanRecord{}, nil
+}
+
+// GetLogLinesWithContext returns an empty list of log lines
+func (c *NoOpClient) GetLogLinesWithContext(ctx context.Context, jail, ip string) ([]string, error) {
+	return []string{}, nil
+}
+
+// ListFiltersWithContext returns an empty list of filters
+func (c *NoOpClient) ListFiltersWithContext(ctx context.Context) ([]string, error) {
+	return []string{}, nil
+}
+
+// TestFilterWithContext returns an error indicating the client is not available
+func (c *NoOpClient) TestFilterWithContext(ctx context.Context, filter string) (string, error) {
 	return "", errors.New("fail2ban client not available for this command")
 }

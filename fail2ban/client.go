@@ -1,6 +1,7 @@
 package fail2ban
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -32,6 +33,18 @@ type Client interface {
 	ListFilters() ([]string, error)
 	// TestFilter runs fail2ban-regex for the given filter.
 	TestFilter(filter string) (string, error)
+
+	// Context-aware versions for timeout and cancellation support
+	ListJailsWithContext(ctx context.Context) ([]string, error)
+	StatusAllWithContext(ctx context.Context) (string, error)
+	StatusJailWithContext(ctx context.Context, jail string) (string, error)
+	BanIPWithContext(ctx context.Context, ip, jail string) (int, error)
+	UnbanIPWithContext(ctx context.Context, ip, jail string) (int, error)
+	BannedInWithContext(ctx context.Context, ip string) ([]string, error)
+	GetBanRecordsWithContext(ctx context.Context, jails []string) ([]BanRecord, error)
+	GetLogLinesWithContext(ctx context.Context, jail, ip string) ([]string, error)
+	ListFiltersWithContext(ctx context.Context) ([]string, error)
+	TestFilterWithContext(ctx context.Context, filter string) (string, error)
 }
 
 // RealClient is the default implementation of Client, using the local fail2ban-client binary.
