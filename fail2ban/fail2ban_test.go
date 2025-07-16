@@ -1069,7 +1069,7 @@ func TestCompareVersions(t *testing.T) {
 
 func TestGetBanRecordsWithInvalidTimes(t *testing.T) {
 	// Set up mock runner and sudo checker
-	originalRunner := runner
+	originalRunner := GetRunner()
 	originalChecker := GetSudoChecker()
 	defer func() {
 		SetRunner(originalRunner)

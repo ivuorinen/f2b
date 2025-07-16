@@ -65,7 +65,7 @@ func NewClient(logDir, filterDir string) (*RealClient, error) {
 	path, err := exec.LookPath("fail2ban-client")
 	if err != nil {
 		// Check if we have a mock runner set up
-		if _, ok := runner.(*MockRunner); ok {
+		if _, ok := GetRunner().(*MockRunner); ok {
 			path = "fail2ban-client" // Use mock path
 		} else {
 			return nil, errors.New("fail2ban-client not found in PATH")

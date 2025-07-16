@@ -79,28 +79,44 @@ func (r *OSRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte, 
 	return exec.Command(name, args...).CombinedOutput()
 }
 
-// runner is the global Runner used for system commands.
-var runner Runner = &OSRunner{}
-var runnerMutex sync.RWMutex
+// runnerManager provides thread-safe access to the global Runner.
+type runnerManager struct {
+	mu     sync.RWMutex
+	runner Runner
+}
+
+// globalRunnerManager is the singleton instance for managing the global runner.
+var globalRunnerManager = &runnerManager{
+	runner: &OSRunner{},
+}
 
 // SetRunner injects a custom runner (for tests or alternate backends).
 func SetRunner(r Runner) {
-	runnerMutex.Lock()
-	defer runnerMutex.Unlock()
-	runner = r
+	globalRunnerManager.mu.Lock()
+	defer globalRunnerManager.mu.Unlock()
+	globalRunnerManager.runner = r
+}
+
+// GetRunner returns the current runner (for tests that need access).
+func GetRunner() Runner {
+	globalRunnerManager.mu.RLock()
+	defer globalRunnerManager.mu.RUnlock()
+	return globalRunnerManager.runner
 }
 
 // RunnerCombinedOutput invokes the runner for a command.
 func RunnerCombinedOutput(name string, args ...string) ([]byte, error) {
-	runnerMutex.RLock()
-	defer runnerMutex.RUnlock()
+	globalRunnerManager.mu.RLock()
+	runner := globalRunnerManager.runner
+	globalRunnerManager.mu.RUnlock()
 	return runner.CombinedOutput(name, args...)
 }
 
 // RunnerCombinedOutputWithSudo invokes the runner for a command with sudo if needed.
 func RunnerCombinedOutputWithSudo(name string, args ...string) ([]byte, error) {
-	runnerMutex.RLock()
-	defer runnerMutex.RUnlock()
+	globalRunnerManager.mu.RLock()
+	runner := globalRunnerManager.runner
+	globalRunnerManager.mu.RUnlock()
 	return runner.CombinedOutputWithSudo(name, args...)
 }
 
@@ -199,9 +215,9 @@ func (m *MockRunner) GetCalls() []string {
 }
 
 func runnerCombinedRunWithSudo(name string, args ...string) error {
-	runnerMutex.RLock()
-	currentRunner := runner
-	runnerMutex.RUnlock()
+	globalRunnerManager.mu.RLock()
+	currentRunner := globalRunnerManager.runner
+	globalRunnerManager.mu.RUnlock()
 
 	out, err := currentRunner.CombinedOutputWithSudo(name, args...)
 	if err != nil {
@@ -223,9 +239,9 @@ func compareVersions(v1, v2 string) int {
 }
 
 func (c *RealClient) fetchJails() ([]string, error) {
-	runnerMutex.RLock()
-	currentRunner := runner
-	runnerMutex.RUnlock()
+	globalRunnerManager.mu.RLock()
+	currentRunner := globalRunnerManager.runner
+	globalRunnerManager.mu.RUnlock()
 
 	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "status")
 	if err != nil {
@@ -248,18 +264,18 @@ func (c *RealClient) fetchJails() ([]string, error) {
 }
 
 func (c *RealClient) StatusAll() (string, error) {
-	runnerMutex.RLock()
-	currentRunner := runner
-	runnerMutex.RUnlock()
+	globalRunnerManager.mu.RLock()
+	currentRunner := globalRunnerManager.runner
+	globalRunnerManager.mu.RUnlock()
 
 	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "status")
 	return string(out), err
 }
 
 func (c *RealClient) StatusJail(j string) (string, error) {
-	runnerMutex.RLock()
-	currentRunner := runner
-	runnerMutex.RUnlock()
+	globalRunnerManager.mu.RLock()
+	currentRunner := globalRunnerManager.runner
+	globalRunnerManager.mu.RUnlock()
 
 	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "status", j)
 	return string(out), err
@@ -285,9 +301,9 @@ func (c *RealClient) BanIP(ip, jail string) (int, error) {
 		return 0, fmt.Errorf("jail '%s' not found", jail)
 	}
 
-	runnerMutex.RLock()
-	currentRunner := runner
-	runnerMutex.RUnlock()
+	globalRunnerManager.mu.RLock()
+	currentRunner := globalRunnerManager.runner
+	globalRunnerManager.mu.RUnlock()
 
 	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "set", jail, "banip", ip)
 	if err != nil {
@@ -323,9 +339,9 @@ func (c *RealClient) UnbanIP(ip, jail string) (int, error) {
 		return 0, fmt.Errorf("jail '%s' not found", jail)
 	}
 
-	runnerMutex.RLock()
-	currentRunner := runner
-	runnerMutex.RUnlock()
+	globalRunnerManager.mu.RLock()
+	currentRunner := globalRunnerManager.runner
+	globalRunnerManager.mu.RUnlock()
 
 	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "set", jail, "unbanip", ip)
 	if err != nil {
@@ -346,9 +362,9 @@ func (c *RealClient) BannedIn(ip string) ([]string, error) {
 		return nil, fmt.Errorf("invalid IP address: %s", ip)
 	}
 
-	runnerMutex.RLock()
-	currentRunner := runner
-	runnerMutex.RUnlock()
+	globalRunnerManager.mu.RLock()
+	currentRunner := globalRunnerManager.runner
+	globalRunnerManager.mu.RUnlock()
 
 	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "banned", ip)
 	if err != nil {
@@ -374,9 +390,9 @@ func (c *RealClient) GetBanRecords(jails []string) ([]BanRecord, error) {
 		toQuery = jails
 	}
 
-	runnerMutex.RLock()
-	currentRunner := runner
-	runnerMutex.RUnlock()
+	globalRunnerManager.mu.RLock()
+	currentRunner := globalRunnerManager.runner
+	globalRunnerManager.mu.RUnlock()
 
 	for _, j := range toQuery {
 		out, err := currentRunner.CombinedOutputWithSudo(c.Path, "get", j, "banip", "--with-time")
@@ -616,9 +632,9 @@ func TestFilter(filter string) (string, error) {
 		return "", errors.New("invalid filter file")
 	}
 
-	runnerMutex.RLock()
-	currentRunner := runner
-	runnerMutex.RUnlock()
+	globalRunnerManager.mu.RLock()
+	currentRunner := globalRunnerManager.runner
+	globalRunnerManager.mu.RUnlock()
 
 	output, err := currentRunner.CombinedOutputWithSudo("fail2ban-regex", logPath, path)
 	return string(output), err
@@ -668,9 +684,9 @@ func (c *RealClient) TestFilter(filter string) (string, error) {
 		return "", errors.New("invalid filter file")
 	}
 
-	runnerMutex.RLock()
-	currentRunner := runner
-	runnerMutex.RUnlock()
+	globalRunnerManager.mu.RLock()
+	currentRunner := globalRunnerManager.runner
+	globalRunnerManager.mu.RUnlock()
 
 	output, err := currentRunner.CombinedOutputWithSudo("fail2ban-regex", logPath, path)
 	return string(output), err

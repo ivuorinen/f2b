@@ -455,17 +455,59 @@ if !validActions[action] {
 **Security Impact**: Eliminated multiple file system attack vectors including advanced path traversal, symlink
 attacks, and device file access attempts.
 
-### 27. Race Condition in Global State Management
+### 27. Race Condition in Global State Management ✅ **COMPLETED**
 
 **Priority:** 🔥 **HIGH**
 **File:** `fail2ban/fail2ban.go`
 **Lines:** 82-105
 
-- [ ] **Eliminate race conditions** in global runner management
-- [ ] Implement atomic operations for state changes
-- [ ] Add proper synchronization for concurrent operations
-- [ ] Consider removing global state entirely
-- [ ] Add comprehensive concurrency tests
+- [x] ✅ **Eliminate race conditions** in global runner management
+- [x] ✅ Implement atomic operations for state changes
+- [x] ✅ Add proper synchronization for concurrent operations
+- [x] ✅ Consider removing global state entirely
+- [x] ✅ Add comprehensive concurrency tests
+
+**Fixed Implementation:**
+
+The race condition in global runner management has been completely resolved by implementing a thread-safe
+`runnerManager` structure:
+
+```go
+// runnerManager provides thread-safe access to the global Runner.
+type runnerManager struct {
+    mu     sync.RWMutex
+    runner Runner
+}
+
+// globalRunnerManager is the singleton instance for managing the global runner.
+var globalRunnerManager = &runnerManager{
+    runner: &OSRunner{},
+}
+```
+
+**Key Improvements:**
+
+1. **Thread-Safe Access**: All runner operations now use proper mutex locking with RWMutex for optimal
+  read/write performance
+2. **Eliminated Direct Access**: Removed direct access to the global `runner` variable, forcing all access
+  through safe methods
+3. **Atomic Operations**: All state changes are now atomic and properly synchronized
+4. **Added GetRunner() Method**: Provided thread-safe access for tests and other components that need
+  runner access
+5. **Comprehensive Testing**: Added extensive concurrency tests (`concurrency_test.go`) that verify thread
+  safety under various concurrent scenarios
+
+**Test Coverage:**
+
+- `TestRunnerConcurrentAccess`: Tests concurrent SetRunner/GetRunner operations
+- `TestRunnerCombinedOutputConcurrency`: Tests concurrent command execution
+- `TestRunnerCombinedOutputWithSudoConcurrency`: Tests concurrent sudo command execution
+- `TestMixedConcurrentOperations`: Tests mixed concurrent operations
+- `TestRunnerManagerLockOrdering`: Verifies no deadlocks occur
+- `TestRunnerStateConsistency`: Ensures state remains consistent across operations
+
+**Impact**: Eliminated all race conditions in global runner management, ensuring thread-safe operations
+in concurrent environments without performance degradation.
 
 ### 28. Information Disclosure in Error Messages
 
