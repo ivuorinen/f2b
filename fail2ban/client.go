@@ -69,7 +69,7 @@ type BanRecord struct {
 // user lacks sudo privileges.
 func NewClient(logDir, filterDir string) (*RealClient, error) {
 	// Check sudo privileges first (skip in test environment unless forced)
-	if !isTest() || os.Getenv("F2B_TEST_SUDO") == "true" {
+	if !IsTestEnvironment() || os.Getenv("F2B_TEST_SUDO") == "true" {
 		if err := CheckSudoRequirements(); err != nil {
 			return nil, err
 		}
@@ -98,7 +98,7 @@ func NewClient(logDir, filterDir string) (*RealClient, error) {
 	if err != nil {
 		return nil, fmt.Errorf("version check failed: %w", err)
 	}
-	if compareVersions(strings.TrimSpace(string(out)), "0.11.0") < 0 {
+	if CompareVersions(strings.TrimSpace(string(out)), "0.11.0") < 0 {
 		return nil, fmt.Errorf("fail2ban >=0.11.0 required, got %s", out)
 	}
 	// Ping - use sudo if needed

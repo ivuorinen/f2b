@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,9 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unicode"
 
-	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
 )
 
@@ -235,16 +232,6 @@ func (m *MockRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte
 	return m.CombinedOutput(name, args...)
 }
 
-// isTest returns true if running in a test environment.
-func isTest() bool {
-	for _, arg := range os.Args {
-		if strings.HasPrefix(arg, "-test.") {
-			return true
-		}
-	}
-	return false
-}
-
 // SetResponse sets a response for a command.
 func (m *MockRunner) SetResponse(cmd string, response []byte) {
 	m.Responses[cmd] = response
@@ -298,85 +285,41 @@ func runnerCombinedRunWithSudo(name string, args ...string) error {
 	return nil
 }
 
-func compareVersions(v1, v2 string) int {
-	version1, err1 := version.NewVersion(v1)
-	version2, err2 := version.NewVersion(v2)
-
-	// If either version is invalid, fall back to string comparison
-	if err1 != nil || err2 != nil {
-		return strings.Compare(v1, v2)
-	}
-
-	return version1.Compare(version2)
-}
-
 func (c *RealClient) fetchJails() ([]string, error) {
-	globalRunnerManager.mu.RLock()
-	currentRunner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
-
+	currentRunner := GetCurrentRunner()
 	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "status")
 	if err != nil {
 		return nil, err
 	}
-	for _, line := range strings.Split(string(out), "\n") {
-		if strings.Contains(line, "Jail list:") {
-			parts := strings.SplitN(line, ":", 2)
-			if len(parts) < 2 {
-				return nil, errors.New("failed to parse jails")
-			}
-			jailList := strings.TrimSpace(parts[1])
-			if jailList == "" {
-				return []string{}, nil // Return empty list for no jails
-			}
-			return strings.Fields(strings.ReplaceAll(jailList, ",", " ")), nil
-		}
-	}
-	return nil, errors.New("failed to parse jails")
+	return ParseJailList(string(out))
 }
 
 func (c *RealClient) StatusAll() (string, error) {
-	globalRunnerManager.mu.RLock()
-	currentRunner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
-
+	currentRunner := GetCurrentRunner()
 	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "status")
 	return string(out), err
 }
 
 func (c *RealClient) StatusJail(j string) (string, error) {
-	globalRunnerManager.mu.RLock()
-	currentRunner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
-
+	currentRunner := GetCurrentRunner()
 	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "status", j)
 	return string(out), err
 }
 
 func (c *RealClient) BanIP(ip, jail string) (int, error) {
-	if !isValidIP(ip) {
-		return 0, fmt.Errorf("invalid IP address: %s", ip)
+	if err := ValidateIP(ip); err != nil {
+		return 0, err
 	}
-	if !isValidJail(jail) {
-		return 0, fmt.Errorf("invalid jail name: %s", jail)
+	if err := ValidateJail(jail); err != nil {
+		return 0, err
 	}
 
 	// Check if jail exists
-	jailExists := false
-	for _, j := range c.Jails {
-		if j == jail {
-			jailExists = true
-			break
-		}
-	}
-	if !jailExists {
-		return 0, fmt.Errorf("jail '%s' not found", jail)
+	if err := ValidateJailExists(jail, c.Jails); err != nil {
+		return 0, err
 	}
 
-	globalRunnerManager.mu.RLock()
-	currentRunner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
-
+	currentRunner := GetCurrentRunner()
 	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "set", jail, "banip", ip)
 	if err != nil {
 		return 0, fmt.Errorf("failed to ban IP %s in jail %s: %w", ip, jail, err)
@@ -392,29 +335,19 @@ func (c *RealClient) BanIP(ip, jail string) (int, error) {
 }
 
 func (c *RealClient) UnbanIP(ip, jail string) (int, error) {
-	if !isValidIP(ip) {
-		return 0, fmt.Errorf("invalid IP address: %s", ip)
+	if err := ValidateIP(ip); err != nil {
+		return 0, err
 	}
-	if !isValidJail(jail) {
-		return 0, fmt.Errorf("invalid jail name: %s", jail)
+	if err := ValidateJail(jail); err != nil {
+		return 0, err
 	}
 
 	// Check if jail exists
-	jailExists := false
-	for _, j := range c.Jails {
-		if j == jail {
-			jailExists = true
-			break
-		}
-	}
-	if !jailExists {
-		return 0, fmt.Errorf("jail '%s' not found", jail)
+	if err := ValidateJailExists(jail, c.Jails); err != nil {
+		return 0, err
 	}
 
-	globalRunnerManager.mu.RLock()
-	currentRunner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
-
+	currentRunner := GetCurrentRunner()
 	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "set", jail, "unbanip", ip)
 	if err != nil {
 		return 0, fmt.Errorf("failed to unban IP %s in jail %s: %w", ip, jail, err)
@@ -430,27 +363,16 @@ func (c *RealClient) UnbanIP(ip, jail string) (int, error) {
 }
 
 func (c *RealClient) BannedIn(ip string) ([]string, error) {
-	if !isValidIP(ip) {
-		return nil, fmt.Errorf("invalid IP address: %s", ip)
+	if err := ValidateIP(ip); err != nil {
+		return nil, err
 	}
 
-	globalRunnerManager.mu.RLock()
-	currentRunner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
-
+	currentRunner := GetCurrentRunner()
 	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "banned", ip)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check if IP %s is banned: %w", ip, err)
 	}
-	s := strings.Trim(string(out), "[]")
-	if s == "" {
-		return []string{}, nil
-	}
-	parts := strings.Split(strings.ReplaceAll(s, "\"", ""), ",")
-	for i := range parts {
-		parts[i] = strings.TrimSpace(parts[i])
-	}
-	return parts, nil
+	return ParseBracketedList(string(out)), nil
 }
 
 func (c *RealClient) GetBanRecords(jails []string) ([]BanRecord, error) {
@@ -512,7 +434,7 @@ func (c *RealClient) GetBanRecords(jails []string) ([]BanRecord, error) {
 				if rem < 0 {
 					rem = 0
 				}
-				recs = append(recs, BanRecord{Jail: j, IP: ip, BannedAt: tBan, Remaining: formatDuration(rem)})
+				recs = append(recs, BanRecord{Jail: j, IP: ip, BannedAt: tBan, Remaining: FormatDuration(rem)})
 			} else {
 				// Fallback for simpler format
 				recs = append(recs, BanRecord{Jail: j, IP: ip, BannedAt: time.Now(), Remaining: "unknown"})
@@ -521,14 +443,6 @@ func (c *RealClient) GetBanRecords(jails []string) ([]BanRecord, error) {
 	}
 	sort.Slice(recs, func(i, j int) bool { return recs[i].BannedAt.Before(recs[j].BannedAt) })
 	return recs, nil
-}
-
-func formatDuration(sec int64) string {
-	days := sec / 86400
-	h := (sec % 86400) / 3600
-	m := (sec % 3600) / 60
-	s := sec % 60
-	return fmt.Sprintf("%02d:%02d:%02d:%02d", days, h, m, s)
 }
 
 func (c *RealClient) GetLogLines(jail, ip string) ([]string, error) {
@@ -661,8 +575,8 @@ func (c *RealClient) ListFilters() ([]string, error) {
 }
 
 func TestFilter(filter string) (string, error) {
-	if !isValidFilter(filter) {
-		return "", fmt.Errorf("invalid filter name")
+	if err := ValidateFilter(filter); err != nil {
+		return "", err
 	}
 	path := filepath.Join(filterDir, filter+".conf")
 
@@ -738,11 +652,11 @@ func (c *RealClient) StatusJailWithContext(ctx context.Context, jail string) (st
 }
 
 func (c *RealClient) BanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
-	if !isValidIP(ip) {
-		return 0, fmt.Errorf("invalid IP address: %s", ip)
+	if err := ValidateIP(ip); err != nil {
+		return 0, err
 	}
-	if !isValidJail(jail) {
-		return 0, fmt.Errorf("invalid jail name: %s", jail)
+	if err := ValidateJail(jail); err != nil {
+		return 0, err
 	}
 
 	globalRunnerManager.mu.RLock()
@@ -764,11 +678,11 @@ func (c *RealClient) BanIPWithContext(ctx context.Context, ip, jail string) (int
 }
 
 func (c *RealClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
-	if !isValidIP(ip) {
-		return 0, fmt.Errorf("invalid IP address: %s", ip)
+	if err := ValidateIP(ip); err != nil {
+		return 0, err
 	}
-	if !isValidJail(jail) {
-		return 0, fmt.Errorf("invalid jail name: %s", jail)
+	if err := ValidateJail(jail); err != nil {
+		return 0, err
 	}
 
 	globalRunnerManager.mu.RLock()
@@ -790,8 +704,8 @@ func (c *RealClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (i
 }
 
 func (c *RealClient) BannedInWithContext(ctx context.Context, ip string) ([]string, error) {
-	if !isValidIP(ip) {
-		return nil, fmt.Errorf("invalid IP address: %s", ip)
+	if err := ValidateIP(ip); err != nil {
+		return nil, err
 	}
 
 	globalRunnerManager.mu.RLock()
@@ -834,8 +748,8 @@ func (c *RealClient) ListFiltersWithContext(ctx context.Context) ([]string, erro
 }
 
 func (c *RealClient) TestFilterWithContext(ctx context.Context, filter string) (string, error) {
-	if !isValidFilter(filter) {
-		return "", fmt.Errorf("invalid filter name")
+	if err := ValidateFilter(filter); err != nil {
+		return "", err
 	}
 	path := filepath.Join(c.FilterDir, filter+".conf")
 
@@ -887,8 +801,8 @@ func (c *RealClient) TestFilterWithContext(ctx context.Context, filter string) (
 }
 
 func (c *RealClient) TestFilter(filter string) (string, error) {
-	if !isValidFilter(filter) {
-		return "", fmt.Errorf("invalid filter name")
+	if err := ValidateFilter(filter); err != nil {
+		return "", err
 	}
 	path := filepath.Join(c.FilterDir, filter+".conf")
 
@@ -936,125 +850,4 @@ func (c *RealClient) TestFilter(filter string) (string, error) {
 
 	output, err := currentRunner.CombinedOutputWithSudo("fail2ban-regex", logPath, path)
 	return string(output), err
-}
-
-// containsPathTraversalPatterns checks for various path traversal patterns in filter names
-func containsPathTraversalPatterns(filter string) bool {
-	// Path separators and traversal patterns
-	if strings.ContainsAny(filter, "/\\") {
-		return true
-	}
-
-	// Various representations of ".."
-	dangerousPatterns := []string{
-		"..",
-		"%2e%2e",       // URL encoded ..
-		"%2f",          // URL encoded /
-		"%5c",          // URL encoded \
-		"\u002e\u002e", // Unicode ..
-		"\uff0e\uff0e", // Full-width Unicode ..
-	}
-
-	filterLower := strings.ToLower(filter)
-	for _, pattern := range dangerousPatterns {
-		if strings.Contains(filterLower, strings.ToLower(pattern)) {
-			return true
-		}
-	}
-
-	return false
-}
-
-// isValidFilterChar checks if a character is allowed in filter names
-func isValidFilterChar(r rune) bool {
-	// Allow letters, digits, and safe punctuation
-	return unicode.IsLetter(r) ||
-		unicode.IsDigit(r) ||
-		r == '-' ||
-		r == '_' ||
-		r == '.' ||
-		r == '@' || // Allow @ for email-like patterns
-		r == '+' || // Allow + for variations
-		r == '~' // Allow ~ for common naming
-}
-
-// isValidFilter validates a filter name to prevent path traversal and other attacks
-func isValidFilter(filter string) bool {
-	if filter == "" {
-		return false
-	}
-
-	// Check length limits to prevent buffer overflow attacks
-	if len(filter) > 255 {
-		return false
-	}
-
-	// Check for null bytes
-	if strings.Contains(filter, "\x00") {
-		return false
-	}
-
-	// Enhanced path traversal detection
-	if containsPathTraversalPatterns(filter) {
-		return false
-	}
-
-	// Character validation - only allow safe characters
-	for _, r := range filter {
-		if !isValidFilterChar(r) {
-			return false
-		}
-	}
-
-	// Additional validation: ensure filter doesn't start/end with dangerous patterns
-	if strings.HasPrefix(filter, ".") || strings.HasSuffix(filter, ".") {
-		// Allow single extension like ".conf" but not ".." or "..."
-		if strings.Contains(filter, "..") {
-			return false
-		}
-	}
-
-	return true
-}
-
-// isValidIP validates an IP address string
-func isValidIP(ip string) bool {
-	if ip == "" {
-		return false
-	}
-	// Check for valid IPv4 or IPv6 address
-	parsed := net.ParseIP(ip)
-	if parsed == nil {
-		return false
-	}
-	// Additional check to prevent loopback addresses in production use
-	if parsed.IsLoopback() {
-		return true // Allow loopback for testing
-	}
-	return true
-}
-
-// isValidJail validates a jail name (alphanumeric, dash, underscore)
-func isValidJail(jail string) bool {
-	if jail == "" {
-		return false
-	}
-	// Jail names should be reasonable length
-	if len(jail) > 64 {
-		return false
-	}
-	// First character should be alphanumeric
-	if len(jail) > 0 {
-		first := rune(jail[0])
-		if !unicode.IsLetter(first) && !unicode.IsDigit(first) {
-			return false
-		}
-	}
-	// Rest can be alphanumeric, dash, underscore, or dot
-	for _, r := range jail {
-		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' && r != '.' {
-			return false
-		}
-	}
-	return true
 }

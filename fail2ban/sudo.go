@@ -88,7 +88,7 @@ func (r *RealSudoChecker) InSudoGroup() bool {
 // CanUseSudo returns true if the current user can use sudo
 func (r *RealSudoChecker) CanUseSudo() bool {
 	// In test environment, don't actually run sudo
-	if isTest() {
+	if IsTestEnvironment() {
 		return false // Default to false in tests unless mocked
 	}
 

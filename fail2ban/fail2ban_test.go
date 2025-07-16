@@ -989,12 +989,12 @@ func TestIsValidFilter(t *testing.T) {
 	valid := []string{"sshd", "nginx-error", "custom.filter"}
 	invalid := []string{"../evil", "bad/name", "bad\\name", "", ".."}
 	for _, f := range valid {
-		if !isValidFilter(f) {
-			t.Errorf("expected filter %s to be valid", f)
+		if err := ValidateFilter(f); err != nil {
+			t.Errorf("expected filter %s to be valid, got error: %v", f, err)
 		}
 	}
 	for _, f := range invalid {
-		if isValidFilter(f) {
+		if err := ValidateFilter(f); err == nil {
 			t.Errorf("expected filter %s to be invalid", f)
 		}
 	}
@@ -1059,9 +1059,9 @@ func TestCompareVersions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := compareVersions(tt.v1, tt.v2)
+			result := CompareVersions(tt.v1, tt.v2)
 			if result != tt.expected {
-				t.Errorf("compareVersions(%q, %q) = %d, expected %d", tt.v1, tt.v2, result, tt.expected)
+				t.Errorf("CompareVersions(%q, %q) = %d, expected %d", tt.v1, tt.v2, result, tt.expected)
 			}
 		})
 	}

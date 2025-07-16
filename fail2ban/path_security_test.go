@@ -241,8 +241,8 @@ func TestFilterValidation(t *testing.T) {
 
 	for _, filter := range validFilters {
 		t.Run("valid_filter_"+filter, func(t *testing.T) {
-			if !isValidFilter(filter) {
-				t.Errorf("filter %q should be valid", filter)
+			if err := ValidateFilter(filter); err != nil {
+				t.Errorf("filter %q should be valid, got error: %v", filter, err)
 			}
 		})
 	}
@@ -263,7 +263,7 @@ func TestFilterValidation(t *testing.T) {
 
 	for _, filter := range invalidFilters {
 		t.Run("invalid_filter", func(t *testing.T) {
-			if isValidFilter(filter) {
+			if err := ValidateFilter(filter); err == nil {
 				t.Errorf("filter %q should be invalid", filter)
 			}
 		})
