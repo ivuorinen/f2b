@@ -433,8 +433,8 @@ func (c *RealClient) getBanRecordsInternal(ctx context.Context, jails []string) 
 			return []BanRecord{}, nil // Return empty slice instead of error (original behavior)
 		}
 
-		// Use optimized parser for this jail's records
-		jailRecords, parseErr := ParseBanRecordsOptimized(string(out), jail)
+		// Use ultra-optimized parser for this jail's records
+		jailRecords, parseErr := ParseBanRecordsUltraOptimized(string(out), jail)
 		if parseErr != nil {
 			return []BanRecord{}, nil // Return empty slice on parse error
 		}
