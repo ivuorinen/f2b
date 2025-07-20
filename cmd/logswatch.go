@@ -15,60 +15,53 @@ import (
 func LogsWatchCmd(ctx context.Context, client fail2ban.Client, config *Config) *cobra.Command {
 	var limit int
 	var interval time.Duration
-	cmd := &cobra.Command{
-		Use:   "logs-watch [jail] [ip]",
-		Short: "Continuously watch Fail2Ban logs (filtered by jail and/or IP)",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			jail := ""
-			ip := ""
-			if len(args) > 0 {
-				jail = args[0]
-			}
-			if len(args) > 1 {
-				ip = args[1]
-			}
-			// Use memory-efficient approach with configurable limits
-			maxLines := limit
-			if maxLines <= 0 {
-				maxLines = 1000 // Default safe limit
-			}
 
-			// Get initial log lines with memory limits
-			prev, err := getLogLinesWithLimit(client, jail, ip, maxLines)
-			if err != nil {
-				PrintError(err)
-				return err
-			}
+	cmd := NewCommand("logs-watch [jail] [ip]", "Continuously watch Fail2Ban logs (filtered by jail and/or IP)", nil, func(cmd *cobra.Command, args []string) error {
+		// Parse optional arguments
+		parsedArgs := ParseOptionalArgs(args, 2)
+		jail := parsedArgs[0]
+		ip := parsedArgs[1]
 
-			prevHash := computeHash(prev)
-			PrintOutput(strings.Join(prev, "\n"), config.Format)
+		// Use memory-efficient approach with configurable limits
+		maxLines := limit
+		if maxLines <= 0 {
+			maxLines = 1000 // Default safe limit
+		}
 
-			if interval <= 0 {
-				interval = 5 * time.Second
-			}
-			ticker := time.NewTicker(interval)
-			defer ticker.Stop()
+		// Get initial log lines with memory limits
+		prev, err := getLogLinesWithLimit(client, jail, ip, maxLines)
+		if err != nil {
+			return HandleClientError(err)
+		}
 
-			for {
-				select {
-				case <-ctx.Done():
-					return nil
-				case <-ticker.C:
-					curr, err := getLogLinesWithLimit(client, jail, ip, maxLines)
-					if err != nil {
-						PrintError(err)
-						return err
-					}
+		prevHash := computeHash(prev)
+		PrintOutput(strings.Join(prev, "\n"), config.Format)
 
-					currHash := computeHash(curr)
-					if prevHash != currHash {
-						PrintOutput(strings.Join(curr, "\n"), config.Format)
-						prevHash = currHash
-					}
+		if interval <= 0 {
+			interval = 5 * time.Second
+		}
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-ticker.C:
+				curr, err := getLogLinesWithLimit(client, jail, ip, maxLines)
+				if err != nil {
+					return HandleClientError(err)
+				}
+
+				currHash := computeHash(curr)
+				if prevHash != currHash {
+					PrintOutput(strings.Join(curr, "\n"), config.Format)
+					prevHash = currHash
 				}
 			}
-		},
-	}
+		}
+	})
+
 	cmd.Flags().IntVarP(&limit, "limit", "n", 10, "Number of log lines to show/tail")
 	cmd.Flags().DurationVarP(&interval, "interval", "i", 5*time.Second, "Polling interval for checking new logs")
 	return cmd

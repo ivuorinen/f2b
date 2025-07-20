@@ -3,6 +3,7 @@ package fail2ban
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -16,16 +17,37 @@ type MockClient struct {
 	Logs       []string
 	Filters    []string
 	FilterRuns map[string]string
+	// Enhanced features for advanced testing
+	StatusAllData  string
+	StatusJailData map[string]string
+	BanRecords     []BanRecord
+	BanResults     map[string]map[string]int   // jail -> ip -> result code
+	BanErrors      map[string]map[string]error // jail -> ip -> error
+	UnbanResults   map[string]map[string]int   // jail -> ip -> result code
+	UnbanErrors    map[string]map[string]error // jail -> ip -> error
+	BannedIPs      map[string][]string         // jail -> list of banned IPs
+	LogLines       []string                    // configurable log lines
+	FilterTests    map[string]string           // filter -> test result
 }
 
 // NewMockClient creates a new MockClient with default jails and filters.
 func NewMockClient() *MockClient {
 	return &MockClient{
-		Jails:      map[string]struct{}{"sshd": {}, "apache": {}},
-		Banned:     make(map[string]map[string]time.Time),
-		Logs:       []string{},
-		Filters:    []string{"sshd", "apache"},
-		FilterRuns: make(map[string]string),
+		Jails:          map[string]struct{}{"sshd": {}, "apache": {}},
+		Banned:         make(map[string]map[string]time.Time),
+		Logs:           []string{},
+		Filters:        []string{"sshd", "apache"},
+		FilterRuns:     make(map[string]string),
+		StatusAllData:  "Mock status for all jails",
+		StatusJailData: make(map[string]string),
+		BanRecords:     []BanRecord{},
+		BanResults:     make(map[string]map[string]int),
+		BanErrors:      make(map[string]map[string]error),
+		UnbanResults:   make(map[string]map[string]int),
+		UnbanErrors:    make(map[string]map[string]error),
+		BannedIPs:      make(map[string][]string),
+		LogLines:       []string{},
+		FilterTests:    make(map[string]string),
 	}
 }
 
@@ -37,12 +59,16 @@ func (m *MockClient) ListJails() ([]string, error) {
 	for jail := range m.Jails {
 		jails = append(jails, jail)
 	}
+	// Sort jails for consistent output
+	sort.Strings(jails)
 	return jails, nil
 }
 
 // StatusAll returns a mock status for all jails.
 func (m *MockClient) StatusAll() (string, error) {
-	return "Mock status for all jails", nil
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.StatusAllData, nil
 }
 
 // StatusJail returns a mock status for a specific jail.
@@ -50,7 +76,10 @@ func (m *MockClient) StatusJail(jail string) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.Jails[jail]; !ok {
-		return "", fmt.Errorf("jail %s not found", jail)
+		return "", NewJailNotFoundError(jail)
+	}
+	if status, ok := m.StatusJailData[jail]; ok {
+		return status, nil
 	}
 	return fmt.Sprintf("Mock status for jail %s", jail), nil
 }
@@ -59,8 +88,23 @@ func (m *MockClient) StatusJail(jail string) (string, error) {
 func (m *MockClient) BanIP(ip, jail string) (int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	// Check for configured error
+	if m.BanErrors[jail] != nil {
+		if err, ok := m.BanErrors[jail][ip]; ok {
+			return 0, err
+		}
+	}
+
+	// Check for configured result
+	if m.BanResults[jail] != nil {
+		if result, ok := m.BanResults[jail][ip]; ok {
+			return result, nil
+		}
+	}
+
 	if _, ok := m.Jails[jail]; !ok {
-		return 0, fmt.Errorf("jail %s not found", jail)
+		return 0, NewJailNotFoundError(jail)
 	}
 	if m.Banned[jail] == nil {
 		m.Banned[jail] = make(map[string]time.Time)
@@ -77,8 +121,23 @@ func (m *MockClient) BanIP(ip, jail string) (int, error) {
 func (m *MockClient) UnbanIP(ip, jail string) (int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	// Check for configured error
+	if m.UnbanErrors[jail] != nil {
+		if err, ok := m.UnbanErrors[jail][ip]; ok {
+			return 0, err
+		}
+	}
+
+	// Check for configured result
+	if m.UnbanResults[jail] != nil {
+		if result, ok := m.UnbanResults[jail][ip]; ok {
+			return result, nil
+		}
+	}
+
 	if _, ok := m.Jails[jail]; !ok {
-		return 0, fmt.Errorf("jail %s not found", jail)
+		return 0, NewJailNotFoundError(jail)
 	}
 	if m.Banned[jail] == nil || m.Banned[jail][ip].IsZero() {
 		return 1, nil // Already unbanned
@@ -98,6 +157,8 @@ func (m *MockClient) BannedIn(ip string) ([]string, error) {
 			jails = append(jails, jail)
 		}
 	}
+	// Sort jails for consistent output
+	sort.Strings(jails)
 	return jails, nil
 }
 
@@ -105,6 +166,12 @@ func (m *MockClient) BannedIn(ip string) ([]string, error) {
 func (m *MockClient) GetBanRecords(jails []string) ([]BanRecord, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	// Use configured ban records if available
+	if len(m.BanRecords) > 0 {
+		return m.BanRecords, nil
+	}
+
 	var recs []BanRecord
 	for _, jail := range jails {
 		for ip, t := range m.Banned[jail] {
@@ -123,6 +190,12 @@ func (m *MockClient) GetBanRecords(jails []string) ([]BanRecord, error) {
 func (m *MockClient) GetLogLines(jail, ip string) ([]string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	// Use configured log lines if available
+	if len(m.LogLines) > 0 {
+		return m.LogLines, nil
+	}
+
 	var lines []string
 	for _, l := range m.Logs {
 		if (jail == "" || strings.Contains(l, jail)) && (ip == "" || strings.Contains(l, ip)) {
@@ -139,52 +212,56 @@ func (m *MockClient) ListFilters() ([]string, error) {
 
 // TestFilter simulates running fail2ban-regex for the given filter.
 func (m *MockClient) TestFilter(filter string) (string, error) {
+	// Check configured filter tests first
+	if result, ok := m.FilterTests[filter]; ok {
+		return result, nil
+	}
 	if result, ok := m.FilterRuns[filter]; ok {
 		return result, nil
 	}
-	return "", fmt.Errorf("filter %s not found", filter)
+	return "", NewFilterNotFoundError(filter)
 }
 
-// Context-aware methods for MockClient
+// Context-aware methods for MockClient (using helpers to reduce boilerplate)
 
 func (m *MockClient) ListJailsWithContext(ctx context.Context) ([]string, error) {
-	return m.ListJails()
+	return wrapWithContext0(m.ListJails)(ctx)
 }
 
 func (m *MockClient) StatusAllWithContext(ctx context.Context) (string, error) {
-	return m.StatusAll()
+	return wrapWithContext0(m.StatusAll)(ctx)
 }
 
 func (m *MockClient) StatusJailWithContext(ctx context.Context, jail string) (string, error) {
-	return m.StatusJail(jail)
+	return wrapWithContext1(m.StatusJail)(ctx, jail)
 }
 
 func (m *MockClient) BanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
-	return m.BanIP(ip, jail)
+	return wrapWithContext2(m.BanIP)(ctx, ip, jail)
 }
 
 func (m *MockClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
-	return m.UnbanIP(ip, jail)
+	return wrapWithContext2(m.UnbanIP)(ctx, ip, jail)
 }
 
 func (m *MockClient) BannedInWithContext(ctx context.Context, ip string) ([]string, error) {
-	return m.BannedIn(ip)
+	return wrapWithContext1(m.BannedIn)(ctx, ip)
 }
 
 func (m *MockClient) GetBanRecordsWithContext(ctx context.Context, jails []string) ([]BanRecord, error) {
-	return m.GetBanRecords(jails)
+	return wrapWithContext1(m.GetBanRecords)(ctx, jails)
 }
 
 func (m *MockClient) GetLogLinesWithContext(ctx context.Context, jail, ip string) ([]string, error) {
-	return m.GetLogLines(jail, ip)
+	return wrapWithContext2(m.GetLogLines)(ctx, jail, ip)
 }
 
 func (m *MockClient) ListFiltersWithContext(ctx context.Context) ([]string, error) {
-	return m.ListFilters()
+	return wrapWithContext0(m.ListFilters)(ctx)
 }
 
 func (m *MockClient) TestFilterWithContext(ctx context.Context, filter string) (string, error) {
-	return m.TestFilter(filter)
+	return wrapWithContext1(m.TestFilter)(ctx, filter)
 }
 
 // Reset clears all bans and logs in the mock (for test isolation).
@@ -193,4 +270,60 @@ func (m *MockClient) Reset() {
 	defer m.mu.Unlock()
 	m.Banned = make(map[string]map[string]time.Time)
 	m.Logs = []string{}
+}
+
+// Helper methods for test configuration
+
+// SetBanError configures an error to return for BanIP(ip, jail).
+func (m *MockClient) SetBanError(jail, ip string, err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.BanErrors[jail] == nil {
+		m.BanErrors[jail] = make(map[string]error)
+	}
+	m.BanErrors[jail][ip] = err
+}
+
+// SetBanResult configures a result code to return for BanIP(ip, jail).
+func (m *MockClient) SetBanResult(jail, ip string, result int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.BanResults[jail] == nil {
+		m.BanResults[jail] = make(map[string]int)
+	}
+	m.BanResults[jail][ip] = result
+}
+
+// SetUnbanError configures an error to return for UnbanIP(ip, jail).
+func (m *MockClient) SetUnbanError(jail, ip string, err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.UnbanErrors[jail] == nil {
+		m.UnbanErrors[jail] = make(map[string]error)
+	}
+	m.UnbanErrors[jail][ip] = err
+}
+
+// SetUnbanResult configures a result code to return for UnbanIP(ip, jail).
+func (m *MockClient) SetUnbanResult(jail, ip string, result int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.UnbanResults[jail] == nil {
+		m.UnbanResults[jail] = make(map[string]int)
+	}
+	m.UnbanResults[jail][ip] = result
+}
+
+// SetStatusJailData configures the status data for a specific jail.
+func (m *MockClient) SetStatusJailData(jail, status string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.StatusJailData[jail] = status
+}
+
+// SetFilterTest configures the test result for a filter.
+func (m *MockClient) SetFilterTest(filter, result string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.FilterTests[filter] = result
 }

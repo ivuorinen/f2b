@@ -2,14 +2,11 @@ package cmd
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"strings"
 	"testing"
-	"unicode"
 
 	"github.com/ivuorinen/f2b/fail2ban"
 	"github.com/spf13/cobra"
@@ -31,294 +28,26 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// MockClient implements fail2ban.Client for testing
-type MockClient struct {
-	Jails          []string
-	StatusAllData  string
-	StatusJailData map[string]string
-	BanRecords     []fail2ban.BanRecord
-	BanResults     map[string]map[string]int
-	BanErrors      map[string]map[string]error
-	BannedIPs      map[string][]string
-	LogLines       []string
-	Filters        []string
-	FilterTests    map[string]string
-	BannedState    map[string]map[string]bool // jail -> ip -> banned
-}
+// Type alias for the enhanced MockClient from fail2ban package
+type MockClient = fail2ban.MockClient
 
 // NewMockClient creates a new MockClient for testing
 func NewMockClient() *MockClient {
-	return &MockClient{
-		Jails:          []string{"sshd", "apache"},
-		StatusAllData:  "Mock status for all jails",
-		StatusJailData: make(map[string]string),
-		BanRecords:     []fail2ban.BanRecord{},
-		BanResults:     make(map[string]map[string]int),
-		BanErrors:      make(map[string]map[string]error),
-		BannedIPs:      make(map[string][]string),
-		LogLines:       []string{},
-		Filters:        []string{"sshd", "apache"},
-		FilterTests:    make(map[string]string),
-		BannedState:    make(map[string]map[string]bool),
-	}
+	return fail2ban.NewMockClient()
 }
 
-func (m *MockClient) ListJails() ([]string, error) {
-	return m.Jails, nil
-}
-
-func (m *MockClient) StatusAll() (string, error) {
-	return m.StatusAllData, nil
-}
-
-func (m *MockClient) StatusJail(jail string) (string, error) {
-	if status, ok := m.StatusJailData[jail]; ok {
-		return status, nil
+// Helper function to set jails for the enhanced MockClient
+func setMockJails(mock *MockClient, jails []string) {
+	mock.Jails = make(map[string]struct{})
+	for _, jail := range jails {
+		mock.Jails[jail] = struct{}{}
 	}
-	// Check if jail exists in our jail list
-	for _, j := range m.Jails {
-		if j == jail {
-			return fmt.Sprintf("Mock status for jail %s", jail), nil
-		}
-	}
-	return "", fmt.Errorf("jail '%s' not found", jail)
-}
-
-func (m *MockClient) BanIP(ip, jail string) (int, error) {
-	// Validate IP address
-	if !isValidIPMock(ip) {
-		return 0, fmt.Errorf("invalid IP address: %s", ip)
-	}
-	// Validate jail name
-	if !isValidJailMock(jail) {
-		return 0, fmt.Errorf("invalid jail name: %s", jail)
-	}
-	// Check if jail exists
-	jailExists := false
-	for _, j := range m.Jails {
-		if j == jail {
-			jailExists = true
-			break
-		}
-	}
-	if !jailExists {
-		return 0, fmt.Errorf("jail '%s' not found", jail)
-	}
-
-	if m.BanErrors[ip] != nil && m.BanErrors[ip][jail] != nil {
-		return 0, m.BanErrors[ip][jail]
-	}
-	if m.BanResults[ip] != nil && m.BanResults[ip][jail] != 0 {
-		return m.BanResults[ip][jail], nil
-	}
-
-	// Update banned state
-	if m.BannedState[jail] == nil {
-		m.BannedState[jail] = make(map[string]bool)
-	}
-	if m.BannedState[jail][ip] {
-		return 1, nil // Already banned
-	}
-	m.BannedState[jail][ip] = true
-
-	// Add log entry for ban operation
-	logEntry := fmt.Sprintf("2024-01-01 12:00:00 [%s] Ban %s", jail, ip)
-	if m.LogLines == nil {
-		m.LogLines = []string{}
-	}
-	m.LogLines = append(m.LogLines, logEntry)
-
-	return 0, nil
-}
-
-func (m *MockClient) UnbanIP(ip, jail string) (int, error) {
-	// Validate IP address
-	if !isValidIPMock(ip) {
-		return 0, fmt.Errorf("invalid IP address: %s", ip)
-	}
-	// Validate jail name
-	if !isValidJailMock(jail) {
-		return 0, fmt.Errorf("invalid jail name: %s", jail)
-	}
-	// Check if jail exists
-	jailExists := false
-	for _, j := range m.Jails {
-		if j == jail {
-			jailExists = true
-			break
-		}
-	}
-	if !jailExists {
-		return 0, fmt.Errorf("jail '%s' not found", jail)
-	}
-
-	if m.BanErrors[ip] != nil && m.BanErrors[ip][jail] != nil {
-		return 0, m.BanErrors[ip][jail]
-	}
-	if m.BanResults[ip] != nil && m.BanResults[ip][jail] != 0 {
-		return m.BanResults[ip][jail], nil
-	}
-
-	// Update banned state
-	if m.BannedState[jail] == nil {
-		m.BannedState[jail] = make(map[string]bool)
-	}
-	if !m.BannedState[jail][ip] {
-		return 1, nil // Already unbanned
-	}
-	delete(m.BannedState[jail], ip)
-
-	// Add log entry for unban operation
-	logEntry := fmt.Sprintf("2024-01-01 12:00:00 [%s] Unban %s", jail, ip)
-	if m.LogLines == nil {
-		m.LogLines = []string{}
-	}
-	m.LogLines = append(m.LogLines, logEntry)
-
-	return 0, nil
-}
-
-func (m *MockClient) BannedIn(ip string) ([]string, error) {
-	// Validate IP address
-	if !isValidIPMock(ip) {
-		return nil, fmt.Errorf("invalid IP address: %s", ip)
-	}
-
-	if jails, ok := m.BannedIPs[ip]; ok {
-		return jails, nil
-	}
-
-	// Check banned state
-	var bannedJails []string
-	for jail, ips := range m.BannedState {
-		if ips[ip] {
-			bannedJails = append(bannedJails, jail)
-		}
-	}
-	return bannedJails, nil
-}
-
-func (m *MockClient) GetBanRecords(jails []string) ([]fail2ban.BanRecord, error) {
-	if len(m.BanRecords) > 0 {
-		return m.BanRecords, nil
-	}
-
-	// Generate ban records from banned state
-	var records []fail2ban.BanRecord
-	for jail, ips := range m.BannedState {
-		for ip := range ips {
-			records = append(records, fail2ban.BanRecord{
-				Jail:      jail,
-				IP:        ip,
-				Remaining: "01:00:00",
-			})
-		}
-	}
-	return records, nil
-}
-
-func (m *MockClient) GetLogLines(jail, ip string) ([]string, error) {
-	var logs []string
-
-	// Use actual log lines from ban/unban operations
-	if m.LogLines != nil {
-		logs = m.LogLines
-	}
-
-	// Apply filtering by jail and IP
-	var filtered []string
-	for _, line := range logs {
-		includeJail := jail == "" || jail == "all" || strings.Contains(line, fmt.Sprintf("[%s]", jail))
-		includeIP := ip == "" || strings.Contains(line, ip)
-
-		if includeJail && includeIP {
-			filtered = append(filtered, line)
-		}
-	}
-
-	return filtered, nil
-}
-
-func (m *MockClient) ListFilters() ([]string, error) {
-	return m.Filters, nil
-}
-
-func (m *MockClient) TestFilter(filter string) (string, error) {
-	if result, ok := m.FilterTests[filter]; ok {
-		return result, nil
-	}
-	return "", fmt.Errorf("filter '%s' not found", filter)
 }
 
 // Context-aware methods for MockClient
 
-func (m *MockClient) ListJailsWithContext(ctx context.Context) ([]string, error) {
-	return m.ListJails()
-}
-
-func (m *MockClient) StatusAllWithContext(ctx context.Context) (string, error) {
-	return m.StatusAll()
-}
-
-func (m *MockClient) StatusJailWithContext(ctx context.Context, jail string) (string, error) {
-	return m.StatusJail(jail)
-}
-
-func (m *MockClient) BanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
-	return m.BanIP(ip, jail)
-}
-
-func (m *MockClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
-	return m.UnbanIP(ip, jail)
-}
-
-func (m *MockClient) BannedInWithContext(ctx context.Context, ip string) ([]string, error) {
-	return m.BannedIn(ip)
-}
-
-func (m *MockClient) GetBanRecordsWithContext(ctx context.Context, jails []string) ([]fail2ban.BanRecord, error) {
-	return m.GetBanRecords(jails)
-}
-
-func (m *MockClient) GetLogLinesWithContext(ctx context.Context, jail, ip string) ([]string, error) {
-	return m.GetLogLines(jail, ip)
-}
-
-func (m *MockClient) ListFiltersWithContext(ctx context.Context) ([]string, error) {
-	return m.ListFilters()
-}
-
-func (m *MockClient) TestFilterWithContext(ctx context.Context, filter string) (string, error) {
-	return m.TestFilter(filter)
-}
-
-// Mock validation functions (simplified versions of the real ones)
-func isValidIPMock(ip string) bool {
-	parts := strings.Split(ip, ".")
-	if len(parts) != 4 {
-		return false
-	}
-	for _, p := range parts {
-		n, err := strconv.Atoi(p)
-		if err != nil || n < 0 || n > 255 {
-			return false
-		}
-	}
-	return true
-}
-
-func isValidJailMock(jail string) bool {
-	// Simple validation - alphanumeric, dash, underscore
-	if jail == "" {
-		return false
-	}
-	for _, r := range jail {
-		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' {
-			return false
-		}
-	}
-	return true
-}
+// Use centralized validation functions from fail2ban package
+// No need for duplicate validation logic here
 
 // Helper function to capture command output
 func executeCommand(client fail2ban.Client, args ...string) (string, error) {
@@ -384,7 +113,7 @@ func TestListJailsCommand(t *testing.T) {
 		{
 			name:        "list multiple jails",
 			jails:       []string{"sshd", "apache", "nginx"},
-			expectedOut: "sshd apache nginx\n",
+			expectedOut: "apache nginx sshd\n", // alphabetical order
 			expectError: false,
 		},
 		{
@@ -398,7 +127,7 @@ func TestListJailsCommand(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := NewMockClient()
-			mock.Jails = tt.jails
+			setMockJails(mock, tt.jails)
 
 			output, err := executeCommand(mock, "list-jails")
 
@@ -461,7 +190,7 @@ func TestStatusCommand(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := NewMockClient()
-			mock.Jails = tt.jails
+			setMockJails(mock, tt.jails)
 			mock.StatusAllData = tt.statusAll
 			mock.StatusJailData = tt.statusJail
 
@@ -535,6 +264,7 @@ func TestBanCommand(t *testing.T) {
 		args        []string
 		jails       []string
 		banResults  map[string]map[string]int
+		setupBanned bool
 		expectedOut string
 		expectError bool
 	}{
@@ -543,7 +273,7 @@ func TestBanCommand(t *testing.T) {
 			args:        []string{"ban", "192.168.1.100"},
 			jails:       []string{"sshd", "apache"},
 			banResults:  map[string]map[string]int{"192.168.1.100": {"sshd": 0, "apache": 0}},
-			expectedOut: "Banned 192.168.1.100 in sshd\nBanned 192.168.1.100 in apache\n",
+			expectedOut: "Banned 192.168.1.100 in apache\nBanned 192.168.1.100 in sshd\n", // alphabetical order
 			expectError: false,
 		},
 		{
@@ -558,7 +288,7 @@ func TestBanCommand(t *testing.T) {
 			name:        "ban IP already banned",
 			args:        []string{"ban", "192.168.1.100", "sshd"},
 			jails:       []string{"sshd"},
-			banResults:  map[string]map[string]int{"192.168.1.100": {"sshd": 1}},
+			setupBanned: true,
 			expectedOut: "Already banned 192.168.1.100 in sshd\n",
 			expectError: false,
 		},
@@ -573,8 +303,14 @@ func TestBanCommand(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := NewMockClient()
-			mock.Jails = tt.jails
+			setMockJails(mock, tt.jails)
 			mock.BanResults = tt.banResults
+
+			// Set up initial banned state if needed
+			if tt.setupBanned {
+				// Pre-ban the IP so it's already banned
+				_, _ = mock.BanIP("192.168.1.100", "sshd")
+			}
 
 			output, err := executeCommand(mock, tt.args...)
 
@@ -629,15 +365,13 @@ func TestUnbanCommand(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := NewMockClient()
-			mock.Jails = tt.jails
+			setMockJails(mock, tt.jails)
 			mock.BanResults = tt.banResults
 
 			// Set up initial banned state
 			if tt.setupBanned {
-				if mock.BannedState["sshd"] == nil {
-					mock.BannedState["sshd"] = make(map[string]bool)
-				}
-				mock.BannedState["sshd"]["192.168.1.100"] = true
+				// Use the enhanced MockClient's BanIP method to set up banned state
+				_, _ = mock.BanIP("192.168.1.100", "sshd")
 			}
 
 			output, err := executeCommand(mock, tt.args...)
@@ -660,29 +394,29 @@ func TestTestIPCommand(t *testing.T) {
 	tests := []struct {
 		name        string
 		args        []string
-		bannedIPs   map[string][]string
+		setupBans   map[string][]string // jail -> IPs to ban
 		expectedOut string
 		expectError bool
 	}{
 		{
 			name:        "test IP not banned",
 			args:        []string{"test", "192.168.1.100"},
-			bannedIPs:   map[string][]string{"192.168.1.100": {}},
+			setupBans:   map[string][]string{}, // no bans
 			expectedOut: "IP 192.168.1.100 is not banned",
 			expectError: false,
 		},
 		{
 			name:        "test IP banned in one jail",
 			args:        []string{"test", "192.168.1.100"},
-			bannedIPs:   map[string][]string{"192.168.1.100": {"sshd"}},
+			setupBans:   map[string][]string{"sshd": {"192.168.1.100"}},
 			expectedOut: "IP 192.168.1.100 is banned in: [sshd]\n",
 			expectError: false,
 		},
 		{
 			name:        "test IP banned in multiple jails",
 			args:        []string{"test", "192.168.1.100"},
-			bannedIPs:   map[string][]string{"192.168.1.100": {"sshd", "apache"}},
-			expectedOut: "IP 192.168.1.100 is banned in: [sshd apache]\n",
+			setupBans:   map[string][]string{"sshd": {"192.168.1.100"}, "apache": {"192.168.1.100"}},
+			expectedOut: "IP 192.168.1.100 is banned in: [apache sshd]\n", // alphabetical order
 			expectError: false,
 		},
 		{
@@ -696,7 +430,13 @@ func TestTestIPCommand(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := NewMockClient()
-			mock.BannedIPs = tt.bannedIPs
+
+			// Set up bans
+			for jail, ips := range tt.setupBans {
+				for _, ip := range ips {
+					_, _ = mock.BanIP(ip, jail)
+				}
+			}
 
 			output, err := executeCommand(mock, tt.args...)
 
@@ -857,10 +597,8 @@ func TestCommandErrorHandling(t *testing.T) {
 			name: "ban IP error",
 			args: []string{"ban", "192.168.1.100", "sshd"},
 			setupMock: func(m *MockClient) {
-				m.Jails = []string{"sshd"}
-				m.BanErrors = map[string]map[string]error{
-					"192.168.1.100": {"sshd": fmt.Errorf("ban failed")},
-				}
+				setMockJails(m, []string{"sshd"})
+				m.SetBanError("sshd", "192.168.1.100", fmt.Errorf("ban failed"))
 			},
 			expectError:   true,
 			expectedError: "ban failed",
@@ -869,10 +607,8 @@ func TestCommandErrorHandling(t *testing.T) {
 			name: "unban IP error",
 			args: []string{"unban", "192.168.1.100", "sshd"},
 			setupMock: func(m *MockClient) {
-				m.Jails = []string{"sshd"}
-				m.BanErrors = map[string]map[string]error{
-					"192.168.1.100": {"sshd": fmt.Errorf("unban failed")},
-				}
+				setMockJails(m, []string{"sshd"})
+				m.SetUnbanError("sshd", "192.168.1.100", fmt.Errorf("unban failed"))
 			},
 			expectError:   true,
 			expectedError: "unban failed",

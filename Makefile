@@ -1,6 +1,6 @@
 # f2b Makefile
 
-.PHONY: help all build test lint fmt clean install dev-deps check-deps test-verbose test-coverage lint-legacy lint-strict lint-fix lint-go lint-md lint-yaml lint-actions lint-make ci ci-coverage security dev-setup pre-commit-setup release-dry-run
+.PHONY: help all build test lint fmt clean install dev-deps check-deps test-verbose test-coverage lint-legacy lint-strict lint-fix lint-go lint-md lint-yaml lint-actions lint-make ci ci-coverage security dev-setup pre-commit-setup release-dry-run release release-snapshot release-check _check-tag
 
 # Default target
 help: ## Show this help message
@@ -22,6 +22,10 @@ install: ## Install f2b globally
 # Development dependencies
 dev-deps: ## Install development dependencies
 	@echo "Installing development dependencies..."
+	@command -v goreleaser >/dev/null 2>&1 || { \
+		echo "Installing goreleaser..."; \
+		go install github.com/goreleaser/goreleaser/v2@latest; \
+	}
 	@command -v golangci-lint >/dev/null 2>&1 || { \
 		echo "Installing golangci-lint..."; \
 		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $$(go env GOPATH)/bin v1.55.2; \
@@ -66,6 +70,7 @@ dev-deps: ## Install development dependencies
 check-deps: ## Check if all development dependencies are installed
 	@echo "Checking development dependencies..."
 	@command -v go >/dev/null 2>&1 || { echo "go is not installed"; exit 1; }
+	@command -v goreleaser >/dev/null 2>&1 || { echo "goreleaser is not installed (run: make dev-deps)"; exit 1; }
 	@command -v golangci-lint >/dev/null 2>&1 || { echo "golangci-lint is not installed (run: make dev-deps)"; exit 1; }
 	@command -v markdownlint-cli2 >/dev/null 2>&1 || { echo "markdownlint-cli2 is not installed (run: make dev-deps)"; exit 1; }
 	@command -v goimports >/dev/null 2>&1 || { echo "goimports is not installed (run: make dev-deps)"; exit 1; }
@@ -192,3 +197,23 @@ release-dry-run: ## Test release process without creating artifacts
 	go build -ldflags "-X github.com/ivuorinen/f2b/cmd.version=$$VERSION" -o f2b-test .
 	@rm -f f2b-test
 	@echo "Release dry-run complete ✓"
+
+release: ## Create a new release using GoReleaser
+	@echo "Creating release with GoReleaser..."
+	@$(MAKE) _check-tag
+	@goreleaser release --clean
+
+_check-tag: ## Internal: Check if a git tag exists
+	@if [ -z "$$(git describe --exact-match 2>/dev/null)" ]; then \
+		echo "Error: No tag found. Please create a tag first (e.g., git tag v1.0.0)"; \
+		exit 1; \
+	fi
+
+release-snapshot: ## Create a snapshot release (no tag required)
+	@echo "Creating snapshot release with GoReleaser..."
+	goreleaser release --snapshot --clean
+
+release-check: ## Check if GoReleaser configuration is valid
+	@echo "Checking GoReleaser configuration..."
+	goreleaser check
+	@echo "GoReleaser configuration is valid ✓"

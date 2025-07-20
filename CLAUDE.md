@@ -1,190 +1,81 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code when working with the f2b repository.
 
 ## About f2b
 
-f2b is a modern, secure Go-based CLI tool for managing Fail2Ban jails and bans. It provides a safer, more
-extensible alternative to Bash scripts for interacting with Fail2Ban, with automatic sudo privilege management,
-shell completion, and comprehensive security features.
+Go CLI for Fail2Ban management with secure sudo handling, input validation, and comprehensive testing.
 
-## Common Development Commands
-
-### Building and Testing
+## Commands
 
 ```bash
-# Build the binary
+# Build & Test
 go build -ldflags "-X github.com/ivuorinen/f2b/cmd.version=1.2.3" -o f2b .
-
-# Install globally
+go test ./... && go test -coverprofile=coverage.out ./...
 go install github.com/ivuorinen/f2b@latest
 
-# Run all tests
-go test ./...
+# Lint & Format
+pre-commit run --all-files  # Run all checks
+pre-commit install          # One-time setup
 
-# Run tests with coverage
-go test -coverprofile=coverage.out ./...
-
-# Run integration tests (requires sudo setup)
-go test -tags=integration ./...
+# Release
+make release-check          # Check config
+make release-snapshot       # Test (no tag)
+git tag -a v1.2.3 -m "Release v1.2.3" && git push origin v1.2.3
+make release               # Full release
 ```
 
-### Code Quality
+## Architecture
 
-**Preferred Method (Unified Tooling):**
+- **main.go**: Entry point, sudo checks
+- **cmd/**: Cobra CLI commands
+- **fail2ban/**: Core client logic (Client interface, MockClient/NoOpClient, Runner, SudoChecker)
 
-```bash
-# Run all linting and formatting checks
-pre-commit run --all-files
+## Key Patterns
 
-# Run specific hook
-pre-commit run yamlfmt --all-files
-pre-commit run golangci-lint --all-files
-pre-commit run checkmake --all-files
+- Dependency injection via interfaces
+- Security-first: validate before escalate
+- Extensive mocking for tests
+- Environment config with defaults
 
-# Install pre-commit hooks (one-time setup)
-pre-commit install
-```
+## Environment
 
-**Individual Tools (if needed):**
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `F2B_LOG_DIR` | Log directory | `/var/log` |
+| `F2B_FILTER_DIR` | Filter directory | `/etc/fail2ban/filter.d` |
+| `F2B_LOG_LEVEL` | Log level | `info` |
+| `F2B_LOG_FILE` | Log file path | - |
+| `F2B_TEST_SUDO` | Enable test sudo | `false` |
 
-```bash
-# Format code
-gofmt -w .
-
-# Run go vet
-go vet ./...
-
-# Run golangci-lint (if available)
-golangci-lint run --timeout=5m
-
-# Check editorconfig compliance
-editorconfig-checker
-
-# Check markdown files
-markdownlint-cli2 "*.md"
-
-# Run yamlfmt (YAML formatter/linter)
-yamlfmt -lint .
-
-# Run checkmake (Makefile linter)
-checkmake Makefile
-```
-
-### Testing with Mock Environment
-
-```bash
-# Set test environment variable for sudo checking
-F2B_TEST_SUDO=true go test ./...
-```
-
-## Code Architecture
-
-### Core Components
-
-1. **Main Entry Point** (`main.go`): Initializes the fail2ban client and handles privilege checks before
-  delegating to cmd package.
-
-2. **Command Layer** (`cmd/`):
-
-  - Uses Cobra for CLI structure
-  - Handles argument parsing and validation
-  - Manages configuration from environment variables and flags
-  - Provides JSON and plain text output formats
-
-3. **Fail2Ban Client** (`fail2ban/`):
-
-  - **Client Interface**: Defines operations for jail/ban management
-  - **RealClient**: Production implementation using fail2ban-client
-  - **MockClient/NoOpClient**: Testing implementations
-  - **Runner Interface**: Abstracts command execution (with/without sudo)
-  - **SudoChecker**: Handles privilege detection and validation
-
-### Key Design Patterns
-
-- **Dependency Injection**: All components use interfaces to enable testing
-- **Security-First**: Input validation, privilege checking, and secure command execution
-- **Testability**: Extensive mocking infrastructure for sudo operations
-- **Configuration**: Environment variable support with sensible defaults
-
-### Security Architecture
-
-- **Privilege Management**: Automatic sudo detection and escalation only when needed
-- **Input Validation**: All IP addresses, jail names, and filter names are validated
-- **Secure Execution**: Uses argument arrays, never shell string concatenation
-- **Test Isolation**: Mock implementations prevent actual sudo execution in tests
-
-## Environment Variables
-
-- `F2B_LOG_DIR`: Fail2Ban log directory (default: `/var/log`)
-- `F2B_FILTER_DIR`: Fail2Ban filter directory (default: `/etc/fail2ban/filter.d`)
-- `F2B_LOG_LEVEL`: Application log level (debug, info, warn, error)
-- `F2B_LOG_FILE`: Path to application log file
-- `F2B_TEST_SUDO`: Enable sudo checking in tests (set to "true")
-
-## Testing Guidelines
-
-### Sudo and Privilege Testing
-
-When writing tests that involve sudo operations:
+## Testing
 
 ```go
-// Save original checker and set up mock
+// Mock Setup Pattern
 originalChecker := fail2ban.GetSudoChecker()
 defer fail2ban.SetSudoChecker(originalChecker)
-
-// Mock with specific privileges
-mockChecker := fail2ban.NewMockSudoCheckerWithPrivileges(true)
-fail2ban.SetSudoChecker(mockChecker)
-
-// Enable sudo checking in test environment
+fail2ban.SetSudoChecker(fail2ban.NewMockSudoCheckerWithPrivileges(true))
 os.Setenv("F2B_TEST_SUDO", "true")
 defer os.Unsetenv("F2B_TEST_SUDO")
-```
 
-### Command Runner Mocking
-
-```go
-// Set up mock runner
+// Mock Runner
 mockRunner := fail2ban.NewMockRunner()
 originalRunner := fail2ban.GetRunner()
 defer fail2ban.SetRunner(originalRunner)
 fail2ban.SetRunner(mockRunner)
-
-// Configure expected responses
 mockRunner.SetResponse("fail2ban-client status", []byte("Jail list: sshd"))
 ```
 
-## File Structure Conventions
+## Security
 
-- `cmd/`: CLI commands and configuration
-- `fail2ban/`: Core fail2ban client implementation
-- `main.go`: Application entry point
-- Tests are co-located with source files (`*_test.go`)
-- Integration tests use `integration_test.go` naming
+See AGENTS.md for full guidelines. Key points:
 
-## Important Security Notes
+- Never execute real sudo in tests
+- Validate inputs before privilege escalation
+- Use argument arrays, not shell strings
+- Test privileged and unprivileged paths
 
-**See [AGENTS.md](AGENTS.md) for comprehensive security rules and guidelines.**
+## Output & Shortcuts
 
-Key reminders:
-
-- NEVER execute real sudo commands in tests - always use MockRunner
-- Validate all input before privilege escalation
-- Use secure command execution (argument arrays, not shell strings)
-- Test both privileged and unprivileged scenarios
-
-## Output Formats
-
-The CLI supports two output formats:
-
-- `--format=plain`: Human-readable output (default)
-- `--format=json`: Machine-readable JSON for scripting
-
-## Common Pitfalls
-
-**See [AGENTS.md](AGENTS.md) for complete list of common pitfalls and how to avoid them.**
-
-## Command Shorthands
-
-- When I only say "lint", it means "Lint all files and fix all linting errors, make sure no errors are left unfixed."
+- `--format=plain|json`: Output formats
+- "lint" = "Lint all files and fix all errors"

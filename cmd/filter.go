@@ -10,27 +10,27 @@ import (
 
 // TestFilterCmd returns the test-filter command with injected client and config
 func TestFilterCmd(client fail2ban.Client, config *Config) *cobra.Command {
-	return &cobra.Command{
-		Use:   "test-filter <filter>",
-		Short: "Test a Fail2Ban filter",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) < 1 {
-				filters, err := client.ListFilters()
-				if err != nil {
-					PrintError(err)
-					return err
-				}
-				PrintOutputTo(GetCmdOutput(cmd), "Available filters: "+strings.Join(filters, ", "), config.Format)
-				PrintError(fmt.Errorf("filter name required"))
-				return fmt.Errorf("filter name required")
-			}
-			out, err := client.TestFilter(strings.ToLower(args[0]))
+	return NewCommand("test-filter <filter>", "Test a Fail2Ban filter", nil, func(cmd *cobra.Command, args []string) error {
+		if len(args) < 1 {
+			filters, err := client.ListFilters()
 			if err != nil {
-				PrintError(err)
-				return err
+				return HandleClientError(err)
 			}
-			PrintOutputTo(GetCmdOutput(cmd), out, config.Format)
-			return nil
-		},
-	}
+			PrintOutputTo(GetCmdOutput(cmd), "Available filters: "+strings.Join(filters, ", "), config.Format)
+			return PrintErrorAndReturn(fmt.Errorf("filter name required"))
+		}
+
+		filterName := strings.ToLower(args[0])
+		if err := RequireNonEmptyArgument(filterName, "filter name"); err != nil {
+			return PrintErrorAndReturn(err)
+		}
+
+		out, err := client.TestFilter(filterName)
+		if err != nil {
+			return HandleClientError(err)
+		}
+
+		PrintOutputTo(GetCmdOutput(cmd), out, config.Format)
+		return nil
+	})
 }

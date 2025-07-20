@@ -1,52 +1,59 @@
 ---
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
-name: Release
+name: Release with GoReleaser
 
 on:
   push:
     tags:
       - "v*.*.*"
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        os: [linux, windows, darwin]
-        arch: [amd64, arm64]
+permissions:
+  contents: write
+  packages: write
+  attestations: write
+  id-token: write
 
+jobs:
+  release:
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0 # Required for changelog generation
+
       - name: Set up Go
         uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
         with:
           go-version-file: go.mod
-      - name: Build
-        run: |
-          # Build static binary for cross-platform compatibility
-          # CGO_ENABLED=0 ensures static linking for better portability
-          # Version is injected via ldflags using the git tag name
-          CGO_ENABLED=0 GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} \
-            go build -ldflags "-X github.com/ivuorinen/f2b/cmd.version=${{ github.ref_name }}" \
-            -o f2b_${{ matrix.os }}_${{ matrix.arch }} .
-      - name: Upload artifact
+          cache: true
+
+      - name: Install GoReleaser
+        uses: goreleaser/goreleaser-action@9ed2f89a662bf1735a48bc8557fd212fa902bebf # v6.1.0
+        with:
+          install-only: true
+          version: "~> v2"
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@9ed2f89a662bf1735a48bc8557fd212fa902bebf # v6.1.0
+        with:
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Optional: Token for homebrew tap if you have a separate repo
+          # HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+
+      - name: Upload Release Assets
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: f2b_${{ matrix.os }}_${{ matrix.arch }}
-          path: f2b_${{ matrix.os }}_${{ matrix.arch }}
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          path: ./artifacts
-      - name: Create Release
-        uses: softprops/action-gh-release@72f2c25fcb47643c292f7107632f7a47c1df5cd8 # v2.3.2
-        with:
-          # Upload all built binaries from all matrix combinations
-          files: ./artifacts/*/f2b_*
-          # Auto-generate release notes from commits since last release
-          generate_release_notes: true
+          name: release-artifacts
+          path: dist/
+          retention-days: 7

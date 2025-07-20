@@ -19,15 +19,49 @@ Built with Go, featuring automatic sudo privilege management, shell completion, 
 
 ### Installation
 
+#### Download Pre-built Binary
+
+Download the latest release for your platform from the [releases page](https://github.com/ivuorinen/f2b/releases).
+
+```bash
+# Linux (amd64)
+wget https://github.com/ivuorinen/f2b/releases/latest/download/f2b_Linux_x86_64.tar.gz
+tar -xzf f2b_Linux_x86_64.tar.gz
+sudo mv f2b /usr/local/bin/
+
+# macOS (Apple Silicon)
+wget https://github.com/ivuorinen/f2b/releases/latest/download/f2b_Darwin_arm64.tar.gz
+tar -xzf f2b_Darwin_arm64.tar.gz
+sudo mv f2b /usr/local/bin/
+```
+
+#### Using Homebrew (macOS/Linux)
+
+```bash
+brew tap ivuorinen/tap
+brew install f2b
+```
+
+#### Using Go
+
+```bash
+# Install latest version
+go install github.com/ivuorinen/f2b@latest
+
+# Install specific version
+go install github.com/ivuorinen/f2b@v1.2.3
+```
+
+#### Build from Source
+
 ```bash
 # Clone and build
 git clone https://github.com/ivuorinen/f2b.git
 cd f2b
-# set version information via ldflags if desired
-go build -ldflags "-X github.com/ivuorinen/f2b/cmd.version=1.2.3" -o f2b .
+make build
 
-# Or install globally
-go install github.com/ivuorinen/f2b@latest
+# Or with custom version
+go build -ldflags "-X github.com/ivuorinen/f2b/cmd.version=1.2.3" -o f2b .
 ```
 
 ---
@@ -333,6 +367,53 @@ f2b logs-watch all --limit 20 | while read line; do
     echo "$(date): $line" >> /var/log/f2b-monitor.log
 done
 ```
+
+---
+
+## 🚀 Releases
+
+### Creating a New Release
+
+Releases are automated using [GoReleaser](https://goreleaser.com/). To create a new release:
+
+1. **Tag the release:**
+
+  ```bash
+  git tag -a v1.2.3 -m "Release v1.2.3"
+  git push origin v1.2.3
+  ```
+
+2. **GitHub Actions will automatically:**
+
+  - Build binaries for multiple platforms (Linux, macOS, Windows, BSD)
+  - Create a GitHub release with changelog
+  - Upload release artifacts
+  - Build and push Docker images
+  - Update Homebrew tap (if configured)
+  - Generate .deb, .rpm, and .apk packages
+
+### Manual Release (Development)
+
+```bash
+# Check GoReleaser configuration
+make release-check
+
+# Create a snapshot release (no tag required)
+make release-snapshot
+
+# Create a full release (requires git tag)
+make release
+```
+
+### Release Artifacts
+
+Each release includes:
+
+- Pre-built binaries for multiple platforms and architectures
+- SHA256 checksums file
+- Source code archives
+- Docker images at `ghcr.io/ivuorinen/f2b`
+- Linux packages (.deb, .rpm, .apk)
 
 ---
 

@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 )
 
@@ -10,26 +8,20 @@ import (
 func TestIPCmd(client interface {
 	BannedIn(string) ([]string, error)
 }, format string) *cobra.Command {
-	return &cobra.Command{
-		Use:   "test <ip>",
-		Short: "Test if an IP is banned",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) < 1 {
-				PrintError(fmt.Errorf("IP address required"))
-				return fmt.Errorf("IP address required")
-			}
-			ip := args[0]
-			jails, err := client.BannedIn(ip)
-			if err != nil {
-				PrintError(err)
-				return err
-			}
-			if len(jails) == 0 {
-				PrintOutputTo(GetCmdOutput(cmd), fmt.Sprintf("IP %s is not banned", ip), format)
-			} else {
-				PrintOutputTo(GetCmdOutput(cmd), fmt.Sprintf("IP %s is banned in: %v", ip, jails), format)
-			}
-			return nil
-		},
-	}
+	return NewCommand("test <ip>", "Test if an IP is banned", nil, func(cmd *cobra.Command, args []string) error {
+		// Validate IP argument
+		ip, err := ValidateIPArgument(args)
+		if err != nil {
+			return PrintErrorAndReturn(err)
+		}
+
+		jails, err := client.BannedIn(ip)
+		if err != nil {
+			return HandleClientError(err)
+		}
+
+		result := FormatBannedResult(ip, jails)
+		PrintOutputTo(GetCmdOutput(cmd), result, format)
+		return nil
+	})
 }
