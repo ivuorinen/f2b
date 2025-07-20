@@ -27,8 +27,13 @@ func UnbanCmd(client fail2ban.Client, config *Config) *cobra.Command {
 				return HandleClientError(err)
 			}
 
-			// Process unban operation
-			results, err := ProcessUnbanOperation(client, ip, jails)
+			// Process unban operation (use parallel processing for multiple jails)
+			var results []OperationResult
+			if len(jails) > 1 {
+				results, err = ProcessUnbanOperationParallel(client, ip, jails)
+			} else {
+				results, err = ProcessUnbanOperation(client, ip, jails)
+			}
 			if err != nil {
 				return HandleClientError(err)
 			}

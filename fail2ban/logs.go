@@ -2,8 +2,6 @@ package fail2ban
 
 import (
 	"bufio"
-	"compress/gzip"
-	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -462,60 +460,8 @@ func shouldSkipFile(path string, maxFileSize int64) bool {
 // createLogScanner creates a scanner for the log file, handling gzip compression
 func createLogScanner(path string) (*bufio.Scanner, func(), error) {
 	// #nosec G304 - Path is validated and sanitized above
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	cleanup := func() {
-		if cerr := f.Close(); cerr != nil {
-			logrus.WithError(cerr).Error("failed to close log file")
-		}
-	}
-
-	// Check if file is gzip compressed
-	var magic [2]byte
-	n, err := f.Read(magic[:])
-	if err != nil && !errors.Is(err, io.EOF) {
-		cleanup()
-		return nil, nil, err
-	}
-
-	// Seek back to beginning
-	_, err = f.Seek(0, io.SeekStart)
-	if err != nil {
-		cleanup()
-		return nil, nil, err
-	}
-
-	var scanner *bufio.Scanner
-
-	// Check if we have gzip magic bytes (0x1f, 0x8b)
-	if n >= 2 && magic[0] == 0x1f && magic[1] == 0x8b {
-		gz, err := gzip.NewReader(f)
-		if err != nil {
-			cleanup()
-			return nil, nil, err
-		}
-
-		gzCleanup := cleanup
-		cleanup = func() {
-			if cerr := gz.Close(); cerr != nil {
-				logrus.WithError(cerr).Error("failed to close gzip reader")
-			}
-			gzCleanup()
-		}
-		scanner = bufio.NewScanner(gz)
-	} else {
-		scanner = bufio.NewScanner(f)
-	}
-
-	// Set buffer size limit to prevent memory exhaustion
 	const maxLineSize = 64 * 1024 // 64KB per line
-	buf := make([]byte, 0, maxLineSize)
-	scanner.Buffer(buf, maxLineSize)
-
-	return scanner, cleanup, nil
+	return CreateGzipAwareScannerWithBuffer(path, maxLineSize)
 }
 
 // scanLogLines scans lines from the scanner with filtering and limits
@@ -580,45 +526,18 @@ func readLogFile(path string) ([]byte, error) {
 		return nil, fmt.Errorf("invalid log file path: contains path traversal")
 	}
 
-	// #nosec G304 - Path is validated and sanitized above
-	f, err := os.Open(cleanPath)
+	// Use consolidated gzip detection utility
+	reader, err := OpenGzipAwareReader(cleanPath)
 	if err != nil {
 		return nil, err
 	}
 	defer func() {
-		if cerr := f.Close(); cerr != nil {
+		if cerr := reader.Close(); cerr != nil {
 			logrus.WithError(cerr).Error("failed to close log file")
 		}
 	}()
 
-	// Check if file is gzip compressed by reading magic bytes
-	var magic [2]byte
-	n, err := f.Read(magic[:])
-	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, err
-	}
-
-	// Seek back to beginning
-	_, err = f.Seek(0, io.SeekStart)
-	if err != nil {
-		return nil, err
-	}
-
-	// Check if we have gzip magic bytes (0x1f, 0x8b)
-	if n >= 2 && magic[0] == 0x1f && magic[1] == 0x8b {
-		gz, err := gzip.NewReader(f)
-		if err != nil {
-			return nil, err
-		}
-		defer func() {
-			if cerr := gz.Close(); cerr != nil {
-				logrus.WithError(cerr).Error("failed to close gzip reader")
-			}
-		}()
-		return io.ReadAll(gz)
-	}
-
-	return io.ReadAll(f)
+	return io.ReadAll(reader)
 }
 
 // applyFilters applies jail and IP filters to log lines.

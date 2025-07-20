@@ -25,8 +25,13 @@ func BanCmd(client fail2ban.Client, config *Config) *cobra.Command {
 				return HandleClientError(err)
 			}
 
-			// Process ban operation
-			results, err := ProcessBanOperation(client, ip, jails)
+			// Process ban operation (use parallel processing for multiple jails)
+			var results []OperationResult
+			if len(jails) > 1 {
+				results, err = ProcessBanOperationParallel(client, ip, jails)
+			} else {
+				results, err = ProcessBanOperation(client, ip, jails)
+			}
 			if err != nil {
 				return HandleClientError(err)
 			}

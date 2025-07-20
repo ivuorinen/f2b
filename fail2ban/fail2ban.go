@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/sirupsen/logrus"
 )
@@ -393,7 +392,11 @@ func (c *RealClient) BannedIn(ip string) ([]string, error) {
 
 // GetBanRecords retrieves ban records for the specified jails.
 func (c *RealClient) GetBanRecords(jails []string) ([]BanRecord, error) {
-	var recs []BanRecord
+	return c.GetBanRecordsWithContext(context.Background(), jails)
+}
+
+// getBanRecordsInternal is the internal implementation with context support
+func (c *RealClient) getBanRecordsInternal(ctx context.Context, jails []string) ([]BanRecord, error) {
 	var toQuery []string
 	if len(jails) == 1 && (jails[0] == AllFilter || jails[0] == "") {
 		toQuery = c.Jails
@@ -405,61 +408,28 @@ func (c *RealClient) GetBanRecords(jails []string) ([]BanRecord, error) {
 	currentRunner := globalRunnerManager.runner
 	globalRunnerManager.mu.RUnlock()
 
-	for _, j := range toQuery {
-		out, err := currentRunner.CombinedOutputWithSudo(c.Path, "get", j, "banip", "--with-time")
+	// Use parallel processing for multiple jails
+	allRecords, err := ProcessJailsParallel(ctx, toQuery, func(_ context.Context, jail string) ([]BanRecord, error) {
+		out, err := currentRunner.CombinedOutputWithSudo(c.Path, "get", jail, "banip", "--with-time")
 		if err != nil {
-			continue
+			return []BanRecord{}, nil // Return empty slice instead of error (original behavior)
 		}
-		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-			line = strings.TrimSpace(line)
-			if line == "" {
-				continue
-			}
-			fields := strings.Fields(line)
-			if len(fields) < 4 {
-				continue
-			}
-			ip := fields[0]
-			if len(fields) >= 8 {
-				// Format: IP BANNED_DATE BANNED_TIME + UNBAN_DATE UNBAN_TIME
-				bannedStr := fields[1] + " " + fields[2]
-				unbanStr := fields[4] + " " + fields[5]
 
-				tBan, err := time.Parse("2006-01-02 15:04:05", bannedStr)
-				if err != nil {
-					logrus.WithFields(logrus.Fields{
-						"jail":      j,
-						"ip":        ip,
-						"bannedStr": bannedStr,
-					}).Warnf("Failed to parse ban time: %v", err)
-					// Skip this entry if we can't parse the ban time
-					continue
-				}
-
-				tUnban, err := time.Parse("2006-01-02 15:04:05", unbanStr)
-				if err != nil {
-					logrus.WithFields(logrus.Fields{
-						"jail":     j,
-						"ip":       ip,
-						"unbanStr": unbanStr,
-					}).Warnf("Failed to parse unban time: %v", err)
-					// Use current time as fallback for unban time calculation
-					tUnban = time.Now().Add(24 * time.Hour) // Assume 24h remaining
-				}
-
-				rem := tUnban.Unix() - time.Now().Unix()
-				if rem < 0 {
-					rem = 0
-				}
-				recs = append(recs, BanRecord{Jail: j, IP: ip, BannedAt: tBan, Remaining: FormatDuration(rem)})
-			} else {
-				// Fallback for simpler format
-				recs = append(recs, BanRecord{Jail: j, IP: ip, BannedAt: time.Now(), Remaining: "unknown"})
-			}
+		// Use optimized parser for this jail's records
+		jailRecords, parseErr := ParseBanRecordsOptimized(string(out), jail)
+		if parseErr != nil {
+			return []BanRecord{}, nil // Return empty slice on parse error
 		}
+
+		return jailRecords, nil
+	})
+
+	if err != nil {
+		return nil, err
 	}
-	sort.Slice(recs, func(i, j int) bool { return recs[i].BannedAt.Before(recs[j].BannedAt) })
-	return recs, nil
+
+	sort.Slice(allRecords, func(i, j int) bool { return allRecords[i].BannedAt.Before(allRecords[j].BannedAt) })
+	return allRecords, nil
 }
 
 // GetLogLines retrieves log lines related to an IP address from the specified jail.
@@ -757,10 +727,8 @@ func (c *RealClient) BannedInWithContext(ctx context.Context, ip string) ([]stri
 }
 
 // GetBanRecordsWithContext retrieves ban records for the specified jails with context support.
-func (c *RealClient) GetBanRecordsWithContext(_ context.Context, jails []string) ([]BanRecord, error) {
-	// For now, delegate to the non-context version since GetBanRecords is complex
-	// In a full implementation, this would use context for all internal operations
-	return c.GetBanRecords(jails)
+func (c *RealClient) GetBanRecordsWithContext(ctx context.Context, jails []string) ([]BanRecord, error) {
+	return c.getBanRecordsInternal(ctx, jails)
 }
 
 // GetLogLinesWithContext retrieves log lines related to an IP address from the specified jail with context support.
