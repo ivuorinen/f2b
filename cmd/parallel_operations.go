@@ -102,7 +102,7 @@ func (pop *ParallelOperationProcessor) processOperations(
 
 	// Collect results
 	for result := range resultCh {
-		if result.index < len(results) {
+		if result.index >= 0 && result.index < len(results) {
 			results[result.index] = result.result
 		}
 	}

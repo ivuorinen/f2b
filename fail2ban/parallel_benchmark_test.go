@@ -2,7 +2,6 @@ package fail2ban
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 )
@@ -76,7 +75,9 @@ func BenchmarkBanOperationsParallel(b *testing.B) {
 
 	banFunc := func(_ context.Context, _ string) (error, error) {
 		time.Sleep(5 * time.Millisecond) // Simulate 5ms ban operation
-		return nil, errors.New("not implemented")
+		// Return success result (nil error means ban succeeded) and no processing error
+		var banResult error // nil indicates successful ban
+		return banResult, nil
 	}
 
 	b.ResetTimer()

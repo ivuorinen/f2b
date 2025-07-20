@@ -202,6 +202,39 @@ func ContainsPathTraversal(input string) bool {
 	return false
 }
 
+// ValidateCommand validates that a command is in the allowlist for security
+func ValidateCommand(command string) error {
+	// Allowlist of commands that f2b is permitted to execute
+	allowedCommands := map[string]bool{
+		"fail2ban-client": true,
+		"fail2ban-regex":  true,
+		"service":         true,
+		"systemctl":       true,
+		"sudo":            true, // Only when used internally
+	}
+
+	if command == "" {
+		return fmt.Errorf("command cannot be empty")
+	}
+
+	// Check for null bytes (command injection attempt)
+	if strings.ContainsRune(command, '\x00') {
+		return fmt.Errorf("command contains null byte")
+	}
+
+	// Check for path traversal in command name
+	if ContainsPathTraversal(command) {
+		return fmt.Errorf("command contains path traversal patterns")
+	}
+
+	// Validate against allowlist
+	if !allowedCommands[command] {
+		return fmt.Errorf("command not in allowlist: %s", command)
+	}
+
+	return nil
+}
+
 // Internal helper functions
 
 // isValidFilterChar checks if a character is allowed in filter names

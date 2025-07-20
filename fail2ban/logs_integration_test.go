@@ -150,7 +150,7 @@ func TestIntegrationConcurrentLogReading(t *testing.T) {
 			}
 
 			if len(lines) == 0 && jail == "sshd" {
-				errors <- err
+				errors <- fmt.Errorf("expected log lines for sshd jail but got empty result")
 			}
 		}(i)
 	}

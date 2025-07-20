@@ -136,22 +136,30 @@ func (gfr *gzipFileReader) Close() error {
 // Global detector instance for convenience
 var defaultGzipDetector = NewGzipDetector()
 
-// IsGzipFile checks if a file is gzip compressed using the default detector
+// IsGzipFile checks if a file is gzip compressed using the default detector.
+// SECURITY: The caller must validate and sanitize the path argument to prevent
+// path traversal attacks and ensure the file is within allowed directories.
 func IsGzipFile(path string) (bool, error) {
 	return defaultGzipDetector.IsGzipFile(path)
 }
 
-// OpenGzipAwareReader opens a file with automatic gzip detection using the default detector
+// OpenGzipAwareReader opens a file with automatic gzip detection using the default detector.
+// SECURITY: The caller must validate and sanitize the path argument to prevent
+// path traversal attacks and ensure the file is within allowed directories.
 func OpenGzipAwareReader(path string) (io.ReadCloser, error) {
 	return defaultGzipDetector.OpenGzipAwareReader(path)
 }
 
-// CreateGzipAwareScanner creates a scanner with automatic gzip detection using the default detector
+// CreateGzipAwareScanner creates a scanner with automatic gzip detection using the default detector.
+// SECURITY: The caller must validate and sanitize the path argument to prevent
+// path traversal attacks and ensure the file is within allowed directories.
 func CreateGzipAwareScanner(path string) (*bufio.Scanner, func(), error) {
 	return defaultGzipDetector.CreateGzipAwareScanner(path)
 }
 
-// CreateGzipAwareScannerWithBuffer creates a scanner with custom buffer size using the default detector
+// CreateGzipAwareScannerWithBuffer creates a scanner with custom buffer size using the default detector.
+// SECURITY: The caller must validate and sanitize the path argument to prevent
+// path traversal attacks and ensure the file is within allowed directories.
 func CreateGzipAwareScannerWithBuffer(path string, maxLineSize int) (*bufio.Scanner, func(), error) {
 	return defaultGzipDetector.CreateGzipAwareScannerWithBuffer(path, maxLineSize)
 }

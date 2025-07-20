@@ -59,16 +59,29 @@ type OSRunner struct{}
 
 // CombinedOutput executes a command without sudo.
 func (r *OSRunner) CombinedOutput(name string, args ...string) ([]byte, error) {
+	// Validate command for security
+	if err := ValidateCommand(name); err != nil {
+		return nil, fmt.Errorf("command validation failed: %w", err)
+	}
 	return exec.Command(name, args...).CombinedOutput()
 }
 
 // CombinedOutputWithContext executes a command without sudo with context support.
 func (r *OSRunner) CombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error) {
+	// Validate command for security
+	if err := ValidateCommand(name); err != nil {
+		return nil, fmt.Errorf("command validation failed: %w", err)
+	}
 	return exec.CommandContext(ctx, name, args...).CombinedOutput()
 }
 
 // CombinedOutputWithSudo executes a command with sudo if needed.
 func (r *OSRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte, error) {
+	// Validate command for security
+	if err := ValidateCommand(name); err != nil {
+		return nil, fmt.Errorf("command validation failed: %w", err)
+	}
+
 	checker := GetSudoChecker()
 
 	// If already root, no need for sudo
@@ -80,7 +93,7 @@ func (r *OSRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte, 
 	if RequiresSudo(name, args...) && checker.HasSudoPrivileges() {
 		sudoArgs := append([]string{name}, args...)
 		// #nosec G204 - This is a legitimate use case for executing fail2ban-client with sudo
-		// The command name and arguments are validated by RequiresSudo() and come from controlled sources
+		// The command name and arguments are validated by ValidateCommand() and RequiresSudo()
 		return exec.Command("sudo", sudoArgs...).CombinedOutput()
 	}
 
@@ -90,6 +103,11 @@ func (r *OSRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte, 
 
 // CombinedOutputWithSudoContext executes a command with sudo if needed, with context support.
 func (r *OSRunner) CombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error) {
+	// Validate command for security
+	if err := ValidateCommand(name); err != nil {
+		return nil, fmt.Errorf("command validation failed: %w", err)
+	}
+
 	checker := GetSudoChecker()
 
 	// If already root, no need for sudo
@@ -101,7 +119,7 @@ func (r *OSRunner) CombinedOutputWithSudoContext(ctx context.Context, name strin
 	if RequiresSudo(name, args...) && checker.HasSudoPrivileges() {
 		sudoArgs := append([]string{name}, args...)
 		// #nosec G204 - This is a legitimate use case for executing fail2ban-client with sudo
-		// The command name and arguments are validated by RequiresSudo() and come from controlled sources
+		// The command name and arguments are validated by ValidateCommand() and RequiresSudo()
 		return exec.CommandContext(ctx, "sudo", sudoArgs...).CombinedOutput()
 	}
 
@@ -713,17 +731,7 @@ func (c *RealClient) BannedInWithContext(ctx context.Context, ip string) ([]stri
 	if err != nil {
 		return nil, fmt.Errorf("failed to get banned status for IP %s: %w", ip, err)
 	}
-
-	lines := strings.Split(string(out), "\n")
-	jails := []string{}
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		jails = append(jails, line)
-	}
-	return jails, nil
+	return ParseBracketedList(string(out)), nil
 }
 
 // GetBanRecordsWithContext retrieves ban records for the specified jails with context support.
