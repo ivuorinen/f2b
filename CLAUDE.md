@@ -27,16 +27,20 @@ make release               # Full release
 
 ## Architecture
 
+**Core Structure:**
+
 - **main.go**: Entry point, sudo checks
 - **cmd/**: Cobra CLI commands
 - **fail2ban/**: Core client logic (Client interface, MockClient/NoOpClient, Runner, SudoChecker)
 
-## Key Patterns
+**Design Patterns:**
 
 - Dependency injection via interfaces
 - Security-first: validate before escalate
 - Extensive mocking for tests
 - Environment config with defaults
+
+For detailed architecture documentation, see [docs/architecture.md](docs/architecture.md).
 
 ## Environment
 
@@ -50,30 +54,34 @@ make release               # Full release
 
 ## Testing
 
+Quick mock setup pattern:
+
 ```go
-// Mock Setup Pattern
-originalChecker := fail2ban.GetSudoChecker()
-defer fail2ban.SetSudoChecker(originalChecker)
-fail2ban.SetSudoChecker(fail2ban.NewMockSudoCheckerWithPrivileges(true))
+// Enable test mode and set up mocks
 os.Setenv("F2B_TEST_SUDO", "true")
 defer os.Unsetenv("F2B_TEST_SUDO")
 
-// Mock Runner
+// Mock privilege checker
+mockChecker := fail2ban.NewMockSudoCheckerWithPrivileges(true)
+fail2ban.SetSudoChecker(mockChecker)
+
+// Mock command runner
 mockRunner := fail2ban.NewMockRunner()
-originalRunner := fail2ban.GetRunner()
-defer fail2ban.SetRunner(originalRunner)
 fail2ban.SetRunner(mockRunner)
 mockRunner.SetResponse("fail2ban-client status", []byte("Jail list: sshd"))
 ```
 
+For comprehensive testing patterns, see [docs/testing.md](docs/testing.md).
+
 ## Security
 
-See AGENTS.md for full guidelines. Key points:
+Key security principles:
 
 - Never execute real sudo in tests
 - Validate inputs before privilege escalation
 - Use argument arrays, not shell strings
-- Test privileged and unprivileged paths
+
+For detailed security guidelines, see [docs/security.md](docs/security.md) and [AGENTS.md](AGENTS.md).
 
 ## Output & Shortcuts
 

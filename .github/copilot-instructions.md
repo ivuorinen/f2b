@@ -16,6 +16,12 @@ working on this project.
 
 ## Project Context
 
-f2b is a security-focused Go CLI for managing Fail2Ban. All code suggestions must prioritize security, testability, and maintainability.
+f2b is a security-focused Go CLI for managing Fail2Ban. All code suggestions must prioritize security, testability,
+and maintainability.
 
-For complete guidelines, see [AGENTS.md](../AGENTS.md).
+## Documentation References
+
+- [AGENTS.md](../AGENTS.md) - Complete AI/LLM contributor guidelines
+- [docs/security.md](../docs/security.md) - Security practices and threat model
+- [docs/testing.md](../docs/testing.md) - Testing strategies and mock patterns
+- [docs/architecture.md](../docs/architecture.md) - System architecture and design

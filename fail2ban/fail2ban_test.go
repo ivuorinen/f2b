@@ -38,14 +38,7 @@ func TestNewClient(t *testing.T) {
 			defer SetSudoChecker(originalChecker)
 
 			// Set environment variable to force sudo checking in tests
-			if err := os.Setenv("F2B_TEST_SUDO", "true"); err != nil {
-				t.Fatalf("failed to set F2B_TEST_SUDO: %v", err)
-			}
-			defer func() {
-				if err := os.Unsetenv("F2B_TEST_SUDO"); err != nil {
-					t.Fatalf("failed to unset F2B_TEST_SUDO: %v", err)
-				}
-			}()
+			t.Setenv("F2B_TEST_SUDO", "true")
 
 			// Set mock checker
 			mock := NewMockSudoCheckerWithPrivileges(tt.hasPrivileges)
@@ -58,8 +51,14 @@ func TestNewClient(t *testing.T) {
 				mockRunner.SetResponse("sudo fail2ban-client -V", []byte("0.11.2"))
 				mockRunner.SetResponse("fail2ban-client ping", []byte("pong"))
 				mockRunner.SetResponse("sudo fail2ban-client ping", []byte("pong"))
-				mockRunner.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-				mockRunner.SetResponse("sudo fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
+				mockRunner.SetResponse(
+					"fail2ban-client status",
+					[]byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"),
+				)
+				mockRunner.SetResponse(
+					"sudo fail2ban-client status",
+					[]byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"),
+				)
 			} else {
 				// For unprivileged tests, set up basic responses for non-sudo commands
 				mockRunner.SetResponse("fail2ban-client -V", []byte("0.11.2"))
@@ -237,7 +236,8 @@ func TestStatusJail(t *testing.T) {
 	mock.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
 	mock.SetResponse("sudo fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
 
-	expectedOutput := "Status for the jail: sshd\n|- Filter\n|- Currently failed: 0\n|- Total failed: 5\n|- Currently banned: 1\n|- Total banned: 1"
+	expectedOutput := "Status for the jail: sshd\n|- Filter\n" +
+		"|- Currently failed: 0\n|- Total failed: 5\n|- Currently banned: 1\n|- Total banned: 1"
 	mock.SetResponse("fail2ban-client status sshd", []byte(expectedOutput))
 	mock.SetResponse("sudo fail2ban-client status sshd", []byte(expectedOutput))
 
@@ -315,7 +315,10 @@ func TestBanIP(t *testing.T) {
 			mock.SetResponse("sudo fail2ban-client banned 192.168.1.100", []byte("0"))
 
 			if tt.expectError {
-				mock.SetError(fmt.Sprintf("sudo fail2ban-client set %s banip %s", tt.jail, tt.ip), fmt.Errorf("command failed"))
+				mock.SetError(
+					fmt.Sprintf("sudo fail2ban-client set %s banip %s", tt.jail, tt.ip),
+					fmt.Errorf("command failed"),
+				)
 			} else {
 				mock.SetResponse(fmt.Sprintf("sudo fail2ban-client set %s banip %s", tt.jail, tt.ip), []byte(tt.mockResponse))
 			}
@@ -394,7 +397,10 @@ func TestUnbanIP(t *testing.T) {
 			mock.SetResponse("sudo fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
 			mock.SetResponse("fail2ban-client banned 192.168.1.100", []byte("0"))
 			mock.SetResponse("sudo fail2ban-client banned 192.168.1.100", []byte("0"))
-			mock.SetResponse(fmt.Sprintf("sudo fail2ban-client set %s unbanip %s", tt.jail, tt.ip), []byte(tt.mockResponse))
+			mock.SetResponse(
+				fmt.Sprintf("sudo fail2ban-client set %s unbanip %s", tt.jail, tt.ip),
+				[]byte(tt.mockResponse),
+			)
 
 			SetRunner(mock)
 
@@ -578,7 +584,7 @@ func TestGetLogLines(t *testing.T) {
 2024-01-01 12:01:00,456 fail2ban.actions [1234]: NOTICE [sshd] Ban 192.168.1.100
 2024-01-01 12:02:00,789 fail2ban.filter [1234]: INFO [apache] Found 192.168.1.101 - 2024-01-01 12:02:00`
 
-	err := os.WriteFile(filepath.Join(tempDir, "fail2ban.log"), []byte(logContent), 0644)
+	err := os.WriteFile(filepath.Join(tempDir, "fail2ban.log"), []byte(logContent), 0600)
 	if err != nil {
 		t.Fatalf("failed to create test log file: %v", err)
 	}
@@ -639,7 +645,7 @@ func TestListFilters(t *testing.T) {
 	// Create a temporary test filter directory
 	tempDir := t.TempDir()
 	filterDir := filepath.Join(tempDir, "filter.d")
-	err := os.MkdirAll(filterDir, 0755)
+	err := os.MkdirAll(filterDir, 0750)
 	if err != nil {
 		t.Fatalf("failed to create filter directory: %v", err)
 	}
@@ -647,7 +653,7 @@ func TestListFilters(t *testing.T) {
 	// Create test filter files
 	filterFiles := []string{"sshd.conf", "apache.conf", "nginx.conf", "readme.txt"}
 	for _, file := range filterFiles {
-		err := os.WriteFile(filepath.Join(filterDir, file), []byte("# test filter"), 0644)
+		err := os.WriteFile(filepath.Join(filterDir, file), []byte("# test filter"), 0600)
 		if err != nil {
 			t.Fatalf("failed to create test filter file: %v", err)
 		}
@@ -684,7 +690,7 @@ func TestTestFilter(t *testing.T) {
 failregex = Failed password for .* from <HOST>
 logpath = /var/log/auth.log`
 
-	err := os.WriteFile(filterPath, []byte(filterContent), 0644)
+	err := os.WriteFile(filterPath, []byte(filterContent), 0600)
 	if err != nil {
 		t.Fatalf("failed to create test filter file: %v", err)
 	}
@@ -766,7 +772,10 @@ func TestVersionComparison(t *testing.T) {
 				mock.SetResponse("fail2ban-client ping", []byte("pong"))
 				mock.SetResponse("sudo fail2ban-client ping", []byte("pong"))
 				mock.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-				mock.SetResponse("sudo fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
+				mock.SetResponse(
+					"sudo fail2ban-client status",
+					[]byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"),
+				)
 			}
 			SetRunner(mock)
 
@@ -793,7 +802,7 @@ func TestGetLogLinesGlobal(t *testing.T) {
 2024-01-01 12:01:00,456 fail2ban.actions [1234]: NOTICE [sshd] Ban 192.168.1.100
 2024-01-01 12:02:00,789 fail2ban.filter [1234]: INFO [apache] Found 192.168.1.101 - 2024-01-01 12:02:00`
 
-	err := os.WriteFile(filepath.Join(tempDir, "fail2ban.log"), []byte(logContent), 0644)
+	err := os.WriteFile(filepath.Join(tempDir, "fail2ban.log"), []byte(logContent), 0600)
 	if err != nil {
 		t.Fatalf("failed to create test log file: %v", err)
 	}
@@ -844,7 +853,7 @@ func TestTestFilterGlobal(t *testing.T) {
 	}
 }
 
-func TestSetFilterDir(t *testing.T) {
+func TestSetFilterDir(_ *testing.T) {
 	originalDir := "/etc/fail2ban/filter.d" // Assume this is the default
 	testDir := "/custom/filter/dir"
 
@@ -886,7 +895,7 @@ func TestListFiltersWithCustomDir(t *testing.T) {
 		content := `[Definition]
 failregex = test regex
 `
-		err := os.WriteFile(tempDir+"/"+file, []byte(content), 0644)
+		err := os.WriteFile(tempDir+"/"+file, []byte(content), 0600)
 		if err != nil {
 			t.Fatalf("failed to create test filter file: %v", err)
 		}
@@ -961,7 +970,7 @@ failregex = Failed password for .* from <HOST>
 logpath = /var/log/auth.log
 `
 	filterPath := tempDir + "/test-filter.conf"
-	err := os.WriteFile(filterPath, []byte(filterContent), 0644)
+	err := os.WriteFile(filterPath, []byte(filterContent), 0600)
 	if err != nil {
 		t.Fatalf("failed to create test filter file: %v", err)
 	}

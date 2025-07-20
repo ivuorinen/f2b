@@ -18,7 +18,7 @@ func TestRealSudoChecker_IsRoot(t *testing.T) {
 	}
 }
 
-func TestRealSudoChecker_InSudoGroup(t *testing.T) {
+func TestRealSudoChecker_InSudoGroup(_ *testing.T) {
 	checker := &RealSudoChecker{}
 
 	// We can't easily test this without modifying groups, but we can verify it doesn't panic
@@ -28,7 +28,7 @@ func TestRealSudoChecker_InSudoGroup(t *testing.T) {
 	_ = inSudoGroup // Just ensure it doesn't panic
 }
 
-func TestRealSudoChecker_CanUseSudo(t *testing.T) {
+func TestRealSudoChecker_CanUseSudo(_ *testing.T) {
 	checker := &RealSudoChecker{}
 
 	// We can't easily test this without sudo configuration, but we can verify it doesn't panic
@@ -352,7 +352,16 @@ func TestGetCurrentUserInfo(t *testing.T) {
 	info := GetCurrentUserInfo()
 
 	// Check that basic fields exist
-	requiredFields := []string{"uid", "gid", "euid", "egid", "is_root", "in_sudo_group", "can_use_sudo", "has_sudo_privileges"}
+	requiredFields := []string{
+		"uid",
+		"gid",
+		"euid",
+		"egid",
+		"is_root",
+		"in_sudo_group",
+		"can_use_sudo",
+		"has_sudo_privileges",
+	}
 	for _, field := range requiredFields {
 		if _, exists := info[field]; !exists {
 			t.Errorf("expected field %s to exist in user info", field)

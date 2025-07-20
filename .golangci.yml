@@ -12,36 +12,42 @@ run:
 linters:
   enable:
     # Essential linters
-    - errcheck
-    - govet
-    - ineffassign
-    - staticcheck
-    - unused
+    - errcheck # Error checking
+    - govet # Go vet
+    - ineffassign # Inefficient assignment checking
+    - staticcheck # Static code analysis
+    - unused # Unused variable checking
+    - lll # Line length checking
+    - gosec # Security checking
+    - usetesting # Unit testing
+    - revive # Code style checking
 
     # Code quality linters
-    - misspell
-    - unconvert
-    - gocyclo
-    - prealloc
-    - bodyclose
-    - rowserrcheck
-    - sqlclosecheck
-    - durationcheck
-    - errorlint
-    - predeclared
-    - wastedassign
-    - containedctx
-    - contextcheck
-    - errname
-    - nilnil
-    - thelper
-    - usestdlibvars
+    - misspell # Spell checking
+    - unconvert # Unconvert checking
+    - gocyclo # Cyclomatic complexity checking
+    - prealloc # Preallocation checking
+    - bodyclose # Body close checking
+    - rowserrcheck # Rows error checking
+    - sqlclosecheck # SQL close checking
+    - durationcheck # Duration checking
+    - errorlint # Error linting
+    - predeclared # Predeclared identifier checking
+    - wastedassign # Wasted assignment checking
+    - containedctx # Contained context checking
+    - contextcheck # Context checking
+    - errname # Error name checking
+    - nilnil # Nil nil checking
+    - thelper # Helper function checking
+    - usestdlibvars # Use standard library variables
+    - whitespace # Whitespace checking
+    - godox # TODO/FIXME/etc comments
 
   disable:
     # Disable overly strict linters for this project
     - varnamelen # Variable name length checking
     - tagliatelle # Struct tag format checking
-    - makezero
+    - makezero # Make zero checking
     - testpackage # Separate test package requirement
     - paralleltest # Parallel test requirement
     - forcetypeassert # Force type assertion
@@ -52,11 +58,8 @@ linters:
     - gocognit # Cognitive complexity checking
     - maintidx # Maintainability index
     - nestif # Nested if checking
-    - lll # Line length checking
-    - godox # TODO/FIXME/etc comments
     - wsl # Whitespace linter (too strict)
     - gocritic # Too many style opinions
-    - whitespace # Whitespace checking
     - nakedret # Naked returns
     - nolintlint # Nolint directive checking
     - noctx # Context checking
@@ -89,8 +92,27 @@ linters:
     errorlint:
       errorf: false # Allow %v instead of %w for some cases
 
+formatters:
+  enable:
+    - gofmt
+    - goimports
+    - golines
+
+  settings:
+    gofmt:
+      simplify: true
+    goimports:
+      local-prefixes:
+        - github.com/ivuorinen/f2b
+    golines:
+      max-len: 120
+      tab-len: 4
+      shorten-comments: false
+      reformat-tags: true
+      chain-split-dots: true
+
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
   new: false
-  fix: false
+  fix: true

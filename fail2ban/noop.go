@@ -25,32 +25,32 @@ func (c *NoOpClient) StatusAll() (string, error) {
 }
 
 // StatusJail returns an error indicating the client is not available
-func (c *NoOpClient) StatusJail(jail string) (string, error) {
+func (c *NoOpClient) StatusJail(_ string) (string, error) {
 	return "", ErrClientNotAvailableError
 }
 
 // BanIP returns an error indicating the client is not available
-func (c *NoOpClient) BanIP(ip, jail string) (int, error) {
+func (c *NoOpClient) BanIP(_, _ string) (int, error) {
 	return 0, ErrClientNotAvailableError
 }
 
 // UnbanIP returns an error indicating the client is not available
-func (c *NoOpClient) UnbanIP(ip, jail string) (int, error) {
+func (c *NoOpClient) UnbanIP(_, _ string) (int, error) {
 	return 0, ErrClientNotAvailableError
 }
 
 // BannedIn returns an empty list
-func (c *NoOpClient) BannedIn(ip string) ([]string, error) {
+func (c *NoOpClient) BannedIn(_ string) ([]string, error) {
 	return []string{}, nil
 }
 
 // GetBanRecords returns an empty list of ban records
-func (c *NoOpClient) GetBanRecords(jails []string) ([]BanRecord, error) {
+func (c *NoOpClient) GetBanRecords(_ []string) ([]BanRecord, error) {
 	return []BanRecord{}, nil
 }
 
 // GetLogLines returns an empty list of log lines
-func (c *NoOpClient) GetLogLines(jail, ip string) ([]string, error) {
+func (c *NoOpClient) GetLogLines(_, _ string) ([]string, error) {
 	return []string{}, nil
 }
 
@@ -60,7 +60,7 @@ func (c *NoOpClient) ListFilters() ([]string, error) {
 }
 
 // TestFilter returns an error indicating the client is not available
-func (c *NoOpClient) TestFilter(filter string) (string, error) {
+func (c *NoOpClient) TestFilter(_ string) (string, error) {
 	return "", ErrClientNotAvailableError
 }
 
@@ -68,42 +68,52 @@ func (c *NoOpClient) TestFilter(filter string) (string, error) {
 
 // Context-aware methods using helpers to reduce boilerplate
 
+// ListJailsWithContext returns an error indicating the client is not available.
 func (c *NoOpClient) ListJailsWithContext(ctx context.Context) ([]string, error) {
 	return wrapWithContext0(c.ListJails)(ctx)
 }
 
+// StatusAllWithContext returns an error indicating the client is not available.
 func (c *NoOpClient) StatusAllWithContext(ctx context.Context) (string, error) {
 	return wrapWithContext0(c.StatusAll)(ctx)
 }
 
+// StatusJailWithContext returns an error indicating the client is not available.
 func (c *NoOpClient) StatusJailWithContext(ctx context.Context, jail string) (string, error) {
 	return wrapWithContext1(c.StatusJail)(ctx, jail)
 }
 
+// BanIPWithContext returns an error indicating the client is not available.
 func (c *NoOpClient) BanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
 	return wrapWithContext2(c.BanIP)(ctx, ip, jail)
 }
 
+// UnbanIPWithContext returns an error indicating the client is not available.
 func (c *NoOpClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
 	return wrapWithContext2(c.UnbanIP)(ctx, ip, jail)
 }
 
+// BannedInWithContext returns an error indicating the client is not available.
 func (c *NoOpClient) BannedInWithContext(ctx context.Context, ip string) ([]string, error) {
 	return wrapWithContext1(c.BannedIn)(ctx, ip)
 }
 
+// GetBanRecordsWithContext returns an error indicating the client is not available.
 func (c *NoOpClient) GetBanRecordsWithContext(ctx context.Context, jails []string) ([]BanRecord, error) {
 	return wrapWithContext1(c.GetBanRecords)(ctx, jails)
 }
 
+// GetLogLinesWithContext returns an error indicating the client is not available.
 func (c *NoOpClient) GetLogLinesWithContext(ctx context.Context, jail, ip string) ([]string, error) {
 	return wrapWithContext2(c.GetLogLines)(ctx, jail, ip)
 }
 
+// ListFiltersWithContext returns an error indicating the client is not available.
 func (c *NoOpClient) ListFiltersWithContext(ctx context.Context) ([]string, error) {
 	return wrapWithContext0(c.ListFilters)(ctx)
 }
 
+// TestFilterWithContext returns an error indicating the client is not available.
 func (c *NoOpClient) TestFilterWithContext(ctx context.Context, filter string) (string, error) {
 	return wrapWithContext1(c.TestFilter)(ctx, filter)
 }

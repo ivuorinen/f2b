@@ -126,7 +126,8 @@ func GetLogLinesLegacy(jailFilter string, ipFilter string) ([]string, error) {
 	return lines, nil
 }
 
-// parseLogFiles parses log file names and returns the current log and a slice of rotated logs (sorted oldest to newest).
+// parseLogFiles parses log file names and returns the current log and a slice of rotated logs
+// (sorted oldest to newest).
 func parseLogFiles(files []string) (string, []rotatedLog) {
 	var currentLog string
 	var rotated []rotatedLog

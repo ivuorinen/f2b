@@ -6,8 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ivuorinen/f2b/fail2ban"
 	"github.com/spf13/cobra"
+
+	"github.com/ivuorinen/f2b/fail2ban"
 )
 
 // Command creation helpers
@@ -60,7 +61,10 @@ func ValidateServiceAction(action string) error {
 	}
 
 	if !validActions[action] {
-		return fmt.Errorf("invalid service action: %s. Valid actions: start, stop, restart, status, reload, enable, disable", action)
+		return fmt.Errorf(
+			"invalid service action: %s. Valid actions: start, stop, restart, status, reload, enable, disable",
+			action,
+		)
 	}
 	return nil
 }

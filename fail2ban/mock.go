@@ -224,42 +224,52 @@ func (m *MockClient) TestFilter(filter string) (string, error) {
 
 // Context-aware methods for MockClient (using helpers to reduce boilerplate)
 
+// ListJailsWithContext returns a list of jails using the provided context.
 func (m *MockClient) ListJailsWithContext(ctx context.Context) ([]string, error) {
 	return wrapWithContext0(m.ListJails)(ctx)
 }
 
+// StatusAllWithContext returns the status of all jails using the provided context.
 func (m *MockClient) StatusAllWithContext(ctx context.Context) (string, error) {
 	return wrapWithContext0(m.StatusAll)(ctx)
 }
 
+// StatusJailWithContext returns the status of the specified jail using the provided context.
 func (m *MockClient) StatusJailWithContext(ctx context.Context, jail string) (string, error) {
 	return wrapWithContext1(m.StatusJail)(ctx, jail)
 }
 
+// BanIPWithContext bans the specified IP in the given jail using the provided context.
 func (m *MockClient) BanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
 	return wrapWithContext2(m.BanIP)(ctx, ip, jail)
 }
 
+// UnbanIPWithContext unbans the specified IP from the given jail using the provided context.
 func (m *MockClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
 	return wrapWithContext2(m.UnbanIP)(ctx, ip, jail)
 }
 
+// BannedInWithContext returns the jails where the IP is banned using the provided context.
 func (m *MockClient) BannedInWithContext(ctx context.Context, ip string) ([]string, error) {
 	return wrapWithContext1(m.BannedIn)(ctx, ip)
 }
 
+// GetBanRecordsWithContext returns ban records for the specified jails using the provided context.
 func (m *MockClient) GetBanRecordsWithContext(ctx context.Context, jails []string) ([]BanRecord, error) {
 	return wrapWithContext1(m.GetBanRecords)(ctx, jails)
 }
 
+// GetLogLinesWithContext returns log lines for the specified jail and IP using the provided context.
 func (m *MockClient) GetLogLinesWithContext(ctx context.Context, jail, ip string) ([]string, error) {
 	return wrapWithContext2(m.GetLogLines)(ctx, jail, ip)
 }
 
+// ListFiltersWithContext returns a list of available filters using the provided context.
 func (m *MockClient) ListFiltersWithContext(ctx context.Context) ([]string, error) {
 	return wrapWithContext0(m.ListFilters)(ctx)
 }
 
+// TestFilterWithContext tests the specified filter using the provided context.
 func (m *MockClient) TestFilterWithContext(ctx context.Context, filter string) (string, error) {
 	return wrapWithContext1(m.TestFilter)(ctx, filter)
 }

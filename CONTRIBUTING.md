@@ -32,9 +32,9 @@ whether you are fixing bugs, adding features, improving documentation, or helpin
 
 - Ensure all tests pass before submitting:
 
-  ```bash
-  go test ./...
-  ```
+```bash
+go test ./...
+```
 
 ### 5. Commit and Push
 
@@ -63,36 +63,27 @@ whether you are fixing bugs, adding features, improving documentation, or helpin
 
 ---
 
-## Security Guidelines
+## Security & Testing Guidelines
 
-### Sudo and Privilege Handling
+**Key Requirements:**
 
-- **Never execute real sudo commands in tests** - always use `MockSudoChecker` and `MockRunner`
-- **Validate all input** before privilege escalation - IP addresses, jail names, etc.
+- **Never execute real sudo commands in tests** - always use mocks
+- **Validate all input** before privilege escalation
 - **Use secure command execution** - argument arrays, not shell strings
-- **Test privilege scenarios** - include tests for both privileged and unprivileged users
-- **Set F2B_TEST_SUDO=true** in tests that need to verify sudo checking behavior
+- **Test both privilege scenarios** - privileged and unprivileged users
 
-### Example Test Pattern
+For comprehensive security guidelines, testing patterns, and examples, see:
 
-```go
-// Save original checker and set up mock with privileges
-originalChecker := fail2ban.GetSudoChecker()
-defer fail2ban.SetSudoChecker(originalChecker)
-mockChecker := fail2ban.NewMockSudoCheckerWithPrivileges(true)
-fail2ban.SetSudoChecker(mockChecker)
-
-// Set environment variable to force sudo checking in tests
-os.Setenv("F2B_TEST_SUDO", "true")
-defer os.Unsetenv("F2B_TEST_SUDO")
-```
+- [docs/security.md](docs/security.md) - Security practices and threat model
+- [docs/testing.md](docs/testing.md) - Testing strategies and mock patterns
+- [AGENTS.md](AGENTS.md) - AI/LLM contributor guidelines
 
 ---
 
 ## Communication
 
 - Be respectful and constructive in all discussions.
-- Review the [Code of Conduct](../.github/CODE_OF_CONDUCT.md).
+- Review the [Code of Conduct](CODE_OF_CONDUCT.md).
 - For large or breaking changes, open an issue to discuss your approach before submitting a PR.
 
 ---

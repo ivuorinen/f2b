@@ -1,4 +1,6 @@
 ---
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# vim: set ts=2 sw=2 tw=0 fo=jcroql
 # GoReleaser configuration
 # Documentation: https://goreleaser.com/customization/
 version: 2
@@ -38,16 +40,16 @@ builds:
       - amd64
       - arm64
       - arm
-      - 386
+      - "386"
 
     goarm:
-      - 6
-      - 7
+      - "6"
+      - "7"
 
     # Skip certain combinations
     ignore:
       - goos: darwin
-        goarch: 386
+        goarch: "386"
       - goos: darwin
         goarch: arm
       - goos: freebsd
@@ -69,9 +71,7 @@ builds:
 # Archive configuration
 archives:
   - id: f2b
-    name_template: >-
-      {{- .ProjectName }}_ {{- .Version }}_ {{- title .Os }}_ {{- if eq .Arch "amd64" }}x86_64 {{- else if eq .Arch "386"
-      }}i386 {{- else }}{{ .Arch }}{{ end }} {{- if .Arm }}v{{ .Arm }}{{ end }}
+    formats: ["binary", "tar.gz"]
 
     # Archive format
     format_overrides:
@@ -87,7 +87,7 @@ archives:
 
 # Checksum configuration
 checksum:
-  name_template: 'checksums.txt'
+  name_template: "checksums.txt"
   algorithm: sha256
 
 # Snapshot configuration
@@ -137,24 +137,24 @@ changelog:
   use: github
   filters:
     exclude:
-      - '^docs:'
-      - '^test:'
-      - '^chore:'
-      - 'typo'
-      - 'Merge pull request'
-      - 'Merge branch'
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "typo"
+      - "Merge pull request"
+      - "Merge branch"
   groups:
-    - title: '🚀 Features'
-      regexp: '^feat'
-    - title: '🐛 Bug Fixes'
-      regexp: '^fix'
-    - title: '🔒 Security'
-      regexp: '^security'
-    - title: '⚡ Performance'
-      regexp: '^perf'
-    - title: '♻️ Refactoring'
-      regexp: '^refactor'
-    - title: 'Other changes'
+    - title: "🚀 Features"
+      regexp: "^feat"
+    - title: "🐛 Bug Fixes"
+      regexp: "^fix"
+    - title: "🔒 Security"
+      regexp: "^security"
+    - title: "⚡ Performance"
+      regexp: "^perf"
+    - title: "♻️ Refactoring"
+      regexp: "^refactor"
+    - title: "Other changes"
 
 # Homebrew tap configuration
 brews:

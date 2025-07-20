@@ -8,8 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivuorinen/f2b/fail2ban"
 	"github.com/spf13/cobra"
+
+	"github.com/ivuorinen/f2b/fail2ban"
 )
 
 func TestMain(m *testing.M) {
@@ -179,10 +180,11 @@ func TestStatusCommand(t *testing.T) {
 			expectError: true,
 		},
 		{
-			name:        "status no args shows usage",
-			args:        []string{"status"},
-			jails:       []string{"sshd"},
-			expectedOut: "Usage: f2b status all   (show all jails)\n       f2b status <jail> (show specific jail)\nAvailable jails: sshd\n",
+			name:  "status no args shows usage",
+			args:  []string{"status"},
+			jails: []string{"sshd"},
+			expectedOut: "Usage: f2b status all   (show all jails)\n" +
+				"       f2b status <jail> (show specific jail)\nAvailable jails: sshd\n",
 			expectError: false,
 		},
 	}
@@ -463,9 +465,12 @@ func TestLogsCommand(t *testing.T) {
 		expectError bool
 	}{
 		{
-			name:        "show all logs",
-			args:        []string{"logs"},
-			logLines:    []string{"2024-01-01 12:00:00 [sshd] Ban 192.168.1.100", "2024-01-01 12:01:00 [apache] Ban 192.168.1.101"},
+			name: "show all logs",
+			args: []string{"logs"},
+			logLines: []string{
+				"2024-01-01 12:00:00 [sshd] Ban 192.168.1.100",
+				"2024-01-01 12:01:00 [apache] Ban 192.168.1.101",
+			},
 			expectedOut: "[2024-01-01 12:00:00 [sshd] Ban 192.168.1.100 2024-01-01 12:01:00 [apache] Ban 192.168.1.101]",
 			expectError: false,
 		},

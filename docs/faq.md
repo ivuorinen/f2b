@@ -146,7 +146,8 @@ F2B_LOG_FILE=/tmp/f2b.log f2b ban 192.168.1.100
 
 ### Why do I see "invalid IP address" or "invalid jail name"?
 
-- The tool validates all input for security. Double-check your IP address and jail name for typos or unsupported characters.
+- The tool validates all input for security. Double-check your IP address and jail name for typos or unsupported
+  characters.
 - IP addresses must be valid IPv4 or IPv6 format
 - Jail names can only contain alphanumeric characters, dashes, underscores, and dots
 

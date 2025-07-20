@@ -1,7 +1,6 @@
 package fail2ban
 
 import (
-	"os"
 	"strings"
 	"testing"
 )
@@ -45,14 +44,7 @@ func TestSudoIntegrationWithClient(t *testing.T) {
 			defer SetSudoChecker(originalChecker)
 
 			// Set environment variable to force sudo checking in tests
-			if err := os.Setenv("F2B_TEST_SUDO", "true"); err != nil {
-				t.Fatalf("failed to set F2B_TEST_SUDO: %v", err)
-			}
-			defer func() {
-				if err := os.Unsetenv("F2B_TEST_SUDO"); err != nil {
-					t.Fatalf("failed to unset F2B_TEST_SUDO: %v", err)
-				}
-			}()
+			t.Setenv("F2B_TEST_SUDO", "true")
 
 			// Set mock checker
 			mock := NewMockSudoCheckerWithPrivileges(tt.hasPrivileges)
@@ -66,8 +58,14 @@ func TestSudoIntegrationWithClient(t *testing.T) {
 				mockRunner.SetResponse("sudo fail2ban-client -V", []byte("0.11.2"))
 				mockRunner.SetResponse("fail2ban-client ping", []byte("pong"))
 				mockRunner.SetResponse("sudo fail2ban-client ping", []byte("pong"))
-				mockRunner.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-				mockRunner.SetResponse("sudo fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
+				mockRunner.SetResponse(
+					"fail2ban-client status",
+					[]byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"),
+				)
+				mockRunner.SetResponse(
+					"sudo fail2ban-client status",
+					[]byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"),
+				)
 
 				// Set up responses for operations
 				mockRunner.SetResponse("sudo fail2ban-client set sshd banip 192.168.1.100", []byte("0"))

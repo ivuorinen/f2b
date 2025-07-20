@@ -49,7 +49,7 @@ func TestValidPaths(t *testing.T) {
 
 	// Create a test file
 	testFile := filepath.Join(tempDir, "test.log")
-	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+	if err := os.WriteFile(testFile, []byte("test"), 0600); err != nil {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
@@ -87,14 +87,14 @@ func TestSymlinkHandling(t *testing.T) {
 
 	// Create a regular file
 	regularFile := filepath.Join(tempDir, "regular.log")
-	if err := os.WriteFile(regularFile, []byte("test"), 0644); err != nil {
+	if err := os.WriteFile(regularFile, []byte("test"), 0600); err != nil {
 		t.Fatalf("failed to create regular file: %v", err)
 	}
 
 	// Create a symlink pointing outside the allowed directory
 	outsideDir := t.TempDir()
 	outsideFile := filepath.Join(outsideDir, "outside.log")
-	if err := os.WriteFile(outsideFile, []byte("outside"), 0644); err != nil {
+	if err := os.WriteFile(outsideFile, []byte("outside"), 0600); err != nil {
 		t.Fatalf("failed to create outside file: %v", err)
 	}
 
@@ -136,7 +136,7 @@ func TestFileTypeValidation(t *testing.T) {
 
 	// Create a regular file
 	regularFile := filepath.Join(tempDir, "regular.log")
-	if err := os.WriteFile(regularFile, []byte("test"), 0644); err != nil {
+	if err := os.WriteFile(regularFile, []byte("test"), 0600); err != nil {
 		t.Fatalf("failed to create regular file: %v", err)
 	}
 

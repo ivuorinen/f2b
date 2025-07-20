@@ -125,7 +125,7 @@ func TestRunnerCombinedOutputWithSudoConcurrency(t *testing.T) {
 
 // TestMixedConcurrentOperations tests mixed concurrent operations including
 // setting runners and executing commands.
-func TestMixedConcurrentOperations(t *testing.T) {
+func TestMixedConcurrentOperations(_ *testing.T) {
 	original := GetRunner()
 	defer SetRunner(original)
 
@@ -135,7 +135,7 @@ func TestMixedConcurrentOperations(t *testing.T) {
 	// Group 1: Set runners
 	for i := 0; i < numGoroutines/3; i++ {
 		wg.Add(1)
-		go func(id int) {
+		go func(_ int) {
 			defer wg.Done()
 
 			for j := 0; j < 20; j++ {
@@ -255,7 +255,7 @@ func TestRunnerStateConsistency(t *testing.T) {
 	// Fewer writers
 	for i := 0; i < numWriters; i++ {
 		wg.Add(1)
-		go func(id int) {
+		go func(_ int) {
 			defer wg.Done()
 
 			for j := 0; j < 10; j++ {

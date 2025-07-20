@@ -7,9 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivuorinen/f2b/fail2ban"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+
+	"github.com/ivuorinen/f2b/fail2ban"
 )
 
 func TestParseLogLevel(t *testing.T) {
@@ -98,26 +99,11 @@ func TestConfigDefaults(t *testing.T) {
 
 func TestEnvironmentVariableSetup(t *testing.T) {
 	// Save original environment
-	originalLogDir := os.Getenv("F2B_LOG_DIR")
-	originalFilterDir := os.Getenv("F2B_FILTER_DIR")
-	originalLogLevel := os.Getenv("F2B_LOG_LEVEL")
-	originalLogFile := os.Getenv("F2B_LOG_FILE")
-
-	defer func() {
-		// Restore original environment
-		if err := os.Setenv("F2B_LOG_DIR", originalLogDir); err != nil {
-			t.Fatalf("failed to restore F2B_LOG_DIR: %v", err)
-		}
-		if err := os.Setenv("F2B_FILTER_DIR", originalFilterDir); err != nil {
-			t.Fatalf("failed to restore F2B_FILTER_DIR: %v", err)
-		}
-		if err := os.Setenv("F2B_LOG_LEVEL", originalLogLevel); err != nil {
-			t.Fatalf("failed to restore F2B_LOG_LEVEL: %v", err)
-		}
-		if err := os.Setenv("F2B_LOG_FILE", originalLogFile); err != nil {
-			t.Fatalf("failed to restore F2B_LOG_FILE: %v", err)
-		}
-	}()
+	// Set up environment variables using t.Setenv for automatic cleanup
+	t.Setenv("F2B_LOG_DIR", os.Getenv("F2B_LOG_DIR"))
+	t.Setenv("F2B_FILTER_DIR", os.Getenv("F2B_FILTER_DIR"))
+	t.Setenv("F2B_LOG_LEVEL", os.Getenv("F2B_LOG_LEVEL"))
+	t.Setenv("F2B_LOG_FILE", os.Getenv("F2B_LOG_FILE"))
 
 	tests := []struct {
 		name     string
@@ -153,10 +139,8 @@ func TestEnvironmentVariableSetup(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set environment variable
-			if err := os.Setenv(tt.envVar, tt.envValue); err != nil {
-				t.Fatalf("failed to set %s: %v", tt.envVar, err)
-			}
+			// Set environment variable using t.Setenv for automatic cleanup
+			t.Setenv(tt.envVar, tt.envValue)
 
 			// Get the value
 			result := os.Getenv(tt.envVar)
@@ -268,29 +252,9 @@ func BenchmarkParseLogLevel(b *testing.B) {
 
 // TestDefaultValues tests the default values used in the configuration
 func TestDefaultValues(t *testing.T) {
-	// Clear environment variables for this test
-	originalLogDir := os.Getenv("F2B_LOG_DIR")
-	originalFilterDir := os.Getenv("F2B_FILTER_DIR")
-
-	if err := os.Unsetenv("F2B_LOG_DIR"); err != nil {
-		t.Fatalf("failed to unset F2B_LOG_DIR: %v", err)
-	}
-	if err := os.Unsetenv("F2B_FILTER_DIR"); err != nil {
-		t.Fatalf("failed to unset F2B_FILTER_DIR: %v", err)
-	}
-
-	defer func() {
-		if originalLogDir != "" {
-			if err := os.Setenv("F2B_LOG_DIR", originalLogDir); err != nil {
-				t.Fatalf("failed to restore F2B_LOG_DIR: %v", err)
-			}
-		}
-		if originalFilterDir != "" {
-			if err := os.Setenv("F2B_FILTER_DIR", originalFilterDir); err != nil {
-				t.Fatalf("failed to restore F2B_FILTER_DIR: %v", err)
-			}
-		}
-	}()
+	// Clear environment variables for this test using t.Setenv
+	t.Setenv("F2B_LOG_DIR", "")
+	t.Setenv("F2B_FILTER_DIR", "")
 
 	// Test default values when environment variables are not set
 	logDir := os.Getenv("F2B_LOG_DIR")
@@ -422,7 +386,20 @@ func TestExecuteWithRealCommands(t *testing.T) {
 	}
 
 	// Check that help output contains expected commands
-	expectedCommands := []string{"list-jails", "status", "banned", "ban", "unban", "test", "logs", "logs-watch", "service", "version", "test-filter", "completion"}
+	expectedCommands := []string{
+		"list-jails",
+		"status",
+		"banned",
+		"ban",
+		"unban",
+		"test",
+		"logs",
+		"logs-watch",
+		"service",
+		"version",
+		"test-filter",
+		"completion",
+	}
 	for _, cmd := range expectedCommands {
 		if !strings.Contains(output, cmd) {
 			t.Errorf("expected help output to contain command %q", cmd)
@@ -588,7 +565,7 @@ func TestPersistentPreRun(t *testing.T) {
 	}
 
 	// Create a temporary log file
-	tmpFile, err := os.CreateTemp("", "f2b-test-*.log")
+	tmpFile, err := os.CreateTemp(t.TempDir(), "f2b-test-*.log")
 	if err != nil {
 		t.Fatalf("failed to create temp file: %v", err)
 	}
@@ -630,7 +607,7 @@ func TestPersistentPreRun(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		t.Run("log_level_"+tt.name, func(t *testing.T) {
+		t.Run("log_level_"+tt.name, func(_ *testing.T) {
 			cmd := &cobra.Command{}
 			cmd.Flags().String("log-file", "", "")
 			cmd.Flags().String("log-level", tt.logLevel, "")
@@ -684,7 +661,12 @@ func TestCompletionCmdLongDescription(t *testing.T) {
 	}
 
 	// Test that it contains example commands
-	expectedExamples := []string{"f2b completion bash", "f2b completion zsh", "f2b completion fish", "f2b completion powershell"}
+	expectedExamples := []string{
+		"f2b completion bash",
+		"f2b completion zsh",
+		"f2b completion fish",
+		"f2b completion powershell",
+	}
 	for _, example := range expectedExamples {
 		if !strings.Contains(cmd.Long, example) {
 			t.Errorf("expected completion long description to contain example %q", example)
@@ -748,31 +730,22 @@ func TestExecuteIntegration(t *testing.T) {
 				Format:    "plain",
 			},
 			setupEnv: func() {
-				if err := os.Setenv("F2B_LOG_DIR", "/tmp/test"); err != nil {
-					t.Fatalf("failed to set F2B_LOG_DIR: %v", err)
-				}
-				if err := os.Setenv("F2B_FILTER_DIR", "/tmp/filters"); err != nil {
-					t.Fatalf("failed to set F2B_FILTER_DIR: %v", err)
-				}
+				// Environment variables will be set using t.Setenv in test loop
 			},
 			cleanup: func() {
-				if err := os.Unsetenv("F2B_LOG_DIR"); err != nil {
-					t.Fatalf("failed to unset F2B_LOG_DIR: %v", err)
-				}
-				if err := os.Unsetenv("F2B_FILTER_DIR"); err != nil {
-					t.Fatalf("failed to unset F2B_FILTER_DIR: %v", err)
-				}
+				// Cleanup handled automatically by t.Setenv
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.setupEnv != nil {
-				tt.setupEnv()
+			// Set up environment variables using t.Setenv for automatic cleanup
+			if tt.config.LogDir != "" {
+				t.Setenv("F2B_LOG_DIR", tt.config.LogDir)
 			}
-			if tt.cleanup != nil {
-				defer tt.cleanup()
+			if tt.config.FilterDir != "" {
+				t.Setenv("F2B_FILTER_DIR", tt.config.FilterDir)
 			}
 
 			client := fail2ban.NewMockClient()

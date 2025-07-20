@@ -1,3 +1,4 @@
+// Package fail2ban provides functionality for managing fail2ban jails and filters.
 package fail2ban
 
 import (
@@ -28,14 +29,18 @@ const (
 var logDir = DefaultLogDir // base directory for fail2ban logs
 var filterDir = DefaultFilterDir
 
+// SetLogDir sets the directory path for log files.
 func SetLogDir(dir string) {
 	logDir = dir
 }
 
 // GetLogDir returns the current log directory path
+// GetLogDir returns the current log directory path.
 func GetLogDir() string {
 	return logDir
 }
+
+// SetFilterDir sets the directory path for filter configuration files.
 func SetFilterDir(dir string) {
 	filterDir = dir
 }
@@ -65,7 +70,6 @@ func (r *OSRunner) CombinedOutputWithContext(ctx context.Context, name string, a
 
 // CombinedOutputWithSudo executes a command with sudo if needed.
 func (r *OSRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte, error) {
-
 	checker := GetSudoChecker()
 
 	// If already root, no need for sudo
@@ -118,6 +122,7 @@ var globalRunnerManager = &runnerManager{
 }
 
 // SetRunner injects a custom runner (for tests or alternate backends).
+// SetRunner sets the global command runner instance.
 func SetRunner(r Runner) {
 	globalRunnerManager.mu.Lock()
 	defer globalRunnerManager.mu.Unlock()
@@ -125,6 +130,7 @@ func SetRunner(r Runner) {
 }
 
 // GetRunner returns the current runner (for tests that need access).
+// GetRunner returns the current global command runner instance.
 func GetRunner() Runner {
 	globalRunnerManager.mu.RLock()
 	defer globalRunnerManager.mu.RUnlock()
@@ -132,6 +138,7 @@ func GetRunner() Runner {
 }
 
 // RunnerCombinedOutput invokes the runner for a command.
+// RunnerCombinedOutput executes a command using the global runner and returns combined stdout/stderr output.
 func RunnerCombinedOutput(name string, args ...string) ([]byte, error) {
 	globalRunnerManager.mu.RLock()
 	runner := globalRunnerManager.runner
@@ -140,6 +147,7 @@ func RunnerCombinedOutput(name string, args ...string) ([]byte, error) {
 }
 
 // RunnerCombinedOutputWithSudo invokes the runner for a command with sudo if needed.
+// RunnerCombinedOutputWithSudo executes a command with sudo privileges using the global runner.
 func RunnerCombinedOutputWithSudo(name string, args ...string) ([]byte, error) {
 	globalRunnerManager.mu.RLock()
 	runner := globalRunnerManager.runner
@@ -148,6 +156,7 @@ func RunnerCombinedOutputWithSudo(name string, args ...string) ([]byte, error) {
 }
 
 // RunnerCombinedOutputWithContext invokes the runner for a command with context support.
+// RunnerCombinedOutputWithContext executes a command with context using the global runner.
 func RunnerCombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error) {
 	globalRunnerManager.mu.RLock()
 	runner := globalRunnerManager.runner
@@ -156,6 +165,7 @@ func RunnerCombinedOutputWithContext(ctx context.Context, name string, args ...s
 }
 
 // RunnerCombinedOutputWithSudoContext invokes the runner for a command with sudo and context support.
+// RunnerCombinedOutputWithSudoContext executes a command with sudo privileges and context using the global runner.
 func RunnerCombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error) {
 	globalRunnerManager.mu.RLock()
 	runner := globalRunnerManager.runner
@@ -173,6 +183,7 @@ type MockRunner struct {
 }
 
 // NewMockRunner creates a new MockRunner for testing
+// NewMockRunner creates a new mock runner instance for testing.
 func NewMockRunner() *MockRunner {
 	return &MockRunner{
 		Responses: make(map[string][]byte),
@@ -294,18 +305,21 @@ func (c *RealClient) fetchJails() ([]string, error) {
 	return ParseJailList(string(out))
 }
 
+// StatusAll returns the status of all fail2ban jails.
 func (c *RealClient) StatusAll() (string, error) {
 	currentRunner := GetCurrentRunner()
 	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "status")
 	return string(out), err
 }
 
+// StatusJail returns the status of a specific fail2ban jail.
 func (c *RealClient) StatusJail(j string) (string, error) {
 	currentRunner := GetCurrentRunner()
 	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "status", j)
 	return string(out), err
 }
 
+// BanIP bans an IP address in the specified jail and returns the ban status code.
 func (c *RealClient) BanIP(ip, jail string) (int, error) {
 	if err := ValidateIP(ip); err != nil {
 		return 0, err
@@ -334,6 +348,7 @@ func (c *RealClient) BanIP(ip, jail string) (int, error) {
 	return 0, fmt.Errorf("unexpected output from fail2ban-client: %s", code)
 }
 
+// UnbanIP unbans an IP address from the specified jail and returns the unban status code.
 func (c *RealClient) UnbanIP(ip, jail string) (int, error) {
 	if err := ValidateIP(ip); err != nil {
 		return 0, err
@@ -362,6 +377,7 @@ func (c *RealClient) UnbanIP(ip, jail string) (int, error) {
 	return 0, fmt.Errorf("unexpected output from fail2ban-client: %s", code)
 }
 
+// BannedIn returns a list of jails where the specified IP address is currently banned.
 func (c *RealClient) BannedIn(ip string) ([]string, error) {
 	if err := ValidateIP(ip); err != nil {
 		return nil, err
@@ -375,6 +391,7 @@ func (c *RealClient) BannedIn(ip string) ([]string, error) {
 	return ParseBracketedList(string(out)), nil
 }
 
+// GetBanRecords retrieves ban records for the specified jails.
 func (c *RealClient) GetBanRecords(jails []string) ([]BanRecord, error) {
 	var recs []BanRecord
 	var toQuery []string
@@ -445,6 +462,7 @@ func (c *RealClient) GetBanRecords(jails []string) ([]BanRecord, error) {
 	return recs, nil
 }
 
+// GetLogLines retrieves log lines related to an IP address from the specified jail.
 func (c *RealClient) GetLogLines(jail, ip string) ([]string, error) {
 	return c.GetLogLinesWithLimit(jail, ip, 1000) // Default limit for safety
 }
@@ -545,6 +563,7 @@ func (c *RealClient) GetLogLinesLegacy(jail, ip string) ([]string, error) {
 	return lines, nil
 }
 
+// ListFilters returns a list of available fail2ban filter files.
 func ListFilters() ([]string, error) {
 	entries, err := os.ReadDir(filterDir)
 	if err != nil {
@@ -559,6 +578,7 @@ func ListFilters() ([]string, error) {
 	return names, nil
 }
 
+// ListFilters returns a list of available fail2ban filter files.
 func (c *RealClient) ListFilters() ([]string, error) {
 	entries, err := os.ReadDir(c.FilterDir)
 	if err != nil {
@@ -574,6 +594,7 @@ func (c *RealClient) ListFilters() ([]string, error) {
 	return filters, nil
 }
 
+// TestFilter tests a fail2ban filter against its configured log files and returns the test output.
 func TestFilter(filter string) (string, error) {
 	if err := ValidateFilter(filter); err != nil {
 		return "", err
@@ -628,11 +649,13 @@ func TestFilter(filter string) (string, error) {
 
 // Context-aware implementations for RealClient
 
-func (c *RealClient) ListJailsWithContext(ctx context.Context) ([]string, error) {
+// ListJailsWithContext returns a list of all fail2ban jails with context support.
+func (c *RealClient) ListJailsWithContext(_ context.Context) ([]string, error) {
 	// ListJails doesn't require external commands, so just delegate
 	return c.ListJails()
 }
 
+// StatusAllWithContext returns the status of all fail2ban jails with context support.
 func (c *RealClient) StatusAllWithContext(ctx context.Context) (string, error) {
 	globalRunnerManager.mu.RLock()
 	currentRunner := globalRunnerManager.runner
@@ -642,6 +665,7 @@ func (c *RealClient) StatusAllWithContext(ctx context.Context) (string, error) {
 	return string(out), err
 }
 
+// StatusJailWithContext returns the status of a specific fail2ban jail with context support.
 func (c *RealClient) StatusJailWithContext(ctx context.Context, jail string) (string, error) {
 	globalRunnerManager.mu.RLock()
 	currentRunner := globalRunnerManager.runner
@@ -651,6 +675,7 @@ func (c *RealClient) StatusJailWithContext(ctx context.Context, jail string) (st
 	return string(out), err
 }
 
+// BanIPWithContext bans an IP address in the specified jail with context support.
 func (c *RealClient) BanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
 	if err := ValidateIP(ip); err != nil {
 		return 0, err
@@ -677,6 +702,7 @@ func (c *RealClient) BanIPWithContext(ctx context.Context, ip, jail string) (int
 	return 0, fmt.Errorf("unexpected output from fail2ban-client: %s", code)
 }
 
+// UnbanIPWithContext unbans an IP address from the specified jail with context support.
 func (c *RealClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
 	if err := ValidateIP(ip); err != nil {
 		return 0, err
@@ -703,6 +729,7 @@ func (c *RealClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (i
 	return 0, fmt.Errorf("unexpected output from fail2ban-client: %s", code)
 }
 
+// BannedInWithContext returns a list of jails where the specified IP address is currently banned with context support.
 func (c *RealClient) BannedInWithContext(ctx context.Context, ip string) ([]string, error) {
 	if err := ValidateIP(ip); err != nil {
 		return nil, err
@@ -729,24 +756,28 @@ func (c *RealClient) BannedInWithContext(ctx context.Context, ip string) ([]stri
 	return jails, nil
 }
 
-func (c *RealClient) GetBanRecordsWithContext(ctx context.Context, jails []string) ([]BanRecord, error) {
+// GetBanRecordsWithContext retrieves ban records for the specified jails with context support.
+func (c *RealClient) GetBanRecordsWithContext(_ context.Context, jails []string) ([]BanRecord, error) {
 	// For now, delegate to the non-context version since GetBanRecords is complex
 	// In a full implementation, this would use context for all internal operations
 	return c.GetBanRecords(jails)
 }
 
-func (c *RealClient) GetLogLinesWithContext(ctx context.Context, jail, ip string) ([]string, error) {
+// GetLogLinesWithContext retrieves log lines related to an IP address from the specified jail with context support.
+func (c *RealClient) GetLogLinesWithContext(_ context.Context, jail, ip string) ([]string, error) {
 	// For now, delegate to the non-context version since GetLogLines is complex
 	// In a full implementation, this would use context for all internal operations
 	return c.GetLogLines(jail, ip)
 }
 
-func (c *RealClient) ListFiltersWithContext(ctx context.Context) ([]string, error) {
+// ListFiltersWithContext returns a list of available fail2ban filter files with context support.
+func (c *RealClient) ListFiltersWithContext(_ context.Context) ([]string, error) {
 	// For now, delegate to the non-context version since ListFilters is complex
 	// In a full implementation, this would use context for all internal operations
 	return c.ListFilters()
 }
 
+// TestFilterWithContext tests a fail2ban filter against its configured log files with context support.
 func (c *RealClient) TestFilterWithContext(ctx context.Context, filter string) (string, error) {
 	if err := ValidateFilter(filter); err != nil {
 		return "", err
@@ -800,6 +831,7 @@ func (c *RealClient) TestFilterWithContext(ctx context.Context, filter string) (
 	return string(output), err
 }
 
+// TestFilter tests a fail2ban filter against its configured log files and returns the test output.
 func (c *RealClient) TestFilter(filter string) (string, error) {
 	if err := ValidateFilter(filter); err != nil {
 		return "", err

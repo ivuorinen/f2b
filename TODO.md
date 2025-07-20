@@ -63,14 +63,45 @@ Technical debt and improvements tracker.
 - [ ] **Concurrent Processing** - Parallel multi-jail operations with proper synchronization
 - [ ] **Caching & Optimization** - Time parsing cache, validation result caching, buffer pooling
 
+## 📚 Documentation Reorganization ✅ FULLY COMPLETED
+
+### File Organization
+
+- [x] **Move FAQ.md** - Move FAQ.md to docs/faq.md and update all references ✅ COMPLETED
+- [x] **Move CODE_OF_CONDUCT.md** - Move from .github/ to root directory ✅ COMPLETED
+- [x] **Create docs/architecture.md** - Extract architecture content from README.md and CLAUDE.md ✅ COMPLETED
+- [x] **Create docs/testing.md** - Consolidate testing guidelines from multiple files ✅ COMPLETED
+- [x] **Create docs/security.md** - Consolidate security practices from multiple files ✅ COMPLETED
+
+### Content Updates
+
+- [x] **Update README.md links** - Fix broken relative paths and add links to new docs ✅ COMPLETED
+- [x] **Update CLAUDE.md** - Remove duplicated content, add references to detailed docs ✅ COMPLETED
+- [x] **Update AGENTS.md** - Remove duplicated content, reference new specialized docs ✅ COMPLETED
+- [x] **Update CONTRIBUTING.md** - Remove duplicated patterns, reference new docs ✅ COMPLETED
+- [x] **Update copilot-instructions.md** - Reference new documentation structure ✅ COMPLETED
+- [x] **Update bug_report.md template** - Customize for CLI tool context ✅ COMPLETED
+- [x] **Review code documentation** - Check godoc comments for accuracy ✅ COMPLETED
+- [x] **Remove duplication** - Eliminate redundant content across all files ✅ COMPLETED
+
+### Code Quality & Linting
+
+- [x] **Add line length limits** - 120-character limit enforced via EditorConfig ✅ COMPLETED
+- [x] **Enable comprehensive linting** - golines, lll, usetesting, gosec, revive ✅ COMPLETED
+- [x] **Fix all revive issues** - 86 issues resolved (unused parameters, export comments) ✅ COMPLETED
+- [x] **Fix security issues** - File permissions 0644→0600, gosec warnings ✅ COMPLETED
+- [x] **Update testing patterns** - Replace os.Setenv with t.Setenv ✅ COMPLETED
+- [x] **Configure auto-fix** - golangci-lint with formatters and auto-fix ✅ COMPLETED
+- [x] **Enhance pre-commit** - Comprehensive hooks and improved configuration ✅ COMPLETED
+
 ## New Critical Items (2025)
 
 ### 🔧 Code Quality (HIGH PRIORITY)
 
-- [ ] **MockClient Consolidation** - Remove duplicate implementations in cmd/cmd_test.go
-- [ ] **Context Wrapper Generator** - Eliminate ~150 lines of WithContext boilerplate
-- [ ] **Validation Centralization** - Single source for IP/jail/filter validation
-- [ ] **Error Message Standardization** - Use constants for repeated error strings
+- [x] **MockClient Consolidation** - Remove duplicate implementations in cmd/cmd_test.go ✅ COMPLETED
+- [x] **Context Wrapper Generator** - Eliminate ~150 lines of WithContext boilerplate ✅ COMPLETED
+- [x] **Validation Centralization** - Single source for IP/jail/filter validation ✅ COMPLETED
+- [x] **Error Message Standardization** - Use constants for repeated error strings ✅ COMPLETED
 
 ### 📈 Performance Optimizations (MEDIUM PRIORITY)
 

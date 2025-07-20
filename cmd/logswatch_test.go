@@ -28,9 +28,12 @@ func TestLogsWatchCmd(t *testing.T) {
 			expectError:    false,
 		},
 		{
-			name:           "watch logs with jail filter",
-			args:           []string{"sshd"},
-			mockLogs:       []string{"2024-01-01 12:00:00 [sshd] Ban 192.168.1.100", "2024-01-01 12:01:00 [apache] Ban 192.168.1.101"},
+			name: "watch logs with jail filter",
+			args: []string{"sshd"},
+			mockLogs: []string{
+				"2024-01-01 12:00:00 [sshd] Ban 192.168.1.100",
+				"2024-01-01 12:01:00 [apache] Ban 192.168.1.101",
+			},
 			limit:          10,
 			expectedOutput: "2024-01-01 12:00:00 [sshd] Ban 192.168.1.100",
 			expectError:    false,
@@ -278,7 +281,7 @@ type MockLogsWatchClient struct {
 	callCount   int
 }
 
-func (m *MockLogsWatchClient) GetLogLines(jail, ip string) ([]string, error) {
+func (m *MockLogsWatchClient) GetLogLines(_, _ string) ([]string, error) {
 	if m.shouldError {
 		return nil, fmt.Errorf("mock error getting log lines")
 	}
@@ -311,19 +314,19 @@ func (m *MockLogsWatchClient) StatusJail(jail string) (string, error) {
 	return fmt.Sprintf("mock status for %s", jail), nil
 }
 
-func (m *MockLogsWatchClient) BanIP(ip, jail string) (int, error) {
+func (m *MockLogsWatchClient) BanIP(_, _ string) (int, error) {
 	return 0, nil
 }
 
-func (m *MockLogsWatchClient) UnbanIP(ip, jail string) (int, error) {
+func (m *MockLogsWatchClient) UnbanIP(_, _ string) (int, error) {
 	return 0, nil
 }
 
-func (m *MockLogsWatchClient) BannedIn(ip string) ([]string, error) {
+func (m *MockLogsWatchClient) BannedIn(_ string) ([]string, error) {
 	return []string{}, nil
 }
 
-func (m *MockLogsWatchClient) GetBanRecords(jails []string) ([]fail2ban.BanRecord, error) {
+func (m *MockLogsWatchClient) GetBanRecords(_ []string) ([]fail2ban.BanRecord, error) {
 	return []fail2ban.BanRecord{}, nil
 }
 
@@ -331,48 +334,49 @@ func (m *MockLogsWatchClient) ListFilters() ([]string, error) {
 	return []string{"sshd"}, nil
 }
 
-func (m *MockLogsWatchClient) TestFilter(filter string) (string, error) {
+func (m *MockLogsWatchClient) TestFilter(_ string) (string, error) {
 	return "mock filter test result", nil
 }
 
 // Context-aware methods for MockLogsWatchClient
 
-func (m *MockLogsWatchClient) ListJailsWithContext(ctx context.Context) ([]string, error) {
+func (m *MockLogsWatchClient) ListJailsWithContext(_ context.Context) ([]string, error) {
 	return m.ListJails()
 }
 
-func (m *MockLogsWatchClient) StatusAllWithContext(ctx context.Context) (string, error) {
+func (m *MockLogsWatchClient) StatusAllWithContext(_ context.Context) (string, error) {
 	return m.StatusAll()
 }
 
-func (m *MockLogsWatchClient) StatusJailWithContext(ctx context.Context, jail string) (string, error) {
+func (m *MockLogsWatchClient) StatusJailWithContext(_ context.Context, jail string) (string, error) {
 	return m.StatusJail(jail)
 }
 
-func (m *MockLogsWatchClient) BanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
+func (m *MockLogsWatchClient) BanIPWithContext(_ context.Context, ip, jail string) (int, error) {
 	return m.BanIP(ip, jail)
 }
 
-func (m *MockLogsWatchClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
+func (m *MockLogsWatchClient) UnbanIPWithContext(_ context.Context, ip, jail string) (int, error) {
 	return m.UnbanIP(ip, jail)
 }
 
-func (m *MockLogsWatchClient) BannedInWithContext(ctx context.Context, ip string) ([]string, error) {
+func (m *MockLogsWatchClient) BannedInWithContext(_ context.Context, ip string) ([]string, error) {
 	return m.BannedIn(ip)
 }
 
-func (m *MockLogsWatchClient) GetBanRecordsWithContext(ctx context.Context, jails []string) ([]fail2ban.BanRecord, error) {
+func (m *MockLogsWatchClient) GetBanRecordsWithContext(
+	_ context.Context, jails []string) ([]fail2ban.BanRecord, error) {
 	return m.GetBanRecords(jails)
 }
 
-func (m *MockLogsWatchClient) GetLogLinesWithContext(ctx context.Context, jail, ip string) ([]string, error) {
+func (m *MockLogsWatchClient) GetLogLinesWithContext(_ context.Context, jail, ip string) ([]string, error) {
 	return m.GetLogLines(jail, ip)
 }
 
-func (m *MockLogsWatchClient) ListFiltersWithContext(ctx context.Context) ([]string, error) {
+func (m *MockLogsWatchClient) ListFiltersWithContext(_ context.Context) ([]string, error) {
 	return m.ListFilters()
 }
 
-func (m *MockLogsWatchClient) TestFilterWithContext(ctx context.Context, filter string) (string, error) {
+func (m *MockLogsWatchClient) TestFilterWithContext(_ context.Context, filter string) (string, error) {
 	return m.TestFilter(filter)
 }

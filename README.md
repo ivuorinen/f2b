@@ -199,43 +199,20 @@ f2b --log-level=debug --log-file=/tmp/f2b-debug.log ban 192.168.1.100
 
 ## 🔐 Security & Privileges
 
-### Automatic Privilege Handling
+f2b is designed with security as a fundamental principle:
 
-f2b intelligently manages sudo requirements:
+- **Smart Privilege Management**: Automatic sudo detection and escalation only when needed
+- **Input Validation**: Comprehensive validation of all user input (IPs, jail names, etc.)
+- **Safe Execution**: No shell injection vulnerabilities; uses argument arrays exclusively
+- **Clear Error Guidance**: Helpful messages when privileges are insufficient
 
-- **Root users**: Commands run directly
-- **Sudo users**: Automatic escalation for privileged operations
-- **Regular users**: Clear error messages with guidance
+### Command Privilege Requirements
 
-### Commands by Privilege Level
+**Require sudo**: `ban`, `unban`, `service` operations
+**No sudo needed**: `status`, `list-jails`, `test`, `logs`, `version`, `completion`
 
-**Require sudo:**
-
-- `ban`, `unban` operations
-- `service` control commands
-- Some configuration changes
-
-**No sudo needed:**
-
-- `status`, `list-jails`, `test`
-- `logs`, `version`, `completion`
-- Most read-only operations
-
-### Error Guidance
-
-```text
-Error: fail2ban operations require sudo privileges. Current user: username (UID: 1000).
-Please run with sudo or ensure user is in sudo group
-Hint: Try running with 'sudo' or ensure your user is in the sudo group
-Example: sudo f2b ban 192.168.1.100
-```
-
-### Input Validation & Security
-
-- **Comprehensive validation:** All user-supplied IP addresses and jail names are validated
-- **Secure execution:** No shell string concatenation; all system commands use argument arrays
-- **Principle of least privilege:** Only escalates privileges when absolutely necessary
-- **Safe testing:** Extensive test coverage with mock implementations prevents accidental privilege escalation
+For detailed security practices, threat model, and contribution security guidelines, see
+[docs/security.md](docs/security.md).
 
 ---
 
@@ -286,37 +263,22 @@ For convenience, most commands have short aliases:
 
 ## 🏗️ Architecture
 
-### Project Summary
+f2b is built with modern Go architecture principles, focusing on security, testability, and extensibility:
 
-- **Modern Go architecture:** All commands use dependency injection for testability and extensibility
-- **Structured logging:** Uses [logrus](https://github.com/sirupsen/logrus) for consistent, structured logs
-- **Consistent output:** All commands support `plain` and `json` output via the `--format` flag
-- **Sudo privilege management:** Automatic privilege detection and escalation for secure operations
-- **Shell completion:** Built-in completion support for bash, zsh, fish, and PowerShell
-- **Command aliases:** Convenient short forms for frequently used commands
-- **Pagination/tailing:** Log commands support the `--limit` flag for efficient log viewing
-- **Enhanced security:** Comprehensive input validation and secure command execution
-- **Easy to extend:** The codebase is modular and ready for new features or backends
+- **Security-First Design**: Automatic privilege management with comprehensive input validation
+- **Dependency Injection**: All components use interfaces for easy testing and extension
+- **Comprehensive Testing**: 85%+ test coverage with extensive mocking
+- **Modern CLI**: Built with Cobra framework, supporting JSON output and shell completion
 
-### Built for Reliability
+**Technology Stack**: Go 1.20+, Cobra CLI framework, Logrus structured logging
 
-- **Dependency Injection**: Testable, modular design
-- **Interface-based**: Easy to extend and mock
-- **Comprehensive Testing**: 85%+ test coverage
-- **Security-focused**: Input validation and safe execution
-
-### Technology Stack
-
-- **Language**: Go 1.20+
-- **CLI Framework**: Cobra
-- **Logging**: Logrus with structured output
-- **Testing**: Comprehensive mocks and integration tests
+For detailed architecture information, see [docs/architecture.md](docs/architecture.md).
 
 ---
 
 ## 🧪 Development & Testing
 
-### Running Tests
+### Quick Start
 
 ```bash
 # Run all tests
@@ -328,6 +290,9 @@ go test -coverprofile=coverage.out ./...
 # Security-focused testing
 F2B_TEST_SUDO=true go test ./fail2ban -run TestSudo
 ```
+
+For comprehensive testing guidelines, mock patterns, and security testing practices, see
+[docs/testing.md](docs/testing.md).
 
 ### Code Quality & Linting
 
@@ -350,7 +315,7 @@ pre-commit run yamlfmt --all-files
 pre-commit run golangci-lint --all-files
 ```
 
-For detailed information about linting tools and configuration, see [docs/linting.md](../docs/linting.md).
+For detailed information about linting tools and configuration, see [docs/linting.md](docs/linting.md).
 
 ### Integration Examples
 
@@ -432,15 +397,18 @@ For larger changes or proposals, please open an issue to discuss your ideas firs
 
 Please see:
 
-- [CONTRIBUTING.md](../CONTRIBUTING.md) - Contribution guidelines
+- [CONTRIBUTING.md](CONTRIBUTING.md) - Contribution guidelines
 - [AGENTS.md](AGENTS.md) - Guidelines for AI/LLM contributors
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) - Community standards
+- [docs/architecture.md](docs/architecture.md) - System architecture and design
+- [docs/security.md](docs/security.md) - Security practices and guidelines
+- [docs/testing.md](docs/testing.md) - Testing strategies and patterns
 
 ---
 
 ## 📄 License
 
-[MIT License](../LICENSE.md).
+[MIT License](LICENSE.md).
 
 ---
 
@@ -453,7 +421,7 @@ Please see:
 ## 🆘 Support
 
 - 📝 [Open an issue](https://github.com/ivuorinen/f2b/issues)
-- 📖 [Read the FAQ](../FAQ.md)
+- 📖 [Read the FAQ](docs/faq.md)
 
 ---
 

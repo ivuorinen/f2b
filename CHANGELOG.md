@@ -44,7 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Comprehensive documentation updates**:
   - Updated README.md with complete feature overview and security guidance
   - Enhanced CONTRIBUTING.md with security and testing guidelines
-  - Expanded FAQ.md with sudo troubleshooting and new features
+  - Expanded docs/faq.md with sudo troubleshooting and new features
   - Updated .github/README.md to reflect modern Go implementation
   - Enhanced .github/AGENTS.md with privilege handling guidelines
 - Refactored CLI to use dependency injection for all commands.

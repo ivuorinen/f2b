@@ -6,9 +6,17 @@ repos:
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
+      - id: mixed-line-ending
       - id: check-yaml
       - id: check-added-large-files
       - id: check-merge-conflict
+      - id: check-json
+      - id: check-shebang-scripts-are-executable
+
+  - repo: https://github.com/pre-commit/sync-pre-commit-deps
+    rev: v0.0.3
+    hooks:
+      - id: sync-pre-commit-deps
 
   - repo: https://github.com/tekwizely/pre-commit-golang
     rev: v1.0.0-rc.1
@@ -19,16 +27,9 @@ repos:
         alias: tidy
       - id: go-fmt
         alias: fmt
-      - id: go-revive-mod
-        alias: revive
-      - id: go-vet-mod
-        alias: vet
+        args: [-s, -w]
       - id: go-test-mod
         alias: test
-      - id: go-staticcheck-mod
-        alias: staticcheck
-      - id: go-sec-mod
-        alias: gosec
 
   - repo: https://github.com/google/yamlfmt
     rev: v0.17.2
@@ -38,9 +39,8 @@ repos:
   - repo: local
     hooks:
       - id: golangci-lint
-        name: golangci-lint
-        entry: golangci-lint
-        args: [run, --timeout=5m]
+        name: Go Lint (golangci-lint)
+        entry: golangci-lint run
         language: system
         files: \.go$
         pass_filenames: false
@@ -60,6 +60,7 @@ repos:
       - id: editorconfig-checker
         name: EditorConfig Checker
         entry: editorconfig-checker
+        args: [-format, gcc]
         language: system
         files: .
 

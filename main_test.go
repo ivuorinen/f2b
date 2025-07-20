@@ -350,26 +350,14 @@ func TestMainFunctionLogic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original env vars
-			originalLogDir := os.Getenv("F2B_LOG_DIR")
-			originalFilterDir := os.Getenv("F2B_FILTER_DIR")
+			// Set up environment using t.Setenv for automatic cleanup
+			t.Setenv("F2B_LOG_DIR", os.Getenv("F2B_LOG_DIR"))
+			t.Setenv("F2B_FILTER_DIR", os.Getenv("F2B_FILTER_DIR"))
 
 			// Set test env vars
 			for key, value := range tt.envVars {
-				if err := os.Setenv(key, value); err != nil {
-					t.Fatalf("failed to set %s: %v", key, err)
-				}
+				t.Setenv(key, value)
 			}
-
-			// Restore env vars after test
-			defer func() {
-				if err := os.Setenv("F2B_LOG_DIR", originalLogDir); err != nil {
-					t.Fatalf("failed to restore F2B_LOG_DIR: %v", err)
-				}
-				if err := os.Setenv("F2B_FILTER_DIR", originalFilterDir); err != nil {
-					t.Fatalf("failed to restore F2B_FILTER_DIR: %v", err)
-				}
-			}()
 
 			// Test the main function's logic
 			args := tt.args
@@ -450,51 +438,9 @@ func TestMainConfigurationParsing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original env vars
-			originalLogDir := os.Getenv("F2B_LOG_DIR")
-			originalFilterDir := os.Getenv("F2B_FILTER_DIR")
-
-			// Set test env vars
-			if tt.logDirEnv != "" {
-				if err := os.Setenv("F2B_LOG_DIR", tt.logDirEnv); err != nil {
-					t.Fatalf("failed to set F2B_LOG_DIR: %v", err)
-				}
-			} else {
-				if err := os.Unsetenv("F2B_LOG_DIR"); err != nil {
-					t.Fatalf("failed to unset F2B_LOG_DIR: %v", err)
-				}
-			}
-			if tt.filterDirEnv != "" {
-				if err := os.Setenv("F2B_FILTER_DIR", tt.filterDirEnv); err != nil {
-					t.Fatalf("failed to set F2B_FILTER_DIR: %v", err)
-				}
-			} else {
-				if err := os.Unsetenv("F2B_FILTER_DIR"); err != nil {
-					t.Fatalf("failed to unset F2B_FILTER_DIR: %v", err)
-				}
-			}
-
-			// Restore env vars after test
-			defer func() {
-				if originalLogDir != "" {
-					if err := os.Setenv("F2B_LOG_DIR", originalLogDir); err != nil {
-						t.Fatalf("failed to restore F2B_LOG_DIR: %v", err)
-					}
-				} else {
-					if err := os.Unsetenv("F2B_LOG_DIR"); err != nil {
-						t.Fatalf("failed to unset F2B_LOG_DIR: %v", err)
-					}
-				}
-				if originalFilterDir != "" {
-					if err := os.Setenv("F2B_FILTER_DIR", originalFilterDir); err != nil {
-						t.Fatalf("failed to restore F2B_FILTER_DIR: %v", err)
-					}
-				} else {
-					if err := os.Unsetenv("F2B_FILTER_DIR"); err != nil {
-						t.Fatalf("failed to unset F2B_FILTER_DIR: %v", err)
-					}
-				}
-			}()
+			// Set test env vars using t.Setenv for automatic cleanup
+			t.Setenv("F2B_LOG_DIR", tt.logDirEnv)
+			t.Setenv("F2B_FILTER_DIR", tt.filterDirEnv)
 
 			// Simulate main function config building
 			config := struct {
@@ -745,26 +691,8 @@ func TestMainEnvironmentVariables(t *testing.T) {
 
 	for _, tt := range envTests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original value
-			original := os.Getenv(tt.envVar)
-
-			// Set test value
-			if err := os.Setenv(tt.envVar, tt.value); err != nil {
-				t.Fatalf("failed to set %s: %v", tt.envVar, err)
-			}
-
-			// Restore after test
-			defer func() {
-				if original != "" {
-					if err := os.Setenv(tt.envVar, original); err != nil {
-						t.Fatalf("failed to restore %s: %v", tt.envVar, err)
-					}
-				} else {
-					if err := os.Unsetenv(tt.envVar); err != nil {
-						t.Fatalf("failed to unset %s: %v", tt.envVar, err)
-					}
-				}
-			}()
+			// Set test value using t.Setenv for automatic cleanup
+			t.Setenv(tt.envVar, tt.value)
 
 			// Get value (this simulates what main does)
 			result := os.Getenv(tt.envVar)

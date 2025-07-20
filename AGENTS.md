@@ -10,9 +10,12 @@ Instructions for AI agents and human contributors to maintain consistent, secure
 - **Stack**: Go >=1.20, Cobra CLI, logrus logging, dependency injection
 - **Principles**: Security-first, testability, maintainability, privilege safety
 
+For detailed project architecture and design patterns, see [docs/architecture.md](docs/architecture.md).
+
 ## Commit Rules
 
-- **Read configs FIRST**: Study `.editorconfig`, `.golangci.yml`, `.markdownlint.json`, `.yamlfmt.yaml`, `.pre-commit-config.yaml`
+- **Read configs FIRST**: Study `.editorconfig`, `.golangci.yml`, `.markdownlint.json`,
+  `.yamlfmt.yaml`, `.pre-commit-config.yaml`
 - **Semantic Commits**: `type(scope): message` (e.g., `feat(cli): add ban command`)
 - **Preferred Workflow**: Use `pre-commit run --all-files` for unified linting and formatting
 - **Pre-commit Setup**: Run `pre-commit install` for automatic hooks on commit
@@ -28,6 +31,8 @@ Instructions for AI agents and human contributors to maintain consistent, secure
 - Validate IPs, jail names, and filter names to prevent injection
 - Use `MockSudoChecker` and `MockRunner` in tests
 - Handle privilege errors gracefully with helpful messages
+
+For comprehensive security guidelines and threat model, see [docs/security.md](docs/security.md).
 
 ## Configuration Files
 
@@ -59,9 +64,17 @@ For detailed information about all linting tools and configuration, see [docs/li
 - Co-locate tests with source files (`*_test.go`)
 - Use `integration_test.go` naming for integration tests
 
+For detailed testing patterns, mock usage, and examples, see [docs/testing.md](docs/testing.md).
+
 ## Development Workflow
 
-1. **Read configuration files first**: `.editorconfig`, `.golangci.yml`, `.markdownlint.json`, `.yamlfmt.yaml`, `.pre-commit-config.yaml`
+1. **Read configuration files first**:
+    - `.editorconfig`,
+    - `.golangci.yml`,
+    - `.markdownlint.json`,
+    - `.yamlfmt.yaml`,
+    - `.pre-commit-config.yaml`
+
 2. **Study existing code patterns** and project structure before making changes
 3. **Apply configuration rules** during development to avoid style violations
 4. **Implement changes** following security and testing requirements

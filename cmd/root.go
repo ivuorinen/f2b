@@ -7,9 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ivuorinen/f2b/fail2ban"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+
+	"github.com/ivuorinen/f2b/fail2ban"
 )
 
 // Config holds global configuration for the CLI, including log and filter directories and output format.
@@ -28,6 +29,7 @@ var (
 	cfg Config
 )
 
+// Execute runs the CLI application with the given client and configuration.
 func Execute(client fail2ban.Client, config Config) error {
 	cfg = config
 	ctx := context.Background()
@@ -65,7 +67,7 @@ func init() {
 	rootCmd.PersistentFlags().String("log-file", logFile, "Path to log file for f2b logs (optional)")
 	rootCmd.PersistentFlags().String("log-level", logLevel, "Log level (debug, info, warn, error)")
 
-	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+	rootCmd.PersistentPreRun = func(cmd *cobra.Command, _ []string) {
 		logFileFlag, _ := cmd.Flags().GetString("log-file")
 		if logFileFlag != "" {
 			// Validate log file path for security

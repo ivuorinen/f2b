@@ -1,6 +1,10 @@
 # f2b Makefile
 
-.PHONY: help all build test lint fmt clean install dev-deps check-deps test-verbose test-coverage lint-legacy lint-strict lint-fix lint-go lint-md lint-yaml lint-actions lint-make ci ci-coverage security dev-setup pre-commit-setup release-dry-run release release-snapshot release-check _check-tag
+.PHONY: help all build test lint fmt clean install dev-deps ci \
+	check-deps test-verbose test-coverage \
+	lint-go lint-md lint-yaml lint-actions lint-make \
+	ci ci-coverage security dev-setup pre-commit-setup \
+	release-dry-run release release-snapshot release-check _check-tag
 
 # Default target
 help: ## Show this help message
@@ -28,7 +32,8 @@ dev-deps: ## Install development dependencies
 	}
 	@command -v golangci-lint >/dev/null 2>&1 || { \
 		echo "Installing golangci-lint..."; \
-		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $$(go env GOPATH)/bin v1.55.2; \
+		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | \
+			sh -s -- -b $$(go env GOPATH)/bin v1.55.2; \
 	}
 	@command -v markdownlint-cli2 >/dev/null 2>&1 || { \
 		echo "Installing markdownlint-cli2..."; \
@@ -66,21 +71,39 @@ dev-deps: ## Install development dependencies
 		echo "Installing checkmake..."; \
 		go install github.com/mrtazz/checkmake/cmd/checkmake@latest; \
 	}
+	@command -v golines >/dev/null 2>&1 || { \
+		echo "Installing golines..."; \
+		go install github.com/segmentio/golines@latest; \
+	}
 
 check-deps: ## Check if all development dependencies are installed
 	@echo "Checking development dependencies..."
-	@command -v go >/dev/null 2>&1 || { echo "go is not installed"; exit 1; }
-	@command -v goreleaser >/dev/null 2>&1 || { echo "goreleaser is not installed (run: make dev-deps)"; exit 1; }
-	@command -v golangci-lint >/dev/null 2>&1 || { echo "golangci-lint is not installed (run: make dev-deps)"; exit 1; }
-	@command -v markdownlint-cli2 >/dev/null 2>&1 || { echo "markdownlint-cli2 is not installed (run: make dev-deps)"; exit 1; }
-	@command -v goimports >/dev/null 2>&1 || { echo "goimports is not installed (run: make dev-deps)"; exit 1; }
-	@command -v editorconfig-checker >/dev/null 2>&1 || { echo "editorconfig-checker is not installed (run: make dev-deps)"; exit 1; }
-	@command -v gosec >/dev/null 2>&1 || { echo "gosec is not installed (run: make dev-deps)"; exit 1; }
-	@command -v staticcheck >/dev/null 2>&1 || { echo "staticcheck is not installed (run: make dev-deps)"; exit 1; }
-	@command -v revive >/dev/null 2>&1 || { echo "revive is not installed (run: make dev-deps)"; exit 1; }
-	@command -v checkmake >/dev/null 2>&1 || { echo "checkmake is not installed (run: make dev-deps)"; exit 1; }
-	@command -v yamlfmt >/dev/null 2>&1 || { echo "yamlfmt is not installed (run: make dev-deps)"; exit 1; }
-	@command -v actionlint >/dev/null 2>&1 || { echo "actionlint is not installed (run: make dev-deps)"; exit 1; }
+	@command -v go >/dev/null 2>&1 || {
+		echo "go is not installed"; exit 1; }
+	@command -v goreleaser >/dev/null 2>&1 || {
+		echo "goreleaser is not installed (run: make dev-deps)"; exit 1; }
+	@command -v golangci-lint >/dev/null 2>&1 || {
+		echo "golangci-lint is not installed (run: make dev-deps)"; exit 1; }
+	@command -v markdownlint-cli2 >/dev/null 2>&1 || {
+		echo "markdownlint-cli2 is not installed (run: make dev-deps)"; exit 1; }
+	@command -v goimports >/dev/null 2>&1 || {
+		echo "goimports is not installed (run: make dev-deps)"; exit 1; }
+	@command -v editorconfig-checker >/dev/null 2>&1 || {
+		echo "editorconfig-checker is not installed (run: make dev-deps)"; exit 1; }
+	@command -v gosec >/dev/null 2>&1 || {
+		echo "gosec is not installed (run: make dev-deps)"; exit 1; }
+	@command -v staticcheck >/dev/null 2>&1 || {
+		echo "staticcheck is not installed (run: make dev-deps)"; exit 1; }
+	@command -v revive >/dev/null 2>&1 || {
+		echo "revive is not installed (run: make dev-deps)"; exit 1; }
+	@command -v checkmake >/dev/null 2>&1 || {
+		echo "checkmake is not installed (run: make dev-deps)"; exit 1; }
+	@command -v yamlfmt >/dev/null 2>&1 || {
+		echo "yamlfmt is not installed (run: make dev-deps)"; exit 1; }
+	@command -v actionlint >/dev/null 2>&1 || {
+		echo "actionlint is not installed (run: make dev-deps)"; exit 1; }
+	@command -v golines >/dev/null 2>&1 || {
+		echo "golines is not installed (run: make dev-deps)"; exit 1; }
 	@echo "All dependencies are installed ✓"
 
 # Testing targets
@@ -105,44 +128,12 @@ lint: ## Run all linters using pre-commit (preferred method)
 	@pre-commit run --all-files
 	@echo "All linting completed ✓"
 
-lint-legacy: check-deps ## Run individual linters (legacy method)
-	@echo "Running Go linters..."
-	@go vet ./...
-	@golangci-lint run --timeout=5m
-	@echo "Go linting ✓"
-	@echo ""
-	@echo "Running Markdown linter..."
-	@markdownlint-cli2 *.md || true
-	@echo "Markdown linting ✓"
-	@echo ""
-	@echo "Running YAML linter..."
-	@yamlfmt -lint . || true
-	@echo "YAML linting ✓"
-	@echo ""
-	@echo "Running GitHub Actions linter..."
-	@actionlint .github/workflows/*.yml || true
-	@echo "GitHub Actions linting ✓"
-	@echo ""
-	@echo "Running Makefile linter..."
-	@checkmake Makefile || true
-	@echo "Makefile linting ✓"
-
-lint-strict: ## Run all linters with strict mode using pre-commit
-	@echo "Running pre-commit linters (strict)..."
-	@pre-commit run --all-files
-	@echo "All strict linting completed ✓"
-
-lint-fix: ## Run linters with auto-fix using pre-commit
-	@echo "Running pre-commit with auto-fix..."
-	@pre-commit run --all-files
-	@echo "All fixes applied ✓"
-
 lint-go: ## Run only Go linters
 	go vet ./...
 	golangci-lint run --timeout=5m
 
 lint-md: ## Run only Markdown linter
-	markdownlint-cli2 *.md
+	markdownlint-cli2 *.md **/*.md
 
 lint-yaml: ## Run only YAML linter
 	yamlfmt -lint .

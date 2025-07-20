@@ -225,7 +225,8 @@ Both workflows now use unified pre-commit:
 
 ### Before Committing
 
-1. **Read configuration files first**: `.editorconfig`, `.golangci.yml`, `.markdownlint.json`, `.yamlfmt.yaml`, `.pre-commit-config.yaml`
+1. **Read configuration files first**: `.editorconfig`, `.golangci.yml`,
+  `.markdownlint.json`, `.yamlfmt.yaml`, `.pre-commit-config.yaml`
 2. **Apply configuration rules** during development
 3. **Run pre-commit checks**: `pre-commit run --all-files`
 4. **Fix all issues** across the project

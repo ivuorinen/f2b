@@ -27,7 +27,7 @@ func TestSetLogDir(t *testing.T) {
 
 	// Test that GetLogLines uses the new directory
 	logContent := "2024-01-01 12:00:00 [sshd] Test log entry"
-	err := os.WriteFile(filepath.Join(tempDir, "fail2ban.log"), []byte(logContent), 0644)
+	err := os.WriteFile(filepath.Join(tempDir, "fail2ban.log"), []byte(logContent), 0600)
 	if err != nil {
 		t.Fatalf("failed to create test log file: %v", err)
 	}
@@ -149,6 +149,7 @@ func TestLogFileReading(t *testing.T) {
 			filePath := filepath.Join(tempDir, tt.filename)
 			if tt.compressed {
 				// Create compressed file
+				// #nosec G304 - filePath is safely constructed from tempDir and test data
 				file, err := os.Create(filePath)
 				if err != nil {
 					t.Fatalf("failed to create file: %v", err)
@@ -168,7 +169,7 @@ func TestLogFileReading(t *testing.T) {
 					t.Fatalf("failed to close gzip writer: %v", err)
 				}
 			} else {
-				err := os.WriteFile(filePath, []byte(tt.content), 0644)
+				err := os.WriteFile(filePath, []byte(tt.content), 0600)
 				if err != nil {
 					t.Fatalf("failed to write file: %v", err)
 				}
@@ -207,7 +208,7 @@ func TestLogFileOrdering(t *testing.T) {
 	}
 
 	for filename, content := range logFiles {
-		err := os.WriteFile(filepath.Join(tempDir, filename), []byte(content), 0644)
+		err := os.WriteFile(filepath.Join(tempDir, filename), []byte(content), 0600)
 		if err != nil {
 			t.Fatalf("failed to create log file %s: %v", filename, err)
 		}
@@ -248,7 +249,7 @@ func TestLogFiltering(t *testing.T) {
 2024-01-01 12:03:00 [apache] Ban 192.168.1.101
 2024-01-01 12:04:00 [nginx] Found 192.168.1.102`
 
-	err := os.WriteFile(filepath.Join(tempDir, "fail2ban.log"), []byte(logContent), 0644)
+	err := os.WriteFile(filepath.Join(tempDir, "fail2ban.log"), []byte(logContent), 0600)
 	if err != nil {
 		t.Fatalf("failed to create test log file: %v", err)
 	}
