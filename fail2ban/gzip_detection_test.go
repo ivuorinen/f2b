@@ -1,7 +1,6 @@
 package fail2ban
 
 import (
-	"compress/gzip"
 	"io"
 	"os"
 	"path/filepath"
@@ -12,30 +11,16 @@ import (
 func TestGzipDetector(t *testing.T) {
 	detector := NewGzipDetector()
 
-	// Create temp directory for test files
-	tempDir := t.TempDir()
-
-	// Test regular file
-	regularFile := filepath.Join(tempDir, "regular.log")
-	err := os.WriteFile(regularFile, []byte("test log line\n"), 0600)
-	if err != nil {
-		t.Fatalf("Failed to create regular file: %v", err)
+	// Create temp directory with test files
+	files := map[string][]byte{
+		"regular.log": []byte("test log line\n"),
 	}
+	tempDir := setupTempDirWithFiles(t, files)
 
 	// Test gzip file
+	regularFile := filepath.Join(tempDir, "regular.log")
 	gzipFile := filepath.Join(tempDir, "compressed.log.gz")
-	// #nosec G304 - Test file path in temp directory, safe for testing
-	f, err := os.Create(gzipFile)
-	if err != nil {
-		t.Fatalf("Failed to create gzip file: %v", err)
-	}
-	gz := gzip.NewWriter(f)
-	_, err = gz.Write([]byte("compressed log line\n"))
-	if err != nil {
-		t.Fatalf("Failed to write gzip content: %v", err)
-	}
-	_ = gz.Close()
-	_ = f.Close()
+	createTestGzipFile(t, gzipFile, []byte("compressed log line\n"))
 
 	tests := []struct {
 		name   string
@@ -70,32 +55,18 @@ func TestGzipDetector(t *testing.T) {
 func TestOpenGzipAwareReader(t *testing.T) {
 	detector := NewGzipDetector()
 
-	// Create temp directory for test files
-	tempDir := t.TempDir()
-
-	// Test regular file
-	regularFile := filepath.Join(tempDir, "regular.log")
+	// Create temp directory with test files
 	testContent := "test log line\nsecond line\n"
-	err := os.WriteFile(regularFile, []byte(testContent), 0600)
-	if err != nil {
-		t.Fatalf("Failed to create regular file: %v", err)
+	files := map[string][]byte{
+		"regular.log": []byte(testContent),
 	}
+	tempDir := setupTempDirWithFiles(t, files)
+	regularFile := filepath.Join(tempDir, "regular.log")
 
 	// Test gzip file
 	gzipFile := filepath.Join(tempDir, "compressed.log.gz")
-	// #nosec G304 - Test file path in temp directory, safe for testing
-	f, err := os.Create(gzipFile)
-	if err != nil {
-		t.Fatalf("Failed to create gzip file: %v", err)
-	}
-	gz := gzip.NewWriter(f)
 	gzipContent := "compressed log line\ncompressed second line\n"
-	_, err = gz.Write([]byte(gzipContent))
-	if err != nil {
-		t.Fatalf("Failed to write gzip content: %v", err)
-	}
-	_ = gz.Close()
-	_ = f.Close()
+	createTestGzipFile(t, gzipFile, []byte(gzipContent))
 
 	tests := []struct {
 		name     string
@@ -137,34 +108,20 @@ func TestOpenGzipAwareReader(t *testing.T) {
 func TestCreateGzipAwareScanner(t *testing.T) {
 	detector := NewGzipDetector()
 
-	// Create temp directory for test files
-	tempDir := t.TempDir()
-
-	// Test regular file
-	regularFile := filepath.Join(tempDir, "regular.log")
+	// Create temp directory with test files
 	testLines := []string{"line1", "line2", "line3"}
 	testContent := strings.Join(testLines, "\n")
-	err := os.WriteFile(regularFile, []byte(testContent), 0600)
-	if err != nil {
-		t.Fatalf("Failed to create regular file: %v", err)
+	files := map[string][]byte{
+		"regular.log": []byte(testContent),
 	}
+	tempDir := setupTempDirWithFiles(t, files)
+	regularFile := filepath.Join(tempDir, "regular.log")
 
 	// Test gzip file
 	gzipFile := filepath.Join(tempDir, "compressed.log.gz")
-	// #nosec G304 - Test file path in temp directory, safe for testing
-	f, err := os.Create(gzipFile)
-	if err != nil {
-		t.Fatalf("Failed to create gzip file: %v", err)
-	}
-	gz := gzip.NewWriter(f)
 	gzipLines := []string{"gzip1", "gzip2", "gzip3"}
 	gzipContent := strings.Join(gzipLines, "\n")
-	_, err = gz.Write([]byte(gzipContent))
-	if err != nil {
-		t.Fatalf("Failed to write gzip content: %v", err)
-	}
-	_ = gz.Close()
-	_ = f.Close()
+	createTestGzipFile(t, gzipFile, []byte(gzipContent))
 
 	tests := []struct {
 		name          string
@@ -301,20 +258,7 @@ func TestGzipFileReaderClose(t *testing.T) {
 	// Create temp gzip file
 	tempDir := t.TempDir()
 	gzipFile := filepath.Join(tempDir, "test.log.gz")
-
-	// #nosec G304 - Test file path in temp directory, safe for testing
-	f, err := os.Create(gzipFile)
-	if err != nil {
-		t.Fatalf("Failed to create gzip file: %v", err)
-	}
-
-	gz := gzip.NewWriter(f)
-	_, err = gz.Write([]byte("test content"))
-	if err != nil {
-		t.Fatalf("Failed to write gzip content: %v", err)
-	}
-	_ = gz.Close()
-	_ = f.Close()
+	createTestGzipFile(t, gzipFile, []byte("test content"))
 
 	// Test that gzipFileReader closes both readers properly
 	reader, err := OpenGzipAwareReader(gzipFile)
@@ -337,21 +281,17 @@ func TestGzipFileReaderClose(t *testing.T) {
 }
 
 func BenchmarkGzipDetection(b *testing.B) {
-	tempDir := b.TempDir()
 	detector := NewGzipDetector()
 
 	// Create test files
+	files := map[string][]byte{
+		"regular.log": []byte("test content"),
+	}
+	tempDir := setupTempDirWithFiles(b, files)
+
 	regularFile := filepath.Join(tempDir, "regular.log")
 	gzipFile := filepath.Join(tempDir, "compressed.log.gz")
-
-	_ = os.WriteFile(regularFile, []byte("test content"), 0600)
-
-	// #nosec G304 - Test file path in temp directory, safe for testing
-	f, _ := os.Create(gzipFile)
-	gz := gzip.NewWriter(f)
-	_, _ = gz.Write([]byte("compressed content"))
-	_ = gz.Close()
-	_ = f.Close()
+	createTestGzipFile(b, gzipFile, []byte("compressed content"))
 
 	b.Run("regular file", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
@@ -364,4 +304,116 @@ func BenchmarkGzipDetection(b *testing.B) {
 			_, _ = detector.IsGzipFile(gzipFile)
 		}
 	})
+}
+
+// TestGzipDetectionWithRealTestData tests gzip detection with actual test data files
+func TestGzipDetectionWithRealTestData(t *testing.T) {
+	detector := NewGzipDetector()
+
+	// Test with real test data files
+	tests := []struct {
+		name     string
+		file     string
+		wantGzip bool
+	}{
+		{
+			name:     "uncompressed log file",
+			file:     filepath.Join("testdata", "fail2ban_sample.log"),
+			wantGzip: false,
+		},
+		{
+			name:     "compressed log file",
+			file:     filepath.Join("testdata", "fail2ban_compressed.log.gz"),
+			wantGzip: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Skip if test file doesn't exist
+			if _, err := os.Stat(tt.file); os.IsNotExist(err) {
+				t.Skipf("Test data file not found: %s", tt.file)
+			}
+
+			isGzip, err := detector.IsGzipFile(tt.file)
+			if err != nil {
+				t.Fatalf("IsGzipFile failed: %v", err)
+			}
+
+			if isGzip != tt.wantGzip {
+				t.Errorf("IsGzipFile(%s) = %v, want %v", tt.file, isGzip, tt.wantGzip)
+			}
+		})
+	}
+}
+
+// TestReadCompressedRealLogs tests reading actual compressed log data
+func TestReadCompressedRealLogs(t *testing.T) {
+	detector := NewGzipDetector()
+	compressedFile := filepath.Join("testdata", "fail2ban_compressed.log.gz")
+
+	// Skip if test file doesn't exist
+	if _, err := os.Stat(compressedFile); os.IsNotExist(err) {
+		t.Skip("Compressed test data file not found:", compressedFile)
+	}
+
+	// Create scanner for compressed file
+	scanner, cleanup, err := detector.CreateGzipAwareScanner(compressedFile)
+	if err != nil {
+		t.Fatalf("Failed to create scanner: %v", err)
+	}
+	defer cleanup()
+
+	// Read and verify content
+	lineCount := 0
+	var firstLine, lastLine string
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if lineCount == 0 {
+			firstLine = line
+		}
+		lastLine = line
+		lineCount++
+	}
+
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("Scanner error: %v", err)
+	}
+
+	// Should have read the expected number of lines
+	if lineCount < 50 {
+		t.Errorf("Expected at least 50 lines, got %d", lineCount)
+	}
+
+	// Verify content looks like fail2ban logs
+	if !strings.Contains(firstLine, "fail2ban") {
+		t.Error("First line doesn't look like a fail2ban log")
+	}
+
+	t.Logf("Read %d lines from compressed file", lineCount)
+	t.Logf("First line: %s", firstLine)
+	t.Logf("Last line: %s", lastLine)
+}
+
+// BenchmarkGzipDetectionWithRealFile benchmarks with actual test data
+func BenchmarkGzipDetectionWithRealFile(b *testing.B) {
+	detector := NewGzipDetector()
+	compressedFile := filepath.Join("testdata", "fail2ban_compressed.log.gz")
+
+	// Skip if test file doesn't exist
+	if _, err := os.Stat(compressedFile); os.IsNotExist(err) {
+		b.Skip("Compressed test data file not found:", compressedFile)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		isGzip, err := detector.IsGzipFile(compressedFile)
+		if err != nil {
+			b.Fatalf("IsGzipFile failed: %v", err)
+		}
+		if !isGzip {
+			b.Fatal("Expected file to be detected as gzip")
+		}
+	}
 }

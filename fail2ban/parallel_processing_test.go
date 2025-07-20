@@ -79,30 +79,30 @@ func TestWorkerPoolWithErrors(t *testing.T) {
 }
 
 func TestWorkerPoolCancellation(t *testing.T) {
-	pool := NewWorkerPool[int, int](1) // Single worker for predictable behavior
+	pool := NewWorkerPool[int, int](3) // Multiple workers for better concurrency
 	items := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Create a channel to coordinate cancellation timing
-	started := make(chan struct{}, 1)
+	workStarted := make(chan struct{})
+	var startOnce sync.Once
 
-	// Cancel after first work item starts
+	// Cancel after first work item starts, with enough delay for multiple items to start
 	go func() {
-		<-started                        // Wait for at least one work item to start
-		time.Sleep(1 * time.Millisecond) // Small delay to let some work begin
+		<-workStarted                     // Wait for first work item to start
+		time.Sleep(10 * time.Millisecond) // Allow multiple work items to start
 		cancel()
 	}()
 
 	results, err := pool.Process(ctx, items, func(workCtx context.Context, item int) (int, error) {
 		// Signal that work has started (only once)
-		select {
-		case started <- struct{}{}:
-		default:
-		}
+		startOnce.Do(func() {
+			close(workStarted)
+		})
 
-		// Simulate work that can be canceled
+		// Simulate longer work that's more likely to be canceled
 		select {
-		case <-time.After(15 * time.Millisecond):
+		case <-time.After(50 * time.Millisecond): // Longer work duration
 			return item * 2, nil
 		case <-workCtx.Done():
 			return 0, workCtx.Err()
@@ -115,15 +115,25 @@ func TestWorkerPoolCancellation(t *testing.T) {
 
 	// Some results should be canceled
 	cancelledCount := 0
+	completedCount := 0
 	for _, result := range results {
 		if errors.Is(result.Error, context.Canceled) {
 			cancelledCount++
+		} else if result.Error == nil {
+			completedCount++
 		}
 	}
 
+	// Verify that we have both completed and canceled results
 	if cancelledCount == 0 {
-		t.Error("Expected some results to be canceled")
+		t.Errorf("Expected some results to be canceled, but got 0 canceled, %d completed", completedCount)
 	}
+
+	if completedCount == 0 {
+		t.Error("Expected some results to complete successfully")
+	}
+
+	t.Logf("Test results: %d completed, %d canceled", completedCount, cancelledCount)
 }
 
 func TestWorkerPoolEmpty(t *testing.T) {

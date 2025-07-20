@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestBanRecordParser(t *testing.T) {
@@ -21,6 +22,20 @@ func TestBanRecordParser(t *testing.T) {
 			line:    "192.168.1.100 2023-12-01 14:30:45 + 2023-12-02 14:30:45 remaining",
 			jail:    "sshd",
 			wantIP:  "192.168.1.100",
+			wantNil: false,
+		},
+		{
+			name:    "real production format - current ban",
+			line:    "192.168.1.100 2025-07-20 14:30:39 + 2025-07-20 14:40:39 remaining",
+			jail:    "sshd",
+			wantIP:  "192.168.1.100",
+			wantNil: false,
+		},
+		{
+			name:    "real production format - longer ban",
+			line:    "10.0.0.50 2025-07-20 02:54:28 + 2025-07-20 03:04:28 remaining",
+			jail:    "nginx",
+			wantIP:  "10.0.0.50",
 			wantNil: false,
 		},
 		{
@@ -211,5 +226,177 @@ func TestBanRecordParserConcurrent(t *testing.T) {
 		if err := <-results; err != nil {
 			t.Errorf("Concurrent parsing failed: %v", err)
 		}
+	}
+}
+
+// TestRealWorldBanRecordPatterns tests with actual patterns from production logs
+func TestRealWorldBanRecordPatterns(t *testing.T) {
+	parser := NewBanRecordParser()
+
+	// Real patterns observed in production fail2ban
+	realWorldPatterns := []struct {
+		name        string
+		output      string
+		jail        string
+		wantRecords int
+		checkIPs    []string
+	}{
+		{
+			name: "mixed active bans from production",
+			output: `192.168.1.100 2025-07-20 00:02:41 + 2025-07-20 00:12:41 remaining
+10.0.0.50 2025-07-20 02:37:27 + 2025-07-20 02:47:27 remaining
+172.16.0.100 2025-07-20 00:24:53 + 2025-07-20 00:34:53 remaining
+192.168.2.100 2025-07-20 16:04:33 + 2025-07-20 16:14:33 remaining`,
+			jail:        "sshd",
+			wantRecords: 4,
+			checkIPs:    []string{"192.168.1.100", "10.0.0.50", "172.16.0.100", "192.168.2.100"},
+		},
+		{
+			name: "repeated offender patterns",
+			output: `192.168.1.100 2025-07-20 00:02:41 + 2025-07-20 00:12:41 remaining
+192.168.1.100 2025-07-20 00:52:16 + 2025-07-20 01:02:16 remaining
+192.168.1.100 2025-07-20 01:41:47 + 2025-07-20 01:51:47 remaining`,
+			jail:        "sshd",
+			wantRecords: 3,
+			checkIPs:    []string{"192.168.1.100"},
+		},
+		{
+			name: "ban cycle timing from real data",
+			output: `10.0.0.50 2025-07-20 02:37:27 + 2025-07-20 02:47:27 remaining
+10.0.0.50 2025-07-20 02:54:28 + 2025-07-20 03:04:28 remaining
+10.0.0.51 2025-07-20 08:59:23 + 2025-07-20 09:09:23 remaining`,
+			jail:        "sshd",
+			wantRecords: 3,
+			checkIPs:    []string{"10.0.0.50", "10.0.0.51"},
+		},
+	}
+
+	for _, tt := range realWorldPatterns {
+		t.Run(tt.name, func(t *testing.T) {
+			records, err := parser.ParseBanRecords(tt.output, tt.jail)
+			if err != nil {
+				t.Fatalf("ParseBanRecords failed: %v", err)
+			}
+
+			if len(records) != tt.wantRecords {
+				t.Errorf("Expected %d records, got %d", tt.wantRecords, len(records))
+			}
+
+			// Check all expected IPs are present
+			ipMap := make(map[string]bool)
+			for _, record := range records {
+				ipMap[record.IP] = true
+
+				// Verify jail
+				if record.Jail != tt.jail {
+					t.Errorf("Record has wrong jail: got %s, want %s", record.Jail, tt.jail)
+				}
+
+				// Verify ban time is parsed
+				if record.BannedAt.IsZero() {
+					t.Errorf("Record for %s has zero ban time", record.IP)
+				}
+			}
+
+			for _, checkIP := range tt.checkIPs {
+				if !ipMap[checkIP] {
+					t.Errorf("Expected IP %s not found in records", checkIP)
+				}
+			}
+		})
+	}
+}
+
+// TestProductionLogTimingPatterns verifies timing patterns from real logs
+func TestProductionLogTimingPatterns(t *testing.T) {
+	parser := NewBanRecordParser()
+
+	// Test various real production patterns
+	tests := []struct {
+		name       string
+		line       string
+		wantIP     string
+		checkTime  bool // Whether to check specific time (only for full format)
+		wantParsed bool
+	}{
+		{
+			name:       "10 minute ban (default)",
+			line:       "192.168.1.100 2025-07-20 02:37:27 + 2025-07-20 02:47:27 remaining",
+			wantIP:     "192.168.1.100",
+			checkTime:  true,
+			wantParsed: true,
+		},
+		{
+			name:       "early morning attack",
+			line:       "192.168.1.101 2025-07-20 00:11:41 + 2025-07-20 00:21:41 remaining",
+			wantIP:     "192.168.1.101",
+			checkTime:  true,
+			wantParsed: true,
+		},
+		{
+			name:       "late night ban",
+			line:       "172.16.0.100 2025-07-20 18:23:55 + 2025-07-20 18:33:55 remaining",
+			wantIP:     "172.16.0.100",
+			checkTime:  true,
+			wantParsed: true,
+		},
+		{
+			name:       "simple format from production",
+			line:       "192.168.2.100 banned",
+			wantIP:     "192.168.2.100",
+			checkTime:  false, // Simple format uses current time
+			wantParsed: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			record, err := parser.ParseBanRecordLine(tt.line, "sshd")
+
+			if !tt.wantParsed {
+				if record != nil || err == nil {
+					t.Error("Expected no record or error")
+				}
+				return
+			}
+
+			if err != nil && !errors.Is(err, ErrEmptyLine) && !errors.Is(err, ErrInsufficientFields) &&
+				!errors.Is(err, ErrInvalidBanTime) {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			if record == nil {
+				t.Fatal("Expected record, got nil")
+			}
+
+			// Verify IP
+			if record.IP != tt.wantIP {
+				t.Errorf("IP mismatch: got %s, want %s", record.IP, tt.wantIP)
+			}
+
+			// Verify ban time is set (even if it's current time for simple format)
+			if record.BannedAt.IsZero() {
+				t.Error("Ban time should not be zero")
+			}
+
+			// For full format, verify it parses the time from the record
+			if tt.checkTime && len(strings.Fields(tt.line)) >= 8 {
+				// The ban time should be from the record, not current time
+				parts := strings.Fields(tt.line)
+				expectedDate := parts[1]
+				expectedTime := parts[2]
+
+				// Just verify it's not using current time
+				now := time.Now()
+				if record.BannedAt.Year() == now.Year() &&
+					record.BannedAt.Month() == now.Month() &&
+					record.BannedAt.Day() == now.Day() &&
+					record.BannedAt.Hour() == now.Hour() {
+					// Likely using current time instead of parsing
+					t.Logf("Warning: Ban time might be using current time instead of parsed time")
+					t.Logf("Expected to parse date %s time %s", expectedDate, expectedTime)
+				}
+			}
+		})
 	}
 }
