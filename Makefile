@@ -56,7 +56,7 @@ dev-deps: ## Install development dependencies
 	}
 	@command -v gosec >/dev/null 2>&1 || { \
 		echo "Installing gosec..."; \
-		go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest; \
+		go install github.com/securego/gosec/v2/cmd/gosec@latest; \
 	}
 	@command -v staticcheck >/dev/null 2>&1 || { \
 		echo "Installing staticcheck..."; \
