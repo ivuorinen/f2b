@@ -43,9 +43,9 @@ func TestParallelOperationProcessor_UnbanIndexValidation(t *testing.T) {
 	// Mock client for testing - need to ban first
 	mockClient := NewMockClient()
 
-	// Ban the IP first so we can unban it
-	_, _ = mockClient.BanIP("192.168.1.100", "sshd")
-	_, _ = mockClient.BanIP("192.168.1.100", "apache")
+	// Ban the IP first so we can unban it using framework for consistency
+	NewCommandTest(t, "ban").WithArgs("192.168.1.100", "sshd").WithMockClient(mockClient).ExpectSuccess().Run()
+	NewCommandTest(t, "ban").WithArgs("192.168.1.100", "apache").WithMockClient(mockClient).ExpectSuccess().Run()
 
 	jails := []string{"sshd", "apache"}
 

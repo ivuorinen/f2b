@@ -17,9 +17,7 @@ func TestNewMockClient(t *testing.T) {
 
 	// Test default jails
 	jails, err := client.ListJails()
-	if err != nil {
-		t.Fatalf("ListJails failed: %v", err)
-	}
+	fail2ban.AssertError(t, err, false, "ListJails")
 
 	expectedJails := []string{"sshd", "apache"}
 	if len(jails) != len(expectedJails) {
@@ -28,9 +26,7 @@ func TestNewMockClient(t *testing.T) {
 
 	// Test default filters
 	filters, err := client.ListFilters()
-	if err != nil {
-		t.Fatalf("ListFilters failed: %v", err)
-	}
+	fail2ban.AssertError(t, err, false, "ListFilters")
 
 	expectedFilters := []string{"sshd", "apache"}
 	if len(filters) != len(expectedFilters) {
@@ -42,9 +38,7 @@ func TestMockClientListJails(t *testing.T) {
 	client := fail2ban.NewMockClient()
 
 	jails, err := client.ListJails()
-	if err != nil {
-		t.Fatalf("ListJails failed: %v", err)
-	}
+	fail2ban.AssertError(t, err, false, "ListJails")
 
 	// Should contain default jails
 	jailMap := make(map[string]bool)
@@ -64,9 +58,7 @@ func TestMockClientStatusAll(t *testing.T) {
 	client := fail2ban.NewMockClient()
 
 	status, err := client.StatusAll()
-	if err != nil {
-		t.Fatalf("StatusAll failed: %v", err)
-	}
+	fail2ban.AssertError(t, err, false, "StatusAll")
 
 	expected := "Mock status for all jails"
 	if status != expected {
@@ -103,14 +95,8 @@ func TestMockClientStatusJail(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			status, err := client.StatusJail(tt.jail)
 
-			if tt.expectError {
-				if err == nil {
-					t.Errorf("expected error for jail %q", tt.jail)
-				}
-			} else {
-				if err != nil {
-					t.Errorf("unexpected error for jail %q: %v", tt.jail, err)
-				}
+			fail2ban.AssertError(t, err, tt.expectError, tt.name)
+			if !tt.expectError {
 				expected := "Mock status for jail " + tt.jail
 				if status != expected {
 					t.Errorf("expected status %q, got %q", expected, status)
@@ -163,14 +149,8 @@ func TestMockClientBanIP(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			code, err := client.BanIP(tt.ip, tt.jail)
 
-			if tt.expectError {
-				if err == nil {
-					t.Errorf("expected error for jail %q", tt.jail)
-				}
-			} else {
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
+			fail2ban.AssertError(t, err, tt.expectError, tt.name)
+			if !tt.expectError {
 				if code != tt.expectedCode {
 					t.Errorf("expected code %d, got %d", tt.expectedCode, code)
 				}
@@ -184,9 +164,7 @@ func TestMockClientUnbanIP(t *testing.T) {
 
 	// First ban an IP
 	_, err := client.BanIP("192.168.1.100", "sshd")
-	if err != nil {
-		t.Fatalf("failed to ban IP: %v", err)
-	}
+	fail2ban.AssertError(t, err, false, "ban IP for setup")
 
 	tests := []struct {
 		name         string
@@ -228,14 +206,8 @@ func TestMockClientUnbanIP(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			code, err := client.UnbanIP(tt.ip, tt.jail)
 
-			if tt.expectError {
-				if err == nil {
-					t.Errorf("expected error for jail %q", tt.jail)
-				}
-			} else {
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
+			fail2ban.AssertError(t, err, tt.expectError, tt.name)
+			if !tt.expectError {
 				if code != tt.expectedCode {
 					t.Errorf("expected code %d, got %d", tt.expectedCode, code)
 				}
@@ -249,14 +221,10 @@ func TestMockClientBannedIn(t *testing.T) {
 
 	// Ban IP in multiple jails
 	_, err := client.BanIP("192.168.1.100", "sshd")
-	if err != nil {
-		t.Fatalf("failed to ban IP in sshd: %v", err)
-	}
+	fail2ban.AssertError(t, err, false, "ban IP in sshd")
 
 	_, err = client.BanIP("192.168.1.100", "apache")
-	if err != nil {
-		t.Fatalf("failed to ban IP in apache: %v", err)
-	}
+	fail2ban.AssertError(t, err, false, "ban IP in apache")
 
 	tests := []struct {
 		name          string
@@ -278,9 +246,7 @@ func TestMockClientBannedIn(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			jails, err := client.BannedIn(tt.ip)
-			if err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
+			fail2ban.AssertError(t, err, false, tt.name)
 
 			if len(jails) != len(tt.expectedJails) {
 				t.Errorf("expected %d jails, got %d", len(tt.expectedJails), len(jails))
@@ -306,19 +272,13 @@ func TestMockClientGetBanRecords(t *testing.T) {
 
 	// Ban some IPs
 	_, err := client.BanIP("192.168.1.100", "sshd")
-	if err != nil {
-		t.Fatalf("failed to ban IP: %v", err)
-	}
+	fail2ban.AssertError(t, err, false, "ban IP 1")
 
 	_, err = client.BanIP("192.168.1.101", "apache")
-	if err != nil {
-		t.Fatalf("failed to ban IP: %v", err)
-	}
+	fail2ban.AssertError(t, err, false, "ban IP 2")
 
 	records, err := client.GetBanRecords([]string{"sshd", "apache"})
-	if err != nil {
-		t.Fatalf("GetBanRecords failed: %v", err)
-	}
+	fail2ban.AssertError(t, err, false, "GetBanRecords")
 
 	if len(records) != 2 {
 		t.Errorf("expected 2 ban records, got %d", len(records))
@@ -352,19 +312,13 @@ func TestMockClientGetLogLines(t *testing.T) {
 
 	// Ban and unban some IPs to generate log entries
 	_, err := client.BanIP("192.168.1.100", "sshd")
-	if err != nil {
-		t.Fatalf("failed to ban IP: %v", err)
-	}
+	fail2ban.AssertError(t, err, false, "ban IP for logs")
 
 	_, err = client.UnbanIP("192.168.1.100", "sshd")
-	if err != nil {
-		t.Fatalf("failed to unban IP: %v", err)
-	}
+	fail2ban.AssertError(t, err, false, "unban IP for logs")
 
 	_, err = client.BanIP("192.168.1.101", "apache")
-	if err != nil {
-		t.Fatalf("failed to ban IP: %v", err)
-	}
+	fail2ban.AssertError(t, err, false, "ban IP 2 for logs")
 
 	tests := []struct {
 		name          string
@@ -413,9 +367,7 @@ func TestMockClientGetLogLines(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			lines, err := client.GetLogLines(tt.jail, tt.ip)
-			if err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
+			fail2ban.AssertError(t, err, false, tt.name)
 
 			if len(lines) != tt.expectedLines {
 				t.Errorf("expected %d lines, got %d", tt.expectedLines, len(lines))
@@ -436,9 +388,7 @@ func TestMockClientListFilters(t *testing.T) {
 	client := fail2ban.NewMockClient()
 
 	filters, err := client.ListFilters()
-	if err != nil {
-		t.Fatalf("ListFilters failed: %v", err)
-	}
+	fail2ban.AssertError(t, err, false, "ListFilters")
 
 	expectedFilters := []string{"sshd", "apache"}
 	if len(filters) != len(expectedFilters) {
@@ -481,14 +431,8 @@ func TestMockClientTestFilter(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result, err := client.TestFilter(tt.filter)
 
-			if tt.expectError {
-				if err == nil {
-					t.Errorf("expected error for filter %q", tt.filter)
-				}
-			} else {
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
+			fail2ban.AssertError(t, err, tt.expectError, tt.name)
+			if !tt.expectError {
 				if result == "" {
 					t.Errorf("expected non-empty result")
 				}
@@ -502,29 +446,21 @@ func TestMockClientReset(t *testing.T) {
 
 	// Ban some IPs and generate logs
 	_, err := client.BanIP("192.168.1.100", "sshd")
-	if err != nil {
-		t.Fatalf("failed to ban IP: %v", err)
-	}
+	fail2ban.AssertError(t, err, false, "ban IP for reset test")
 
 	_, err = client.BanIP("192.168.1.101", "apache")
-	if err != nil {
-		t.Fatalf("failed to ban IP: %v", err)
-	}
+	fail2ban.AssertError(t, err, false, "ban IP 2 for reset test")
 
 	// Verify that IPs are banned
 	jails, err := client.BannedIn("192.168.1.100")
-	if err != nil {
-		t.Fatalf("BannedIn failed: %v", err)
-	}
+	fail2ban.AssertError(t, err, false, "BannedIn before reset")
 	if len(jails) == 0 {
 		t.Fatalf("expected IP to be banned before reset")
 	}
 
 	// Verify that logs exist
 	logs, err := client.GetLogLines("", "")
-	if err != nil {
-		t.Fatalf("GetLogLines failed: %v", err)
-	}
+	fail2ban.AssertError(t, err, false, "GetLogLines before reset")
 	if len(logs) == 0 {
 		t.Fatalf("expected logs to exist before reset")
 	}
@@ -534,18 +470,14 @@ func TestMockClientReset(t *testing.T) {
 
 	// Verify that bans are cleared
 	jails, err = client.BannedIn("192.168.1.100")
-	if err != nil {
-		t.Fatalf("BannedIn failed after reset: %v", err)
-	}
+	fail2ban.AssertError(t, err, false, "BannedIn after reset")
 	if len(jails) != 0 {
 		t.Errorf("expected no banned IPs after reset, got %d", len(jails))
 	}
 
 	// Verify that logs are cleared
 	logs, err = client.GetLogLines("", "")
-	if err != nil {
-		t.Fatalf("GetLogLines failed after reset: %v", err)
-	}
+	fail2ban.AssertError(t, err, false, "GetLogLines after reset")
 	if len(logs) != 0 {
 		t.Errorf("expected no logs after reset, got %d", len(logs))
 	}

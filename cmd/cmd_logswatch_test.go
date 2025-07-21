@@ -12,20 +12,20 @@ import (
 
 func TestLogsWatchCmd(t *testing.T) {
 	tests := []struct {
-		name           string
-		args           []string
-		mockLogs       []string
-		limit          int
-		expectedOutput string
-		expectError    bool
+		name       string
+		args       []string
+		mockLogs   []string
+		limit      int
+		wantOutput string
+		wantError  bool
 	}{
 		{
-			name:           "watch all logs",
-			args:           []string{},
-			mockLogs:       []string{"2024-01-01 12:00:00 [sshd] Ban 192.168.1.100"},
-			limit:          10,
-			expectedOutput: "2024-01-01 12:00:00 [sshd] Ban 192.168.1.100",
-			expectError:    false,
+			name:       "watch all logs",
+			args:       []string{},
+			mockLogs:   []string{"2024-01-01 12:00:00 [sshd] Ban 192.168.1.100"},
+			limit:      10,
+			wantOutput: "2024-01-01 12:00:00 [sshd] Ban 192.168.1.100",
+			wantError:  false,
 		},
 		{
 			name: "watch logs with jail filter",
@@ -34,31 +34,31 @@ func TestLogsWatchCmd(t *testing.T) {
 				"2024-01-01 12:00:00 [sshd] Ban 192.168.1.100",
 				"2024-01-01 12:01:00 [apache] Ban 192.168.1.101",
 			},
-			limit:          10,
-			expectedOutput: "2024-01-01 12:00:00 [sshd] Ban 192.168.1.100",
-			expectError:    false,
+			limit:      10,
+			wantOutput: "2024-01-01 12:00:00 [sshd] Ban 192.168.1.100",
+			wantError:  false,
 		},
 		{
-			name:           "watch logs with jail and IP filter",
-			args:           []string{"sshd", "192.168.1.100"},
-			mockLogs:       []string{"2024-01-01 12:00:00 [sshd] Ban 192.168.1.100"},
-			limit:          10,
-			expectedOutput: "2024-01-01 12:00:00 [sshd] Ban 192.168.1.100",
-			expectError:    false,
+			name:       "watch logs with jail and IP filter",
+			args:       []string{"sshd", "192.168.1.100"},
+			mockLogs:   []string{"2024-01-01 12:00:00 [sshd] Ban 192.168.1.100"},
+			limit:      10,
+			wantOutput: "2024-01-01 12:00:00 [sshd] Ban 192.168.1.100",
+			wantError:  false,
 		},
 		{
-			name:           "watch logs with limit",
-			args:           []string{},
-			mockLogs:       []string{"line1", "line2", "line3"},
-			limit:          2,
-			expectedOutput: "line2\nline3",
-			expectError:    false,
+			name:       "watch logs with limit",
+			args:       []string{},
+			mockLogs:   []string{"line1", "line2", "line3"},
+			limit:      2,
+			wantOutput: "line2\nline3",
+			wantError:  false,
 		},
 		{
-			name:        "watch logs with error",
-			args:        []string{},
-			mockLogs:    []string{},
-			expectError: true,
+			name:      "watch logs with error",
+			args:      []string{},
+			mockLogs:  []string{},
+			wantError: true,
 		},
 	}
 
@@ -68,7 +68,7 @@ func TestLogsWatchCmd(t *testing.T) {
 			mock := &MockLogsWatchClient{
 				initialLogs: tt.mockLogs,
 				limit:       tt.limit,
-				shouldError: tt.expectError,
+				shouldError: tt.wantError,
 			}
 
 			config := &Config{Format: "plain"}
@@ -87,7 +87,7 @@ func TestLogsWatchCmd(t *testing.T) {
 			cmd.SetArgs(tt.args)
 
 			// For error cases, run the command and check error immediately
-			if tt.expectError {
+			if tt.wantError {
 				err := cmd.Execute()
 				if err == nil {
 					t.Errorf("expected error but got none")

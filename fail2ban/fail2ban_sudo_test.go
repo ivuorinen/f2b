@@ -306,22 +306,13 @@ func TestCheckSudoRequirements(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original checker
-			originalChecker := GetSudoChecker()
-			defer SetSudoChecker(originalChecker)
-
-			// Set mock checker
-			mock := NewMockSudoCheckerWithPrivileges(tt.hasPrivileges)
-			SetSudoChecker(mock)
+			// Set up mock environment with specified privileges
+			_, cleanup := SetupMockEnvironmentWithSudo(t, tt.hasPrivileges)
+			defer cleanup()
 
 			err := CheckSudoRequirements()
 
-			if tt.expectError && err == nil {
-				t.Error("expected error but got none")
-			}
-			if !tt.expectError && err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
+			AssertError(t, err, tt.expectError, tt.name)
 		})
 	}
 }

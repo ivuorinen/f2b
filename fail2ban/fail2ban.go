@@ -618,9 +618,8 @@ func TestFilter(filter string) (string, error) {
 // Context-aware implementations for RealClient
 
 // ListJailsWithContext returns a list of all fail2ban jails with context support.
-func (c *RealClient) ListJailsWithContext(_ context.Context) ([]string, error) {
-	// ListJails doesn't require external commands, so just delegate
-	return c.ListJails()
+func (c *RealClient) ListJailsWithContext(ctx context.Context) ([]string, error) {
+	return wrapWithContext0(c.ListJails)(ctx)
 }
 
 // StatusAllWithContext returns the status of all fail2ban jails with context support.
@@ -720,17 +719,13 @@ func (c *RealClient) GetBanRecordsWithContext(ctx context.Context, jails []strin
 }
 
 // GetLogLinesWithContext retrieves log lines related to an IP address from the specified jail with context support.
-func (c *RealClient) GetLogLinesWithContext(_ context.Context, jail, ip string) ([]string, error) {
-	// For now, delegate to the non-context version since GetLogLines is complex
-	// In a full implementation, this would use context for all internal operations
-	return c.GetLogLines(jail, ip)
+func (c *RealClient) GetLogLinesWithContext(ctx context.Context, jail, ip string) ([]string, error) {
+	return wrapWithContext2(c.GetLogLines)(ctx, jail, ip)
 }
 
 // ListFiltersWithContext returns a list of available fail2ban filter files with context support.
-func (c *RealClient) ListFiltersWithContext(_ context.Context) ([]string, error) {
-	// For now, delegate to the non-context version since ListFilters is complex
-	// In a full implementation, this would use context for all internal operations
-	return c.ListFilters()
+func (c *RealClient) ListFiltersWithContext(ctx context.Context) ([]string, error) {
+	return wrapWithContext0(c.ListFilters)(ctx)
 }
 
 // TestFilterWithContext tests a fail2ban filter against its configured log files with context support.

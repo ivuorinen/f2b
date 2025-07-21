@@ -82,3 +82,28 @@ func executeCommand(client fail2ban.Client, args ...string) (string, error) {
 	}
 	return strings.Join(filtered, "\n") + "\n", err
 }
+
+// AssertError provides standardized error checking for command tests
+func AssertError(t interface {
+	Helper()
+	Fatalf(string, ...interface{})
+}, err error, expectError bool, testName string) {
+	t.Helper()
+	if expectError && err == nil {
+		t.Fatalf("%s: expected error but got none", testName)
+	}
+	if !expectError && err != nil {
+		t.Fatalf("%s: unexpected error: %v", testName, err)
+	}
+}
+
+// AssertOutputContains checks that output contains expected substring
+func AssertOutputContains(t interface {
+	Helper()
+	Fatalf(string, ...interface{})
+}, output, expectedSubstring, testName string) {
+	t.Helper()
+	if !strings.Contains(output, expectedSubstring) {
+		t.Fatalf("%s: expected output containing %q but got %q", testName, expectedSubstring, output)
+	}
+}

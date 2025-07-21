@@ -28,14 +28,10 @@ func TestSetLogDir(t *testing.T) {
 	// Test that GetLogLines uses the new directory
 	logContent := "2024-01-01 12:00:00 [sshd] Test log entry"
 	err := os.WriteFile(filepath.Join(tempDir, "fail2ban.log"), []byte(logContent), 0600)
-	if err != nil {
-		t.Fatalf("failed to create test log file: %v", err)
-	}
+	fail2ban.AssertError(t, err, false, "create test log file")
 
 	lines, err := fail2ban.GetLogLines("", "")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	fail2ban.AssertError(t, err, false, "GetLogLines")
 
 	if len(lines) != 1 || lines[0] != logContent {
 		t.Errorf("expected log content %q, got %v", logContent, lines)
@@ -60,9 +56,7 @@ func TestSetRunner(t *testing.T) {
 	testRunner.SetResponse("test-command arg1 arg2", []byte("test-output"))
 
 	output, err := fail2ban.RunnerCombinedOutput("test-command", "arg1", "arg2")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	fail2ban.AssertError(t, err, false, "RunnerCombinedOutput")
 
 	if string(output) != "test-output" {
 		t.Errorf("expected output %q, got %q", "test-output", string(output))
@@ -151,9 +145,7 @@ func TestLogFileReading(t *testing.T) {
 				// Create compressed file
 				// #nosec G304 - filePath is safely constructed from tempDir and test data
 				file, err := os.Create(filePath)
-				if err != nil {
-					t.Fatalf("failed to create file: %v", err)
-				}
+				fail2ban.AssertError(t, err, false, "create compressed file")
 				defer func() {
 					if err := file.Close(); err != nil {
 						t.Fatalf("failed to close file: %v", err)
@@ -162,24 +154,18 @@ func TestLogFileReading(t *testing.T) {
 
 				gzWriter := gzip.NewWriter(file)
 				_, err = gzWriter.Write([]byte(tt.content))
-				if err != nil {
-					t.Fatalf("failed to write compressed content: %v", err)
-				}
+				fail2ban.AssertError(t, err, false, "write compressed content")
 				if err := gzWriter.Close(); err != nil {
 					t.Fatalf("failed to close gzip writer: %v", err)
 				}
 			} else {
 				err := os.WriteFile(filePath, []byte(tt.content), 0600)
-				if err != nil {
-					t.Fatalf("failed to write file: %v", err)
-				}
+				fail2ban.AssertError(t, err, false, "write regular file")
 			}
 
 			// Test reading
 			lines, err := fail2ban.GetLogLines("", "")
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			fail2ban.AssertError(t, err, false, tt.name)
 
 			if len(lines) != len(tt.expected) {
 				t.Errorf("expected %d lines, got %d", len(tt.expected), len(lines))
@@ -215,9 +201,7 @@ func TestLogFileOrdering(t *testing.T) {
 	}
 
 	lines, err := fail2ban.GetLogLines("", "")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	fail2ban.AssertError(t, err, false, "GetLogLines ordering test")
 
 	// Should be in chronological order: oldest rotated first, then current
 	expectedOrder := []string{
@@ -250,9 +234,7 @@ func TestLogFiltering(t *testing.T) {
 2024-01-01 12:04:00 [nginx] Found 192.168.1.102`
 
 	err := os.WriteFile(filepath.Join(tempDir, "fail2ban.log"), []byte(logContent), 0600)
-	if err != nil {
-		t.Fatalf("failed to create test log file: %v", err)
-	}
+	fail2ban.AssertError(t, err, false, "create test log file for filtering")
 
 	tests := []struct {
 		name          string
@@ -313,9 +295,7 @@ func TestLogFiltering(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			lines, err := fail2ban.GetLogLines(tt.jailFilter, tt.ipFilter)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			fail2ban.AssertError(t, err, false, tt.name)
 
 			if len(lines) != tt.expectedCount {
 				t.Errorf("expected %d lines, got %d", tt.expectedCount, len(lines))
@@ -347,14 +327,10 @@ func TestBanRecordFormatting(t *testing.T) {
 	fail2ban.SetRunner(mock)
 
 	client, err := fail2ban.NewClient(fail2ban.DefaultLogDir, fail2ban.DefaultFilterDir)
-	if err != nil {
-		t.Fatalf("failed to create client: %v", err)
-	}
+	fail2ban.AssertError(t, err, false, "create client")
 
 	records, err := client.GetBanRecords([]string{"sshd"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	fail2ban.AssertError(t, err, false, "GetBanRecords")
 
 	if len(records) != 1 {
 		t.Errorf("expected 1 record, got %d", len(records))
@@ -444,12 +420,7 @@ func TestVersionComparisonEdgeCases(t *testing.T) {
 
 			_, err := fail2ban.NewClient(fail2ban.DefaultLogDir, fail2ban.DefaultFilterDir)
 
-			if tt.expectError && err == nil {
-				t.Fatal("expected error but got none")
-			}
-			if !tt.expectError && err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			fail2ban.AssertError(t, err, tt.expectError, tt.name)
 		})
 	}
 }
@@ -512,12 +483,7 @@ func TestClientInitializationEdgeCases(t *testing.T) {
 
 			_, err := fail2ban.NewClient(fail2ban.DefaultLogDir, fail2ban.DefaultFilterDir)
 
-			if tt.expectError && err == nil {
-				t.Fatal("expected error but got none")
-			}
-			if !tt.expectError && err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			fail2ban.AssertError(t, err, tt.expectError, tt.name)
 			if tt.expectError && tt.errorMsg != "" {
 				if !strings.Contains(err.Error(), tt.errorMsg) {
 					t.Errorf("expected error to contain %q, got %q", tt.errorMsg, err.Error())
@@ -540,9 +506,7 @@ func TestConcurrentAccess(t *testing.T) {
 	fail2ban.SetRunner(mock)
 
 	client, err := fail2ban.NewClient(fail2ban.DefaultLogDir, fail2ban.DefaultFilterDir)
-	if err != nil {
-		t.Fatalf("failed to create client: %v", err)
-	}
+	fail2ban.AssertError(t, err, false, "create client for concurrency test")
 
 	// Run concurrent operations
 	done := make(chan bool)
@@ -594,15 +558,11 @@ func TestMemoryUsage(t *testing.T) {
 	// Create and destroy many clients
 	for i := 0; i < 1000; i++ {
 		client, err := fail2ban.NewClient(fail2ban.DefaultLogDir, fail2ban.DefaultFilterDir)
-		if err != nil {
-			t.Fatalf("failed to create client: %v", err)
-		}
+		fail2ban.AssertError(t, err, false, "create client in memory test")
 
 		// Use the client
 		_, err = client.ListJails()
-		if err != nil {
-			t.Fatalf("failed to list jails: %v", err)
-		}
+		fail2ban.AssertError(t, err, false, "list jails in memory test")
 
 		// Client should be garbage collected
 		_ = client

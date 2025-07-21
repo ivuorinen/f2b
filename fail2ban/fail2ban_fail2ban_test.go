@@ -33,19 +33,15 @@ func TestNewClient(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original checker
-			originalChecker := GetSudoChecker()
-			defer SetSudoChecker(originalChecker)
-
 			// Set environment variable to force sudo checking in tests
 			t.Setenv("F2B_TEST_SUDO", "true")
 
-			// Set mock checker
-			mock := NewMockSudoCheckerWithPrivileges(tt.hasPrivileges)
-			SetSudoChecker(mock)
+			// Set up mock environment
+			_, cleanup := SetupMockEnvironmentWithSudo(t, tt.hasPrivileges)
+			defer cleanup()
 
-			// Set up mock runner
-			mockRunner := NewMockRunner()
+			// Get the mock runner that was set up
+			mockRunner := GetRunner().(*MockRunner)
 			if tt.hasPrivileges {
 				mockRunner.SetResponse("fail2ban-client -V", []byte("0.11.2"))
 				mockRunner.SetResponse("sudo fail2ban-client -V", []byte("0.11.2"))
@@ -65,22 +61,15 @@ func TestNewClient(t *testing.T) {
 				mockRunner.SetResponse("fail2ban-client ping", []byte("pong"))
 				mockRunner.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
 			}
-			SetRunner(mockRunner)
 
 			client, err := NewClient(DefaultLogDir, DefaultFilterDir)
 
+			AssertError(t, err, tt.expectError, tt.name)
 			if tt.expectError {
-				if err == nil {
-					t.Fatal("expected error but got none")
-				}
-				if tt.errorContains != "" && !strings.Contains(err.Error(), tt.errorContains) {
+				if tt.errorContains != "" && err != nil && !strings.Contains(err.Error(), tt.errorContains) {
 					t.Errorf("expected error to contain %q, got %q", tt.errorContains, err.Error())
 				}
 				return
-			}
-
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
 			}
 
 			if client == nil {
@@ -130,42 +119,27 @@ func TestListJails(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original checker and set up mock with privileges
-			originalChecker := GetSudoChecker()
-			defer SetSudoChecker(originalChecker)
-			mockChecker := NewMockSudoCheckerWithPrivileges(true)
-			SetSudoChecker(mockChecker)
+			// Set up mock environment with sudo privileges
+			_, cleanup := SetupMockEnvironmentWithSudo(t, true)
+			defer cleanup()
 
-			mock := &MockRunner{
-				Responses: make(map[string][]byte),
-				Errors:    make(map[string]error),
-			}
-			mock.SetResponse("fail2ban-client -V", []byte("0.11.2"))
-			mock.SetResponse("sudo fail2ban-client -V", []byte("0.11.2"))
-			mock.SetResponse("fail2ban-client ping", []byte("pong"))
-			mock.SetResponse("sudo fail2ban-client ping", []byte("pong"))
+			// Configure specific responses for this test
+			mock := GetRunner().(*MockRunner)
 			mock.SetResponse("fail2ban-client status", []byte(tt.statusOutput))
 			mock.SetResponse("sudo fail2ban-client status", []byte(tt.statusOutput))
-			SetRunner(mock)
 
 			if tt.expectError {
 				// For error cases, we expect NewClient to fail
 				_, err := NewClient(DefaultLogDir, DefaultFilterDir)
-				if err == nil {
-					t.Fatal("expected error but got none")
-				}
+				AssertError(t, err, true, tt.name)
 				return
 			}
 
 			client, err := NewClient(DefaultLogDir, DefaultFilterDir)
-			if err != nil {
-				t.Fatalf("failed to create client: %v", err)
-			}
+			AssertError(t, err, false, "create client")
 
 			jails, err := client.ListJails()
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			AssertError(t, err, false, "list jails")
 
 			if len(jails) != len(tt.expectedJails) {
 				t.Errorf("expected %d jails, got %d", len(tt.expectedJails), len(jails))
@@ -181,37 +155,21 @@ func TestListJails(t *testing.T) {
 }
 
 func TestStatusAll(t *testing.T) {
-	// Save original checker and set up mock with privileges
-	originalChecker := GetSudoChecker()
-	defer SetSudoChecker(originalChecker)
-	mockChecker := NewMockSudoCheckerWithPrivileges(true)
-	SetSudoChecker(mockChecker)
+	// Set up mock environment with sudo privileges
+	_, cleanup := SetupMockEnvironmentWithSudo(t, true)
+	defer cleanup()
 
-	mock := &MockRunner{
-		Responses: make(map[string][]byte),
-		Errors:    make(map[string]error),
-	}
-	mock.SetResponse("fail2ban-client -V", []byte("0.11.2"))
-	mock.SetResponse("sudo fail2ban-client -V", []byte("0.11.2"))
-	mock.SetResponse("fail2ban-client ping", []byte("pong"))
-	mock.SetResponse("sudo fail2ban-client ping", []byte("pong"))
-	mock.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-	mock.SetResponse("sudo fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-
+	// Configure specific responses for this test
 	expectedOutput := "Status\n|- Number of jail: 1\n`- Jail list: sshd"
+	mock := GetRunner().(*MockRunner)
+	mock.SetResponse("fail2ban-client status", []byte(expectedOutput))
 	mock.SetResponse("sudo fail2ban-client status", []byte(expectedOutput))
 
-	SetRunner(mock)
-
 	client, err := NewClient(DefaultLogDir, DefaultFilterDir)
-	if err != nil {
-		t.Fatalf("failed to create client: %v", err)
-	}
+	AssertError(t, err, false, "create client")
 
 	output, err := client.StatusAll()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	AssertError(t, err, false, "status all")
 
 	if output != expectedOutput {
 		t.Errorf("expected %q, got %q", expectedOutput, output)
@@ -219,39 +177,22 @@ func TestStatusAll(t *testing.T) {
 }
 
 func TestStatusJail(t *testing.T) {
-	// Save original checker and set up mock with privileges
-	originalChecker := GetSudoChecker()
-	defer SetSudoChecker(originalChecker)
-	mockChecker := NewMockSudoCheckerWithPrivileges(true)
-	SetSudoChecker(mockChecker)
+	// Set up mock environment with sudo privileges
+	_, cleanup := SetupMockEnvironmentWithSudo(t, true)
+	defer cleanup()
 
-	mock := &MockRunner{
-		Responses: make(map[string][]byte),
-		Errors:    make(map[string]error),
-	}
-	mock.SetResponse("fail2ban-client -V", []byte("0.11.2"))
-	mock.SetResponse("sudo fail2ban-client -V", []byte("0.11.2"))
-	mock.SetResponse("fail2ban-client ping", []byte("pong"))
-	mock.SetResponse("sudo fail2ban-client ping", []byte("pong"))
-	mock.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-	mock.SetResponse("sudo fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-
+	// Configure specific responses for this test
+	mock := GetRunner().(*MockRunner)
 	expectedOutput := "Status for the jail: sshd\n|- Filter\n" +
 		"|- Currently failed: 0\n|- Total failed: 5\n|- Currently banned: 1\n|- Total banned: 1"
 	mock.SetResponse("fail2ban-client status sshd", []byte(expectedOutput))
 	mock.SetResponse("sudo fail2ban-client status sshd", []byte(expectedOutput))
 
-	SetRunner(mock)
-
 	client, err := NewClient(DefaultLogDir, DefaultFilterDir)
-	if err != nil {
-		t.Fatalf("failed to create client: %v", err)
-	}
+	AssertError(t, err, false, "create client")
 
 	output, err := client.StatusJail("sshd")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	AssertError(t, err, false, "status jail")
 
 	if output != expectedOutput {
 		t.Errorf("expected %q, got %q", expectedOutput, output)
@@ -295,25 +236,12 @@ func TestBanIP(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original checker and set up mock with privileges
-			originalChecker := GetSudoChecker()
-			defer SetSudoChecker(originalChecker)
-			mockChecker := NewMockSudoCheckerWithPrivileges(true)
-			SetSudoChecker(mockChecker)
+			// Set up mock environment with sudo privileges
+			_, cleanup := SetupMockEnvironmentWithSudo(t, true)
+			defer cleanup()
 
-			mock := &MockRunner{
-				Responses: make(map[string][]byte),
-				Errors:    make(map[string]error),
-			}
-			mock.SetResponse("fail2ban-client -V", []byte("0.11.2"))
-			mock.SetResponse("sudo fail2ban-client -V", []byte("0.11.2"))
-			mock.SetResponse("fail2ban-client ping", []byte("pong"))
-			mock.SetResponse("sudo fail2ban-client ping", []byte("pong"))
-			mock.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-			mock.SetResponse("sudo fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-			mock.SetResponse("fail2ban-client banned 192.168.1.100", []byte("0"))
-			mock.SetResponse("sudo fail2ban-client banned 192.168.1.100", []byte("0"))
-
+			// Configure specific responses for this test
+			mock := GetRunner().(*MockRunner)
 			if tt.expectError {
 				mock.SetError(
 					fmt.Sprintf("sudo fail2ban-client set %s banip %s", tt.jail, tt.ip),
@@ -323,24 +251,14 @@ func TestBanIP(t *testing.T) {
 				mock.SetResponse(fmt.Sprintf("sudo fail2ban-client set %s banip %s", tt.jail, tt.ip), []byte(tt.mockResponse))
 			}
 
-			SetRunner(mock)
-
 			client, err := NewClient(DefaultLogDir, DefaultFilterDir)
-			if err != nil {
-				t.Fatalf("failed to create client: %v", err)
-			}
+			AssertError(t, err, false, "create client")
 
 			code, err := client.BanIP(tt.ip, tt.jail)
 
+			AssertError(t, err, tt.expectError, tt.name)
 			if tt.expectError {
-				if err == nil {
-					t.Fatal("expected error but got none")
-				}
 				return
-			}
-
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
 			}
 
 			if code != tt.expectedCode {
@@ -379,47 +297,25 @@ func TestUnbanIP(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original checker and set up mock with privileges
-			originalChecker := GetSudoChecker()
-			defer SetSudoChecker(originalChecker)
-			mockChecker := NewMockSudoCheckerWithPrivileges(true)
-			SetSudoChecker(mockChecker)
+			// Set up mock environment with sudo privileges
+			_, cleanup := SetupMockEnvironmentWithSudo(t, true)
+			defer cleanup()
 
-			mock := &MockRunner{
-				Responses: make(map[string][]byte),
-				Errors:    make(map[string]error),
-			}
-			mock.SetResponse("fail2ban-client -V", []byte("0.11.2"))
-			mock.SetResponse("sudo fail2ban-client -V", []byte("0.11.2"))
-			mock.SetResponse("fail2ban-client ping", []byte("pong"))
-			mock.SetResponse("sudo fail2ban-client ping", []byte("pong"))
-			mock.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-			mock.SetResponse("sudo fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-			mock.SetResponse("fail2ban-client banned 192.168.1.100", []byte("0"))
-			mock.SetResponse("sudo fail2ban-client banned 192.168.1.100", []byte("0"))
+			// Configure specific responses for this test
+			mock := GetRunner().(*MockRunner)
 			mock.SetResponse(
 				fmt.Sprintf("sudo fail2ban-client set %s unbanip %s", tt.jail, tt.ip),
 				[]byte(tt.mockResponse),
 			)
 
-			SetRunner(mock)
-
 			client, err := NewClient(DefaultLogDir, DefaultFilterDir)
-			if err != nil {
-				t.Fatalf("failed to create client: %v", err)
-			}
+			AssertError(t, err, false, "create client")
 
 			code, err := client.UnbanIP(tt.ip, tt.jail)
 
+			AssertError(t, err, tt.expectError, tt.name)
 			if tt.expectError {
-				if err == nil {
-					t.Fatal("expected error but got none")
-				}
 				return
-			}
-
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
 			}
 
 			if code != tt.expectedCode {
@@ -469,43 +365,23 @@ func TestBannedIn(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original checker and set up mock with privileges
-			originalChecker := GetSudoChecker()
-			defer SetSudoChecker(originalChecker)
-			mockChecker := NewMockSudoCheckerWithPrivileges(true)
-			SetSudoChecker(mockChecker)
+			// Set up mock environment with sudo privileges
+			_, cleanup := SetupMockEnvironmentWithSudo(t, true)
+			defer cleanup()
 
-			mock := &MockRunner{
-				Responses: make(map[string][]byte),
-				Errors:    make(map[string]error),
-			}
-			mock.SetResponse("fail2ban-client -V", []byte("0.11.2"))
-			mock.SetResponse("sudo fail2ban-client -V", []byte("0.11.2"))
-			mock.SetResponse("fail2ban-client ping", []byte("pong"))
-			mock.SetResponse("sudo fail2ban-client ping", []byte("pong"))
-			mock.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-			mock.SetResponse("sudo fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
+			// Configure specific responses for this test
+			mock := GetRunner().(*MockRunner)
 			mock.SetResponse(fmt.Sprintf("fail2ban-client banned %s", tt.ip), []byte(tt.mockResponse))
 			mock.SetResponse(fmt.Sprintf("sudo fail2ban-client banned %s", tt.ip), []byte(tt.mockResponse))
 
-			SetRunner(mock)
-
 			client, err := NewClient(DefaultLogDir, DefaultFilterDir)
-			if err != nil {
-				t.Fatalf("failed to create client: %v", err)
-			}
+			AssertError(t, err, false, "create client")
 
 			jails, err := client.BannedIn(tt.ip)
 
+			AssertError(t, err, tt.expectError, tt.name)
 			if tt.expectError {
-				if err == nil {
-					t.Fatal("expected error but got none")
-				}
 				return
-			}
-
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
 			}
 
 			if len(jails) != len(tt.expectedJails) {
@@ -522,23 +398,12 @@ func TestBannedIn(t *testing.T) {
 }
 
 func TestGetBanRecords(t *testing.T) {
-	// Save original checker and set up mock with privileges
-	originalChecker := GetSudoChecker()
-	defer SetSudoChecker(originalChecker)
-	mockChecker := NewMockSudoCheckerWithPrivileges(true)
-	SetSudoChecker(mockChecker)
+	// Set up mock environment with sudo privileges
+	_, cleanup := SetupMockEnvironmentWithSudo(t, true)
+	defer cleanup()
 
-	mock := &MockRunner{
-		Responses: make(map[string][]byte),
-		Errors:    make(map[string]error),
-	}
-	mock.SetResponse("fail2ban-client -V", []byte("0.11.2"))
-	mock.SetResponse("sudo fail2ban-client -V", []byte("0.11.2"))
-	mock.SetResponse("fail2ban-client ping", []byte("pong"))
-	mock.SetResponse("sudo fail2ban-client ping", []byte("pong"))
-	mock.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-	mock.SetResponse("sudo fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-
+	// Configure specific responses for this test
+	mock := GetRunner().(*MockRunner)
 	// Mock ban records response
 	banTime := time.Now().Add(-1 * time.Hour)
 	unbanTime := time.Now().Add(1 * time.Hour)
@@ -547,17 +412,11 @@ func TestGetBanRecords(t *testing.T) {
 		unbanTime.Format("2006-01-02 15:04:05"))
 	mock.SetResponse("sudo fail2ban-client get sshd banip --with-time", []byte(mockBanOutput))
 
-	SetRunner(mock)
-
 	client, err := NewClient(DefaultLogDir, DefaultFilterDir)
-	if err != nil {
-		t.Fatalf("failed to create client: %v", err)
-	}
+	AssertError(t, err, false, "create client")
 
 	records, err := client.GetBanRecords([]string{"sshd"})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	AssertError(t, err, false, "get ban records")
 
 	if len(records) != 1 {
 		t.Errorf("expected 1 record, got %d", len(records))
@@ -630,9 +489,7 @@ func TestGetLogLines(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			lines, err := GetLogLines(tt.jail, tt.ip)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			AssertError(t, err, false, "get log lines")
 
 			if len(lines) != tt.expectedLines {
 				t.Errorf("expected %d lines, got %d", tt.expectedLines, len(lines))
@@ -667,9 +524,7 @@ func TestListFilters(t *testing.T) {
 	SetRunner(mock)
 
 	client, err := NewClient(DefaultLogDir, DefaultFilterDir)
-	if err != nil {
-		t.Fatalf("failed to create client: %v", err)
-	}
+	AssertError(t, err, false, "create client")
 
 	// We can't easily test ListFilters as it reads from /etc/fail2ban/filter.d
 	// This would require more complex mocking or dependency injection
@@ -695,32 +550,17 @@ logpath = /var/log/auth.log`
 		t.Fatalf("failed to create test filter file: %v", err)
 	}
 
-	// Save original checker and set up mock with privileges
-	originalChecker := GetSudoChecker()
-	defer SetSudoChecker(originalChecker)
-	mockChecker := NewMockSudoCheckerWithPrivileges(true)
-	SetSudoChecker(mockChecker)
+	// Set up mock environment with sudo privileges
+	_, cleanup := SetupMockEnvironmentWithSudo(t, true)
+	defer cleanup()
 
-	mock := &MockRunner{
-		Responses: make(map[string][]byte),
-		Errors:    make(map[string]error),
-	}
-	mock.SetResponse("fail2ban-client -V", []byte("0.11.2"))
-	mock.SetResponse("sudo fail2ban-client -V", []byte("0.11.2"))
-	mock.SetResponse("fail2ban-client ping", []byte("pong"))
-	mock.SetResponse("sudo fail2ban-client ping", []byte("pong"))
-	mock.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-	mock.SetResponse("sudo fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-
+	// Configure specific responses for this test
+	mock := GetRunner().(*MockRunner)
 	expectedOutput := "Running tests on fail2ban-regex\nResults: 5 matches found"
 	mock.SetResponse("sudo fail2ban-regex /var/log/auth.log "+filterPath, []byte(expectedOutput))
 
-	SetRunner(mock)
-
 	client, err := NewClient(DefaultLogDir, DefaultFilterDir)
-	if err != nil {
-		t.Fatalf("failed to create client: %v", err)
-	}
+	AssertError(t, err, false, "create client")
 
 	// This test will fail in normal circumstances as it tries to read from /etc/fail2ban/filter.d
 	// but we're testing the method structure
@@ -756,16 +596,12 @@ func TestVersionComparison(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original checker and set up mock with privileges for successful cases
-			originalChecker := GetSudoChecker()
-			defer SetSudoChecker(originalChecker)
-			mockChecker := NewMockSudoCheckerWithPrivileges(!tt.expectError)
-			SetSudoChecker(mockChecker)
+			// Set up mock environment with privileges based on expected outcome
+			_, cleanup := SetupMockEnvironmentWithSudo(t, !tt.expectError)
+			defer cleanup()
 
-			mock := &MockRunner{
-				Responses: make(map[string][]byte),
-				Errors:    make(map[string]error),
-			}
+			// Configure specific responses for this test
+			mock := GetRunner().(*MockRunner)
 			mock.SetResponse("fail2ban-client -V", []byte(tt.version))
 			mock.SetResponse("sudo fail2ban-client -V", []byte(tt.version))
 			if !tt.expectError {
@@ -777,16 +613,10 @@ func TestVersionComparison(t *testing.T) {
 					[]byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"),
 				)
 			}
-			SetRunner(mock)
 
 			_, err := NewClient(DefaultLogDir, DefaultFilterDir)
 
-			if tt.expectError && err == nil {
-				t.Fatal("expected error but got none")
-			}
-			if !tt.expectError && err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
+			AssertError(t, err, tt.expectError, tt.name)
 		})
 	}
 }
@@ -808,9 +638,7 @@ func TestGetLogLinesGlobal(t *testing.T) {
 	}
 
 	lines, err := GetLogLines("sshd", "192.168.1.100")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	AssertError(t, err, false, "get log lines for sshd and IP")
 
 	if len(lines) != 2 {
 		t.Errorf("expected 2 lines, got %d", len(lines))
@@ -818,9 +646,7 @@ func TestGetLogLinesGlobal(t *testing.T) {
 
 	// Test with "all" parameters
 	lines, err = GetLogLines("all", "all")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	AssertError(t, err, false, "get all log lines")
 
 	if len(lines) != 3 {
 		t.Errorf("expected 3 lines, got %d", len(lines))
@@ -903,9 +729,7 @@ failregex = test regex
 
 	// Test ListFilters
 	filters, err := ListFilters()
-	if err != nil {
-		t.Fatalf("ListFilters failed: %v", err)
-	}
+	AssertError(t, err, false, "list filters with custom dir")
 
 	expectedFilters := []string{"apache", "sshd", "nginx", "test-filter"}
 	if len(filters) != len(expectedFilters) {
@@ -936,9 +760,7 @@ func TestListFiltersEmptyDirectory(t *testing.T) {
 	SetFilterDir(tempDir)
 
 	filters, err := ListFilters()
-	if err != nil {
-		t.Fatalf("ListFilters failed: %v", err)
-	}
+	AssertError(t, err, false, "list filters empty directory")
 
 	if len(filters) != 0 {
 		t.Errorf("expected 0 filters in empty directory, got %d", len(filters))
@@ -950,9 +772,7 @@ func TestListFiltersNonexistentDirectory(t *testing.T) {
 	SetFilterDir("/nonexistent/directory/path")
 
 	filters, err := ListFilters()
-	if err == nil {
-		t.Errorf("expected error for non-existent directory")
-	}
+	AssertError(t, err, true, "list filters nonexistent directory")
 
 	if filters != nil {
 		t.Errorf("expected nil filters on error, got %v", filters)
@@ -1077,18 +897,12 @@ func TestCompareVersions(t *testing.T) {
 }
 
 func TestGetBanRecordsWithInvalidTimes(t *testing.T) {
-	// Set up mock runner and sudo checker
-	originalRunner := GetRunner()
-	originalChecker := GetSudoChecker()
-	defer func() {
-		SetRunner(originalRunner)
-		SetSudoChecker(originalChecker)
-	}()
+	// Set up mock environment with sudo privileges
+	_, cleanup := SetupMockEnvironmentWithSudo(t, true)
+	defer cleanup()
 
-	mockRunner := NewMockRunner()
-	SetRunner(mockRunner)
-	mockChecker := NewMockSudoCheckerWithPrivileges(true)
-	SetSudoChecker(mockChecker)
+	// Get mock runner for configuration
+	mockRunner := GetRunner().(*MockRunner)
 
 	// Create client
 	client := &RealClient{

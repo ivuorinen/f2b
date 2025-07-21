@@ -273,7 +273,7 @@ func TestExecute(t *testing.T) {
 		name        string
 		setupClient func() fail2ban.Client
 		config      Config
-		expectError bool
+		wantError   bool
 	}{
 		{
 			name: "successful execution with mock client",
@@ -285,7 +285,7 @@ func TestExecute(t *testing.T) {
 				FilterDir: "/tmp/filters",
 				Format:    "plain",
 			},
-			expectError: false,
+			wantError: false,
 		},
 		{
 			name: "execution with json format",
@@ -297,7 +297,7 @@ func TestExecute(t *testing.T) {
 				FilterDir: "/etc/fail2ban/filter.d",
 				Format:    "json",
 			},
-			expectError: false,
+			wantError: false,
 		},
 	}
 
@@ -329,12 +329,7 @@ func TestExecute(t *testing.T) {
 				t.Fatalf("failed to read output: %v", err)
 			}
 
-			if tt.expectError && err == nil {
-				t.Errorf("expected error but got none")
-			}
-			if !tt.expectError && err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
+			AssertError(t, err, tt.wantError, tt.name)
 		})
 	}
 }
@@ -381,9 +376,7 @@ func TestExecuteWithRealCommands(t *testing.T) {
 	}
 	output := buf.String()
 
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
+	AssertError(t, err, false, "root help command")
 
 	// Check that help output contains expected commands
 	expectedCommands := []string{
@@ -438,44 +431,45 @@ func TestCompletionCmd(t *testing.T) {
 
 func TestCompletionCmdExecution(t *testing.T) {
 	tests := []struct {
-		name           string
-		args           []string
-		expectedOutput string
-		expectError    bool
+		name       string
+		args       []string
+		wantOutput string
+		wantError  bool
 	}{
 		{
-			name:           "bash completion",
-			args:           []string{"bash"},
-			expectedOutput: "__start_f2b",
-			expectError:    false,
+			name:       "bash completion",
+			args:       []string{"bash"},
+			wantOutput: "__start_f2b",
+			wantError:  false,
 		},
 		{
-			name:           "zsh completion",
-			args:           []string{"zsh"},
-			expectedOutput: "#compdef f2b",
-			expectError:    false,
+			name:       "zsh completion",
+			args:       []string{"zsh"},
+			wantOutput: "#compdef f2b",
+			wantError:  false,
 		},
 		{
-			name:           "fish completion",
-			args:           []string{"fish"},
-			expectedOutput: "complete -c f2b",
-			expectError:    false,
+			name:       "fish completion",
+			args:       []string{"fish"},
+			wantOutput: "complete -c f2b",
+			wantError:  false,
 		},
 		{
-			name:           "powershell completion",
-			args:           []string{"powershell"},
-			expectedOutput: "Register-ArgumentCompleter",
-			expectError:    false,
+			name:       "powershell completion",
+			args:       []string{"powershell"},
+			wantOutput: "Register-ArgumentCompleter",
+			wantError:  false,
 		},
 		{
-			name:        "unsupported shell",
-			args:        []string{"unsupported"},
-			expectError: true, // Cobra returns an error for invalid args due to OnlyValidArgs
+			name:      "unsupported shell",
+			args:      []string{"unsupported"},
+			wantError: true, // Cobra returns an error for invalid args due to OnlyValidArgs
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Framework doesn't support completion cmd yet, so keeping manual approach:
 			// Create a proper root command structure for the test
 			testRoot := &cobra.Command{
 				Use:   "f2b",
@@ -513,18 +507,13 @@ func TestCompletionCmdExecution(t *testing.T) {
 			testRoot.SetArgs(args)
 			err := testRoot.Execute()
 
-			if tt.expectError && err == nil {
-				t.Errorf("expected error but got none")
-			}
-			if !tt.expectError && err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
+			AssertError(t, err, tt.wantError, tt.name)
 
 			output := outBuf.String() + errBuf.String()
-			if tt.expectedOutput != "" && !tt.expectError {
+			if tt.wantOutput != "" && !tt.wantError {
 				// Check for substring anywhere in the output, ignoring leading/trailing whitespace
-				if !strings.Contains(output, tt.expectedOutput) {
-					t.Errorf("expected output to contain %q, got %q", tt.expectedOutput, strings.TrimSpace(output))
+				if !strings.Contains(output, tt.wantOutput) {
+					t.Errorf("expected output to contain %q, got %q", tt.wantOutput, strings.TrimSpace(output))
 				}
 			}
 		})
@@ -740,6 +729,7 @@ func TestExecuteIntegration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Integration test requires manual approach:
 			// Set up environment variables using t.Setenv for automatic cleanup
 			if tt.config.LogDir != "" {
 				t.Setenv("F2B_LOG_DIR", tt.config.LogDir)
@@ -761,21 +751,19 @@ func TestExecuteIntegration(t *testing.T) {
 			err := Execute(client, tt.config)
 
 			// Restore
-			if err := w.Close(); err != nil {
-				t.Fatalf("failed to close writer: %v", err)
+			if closeErr := w.Close(); closeErr != nil {
+				t.Fatalf("failed to close writer: %v", closeErr)
 			}
 			os.Stdout = oldStdout
 			os.Args = originalArgs
 
-			// Read and verify we don't get errors
+			// Read output
 			var buf bytes.Buffer
-			if _, err := buf.ReadFrom(r); err != nil {
-				t.Fatalf("failed to read output: %v", err)
+			if _, readErr := buf.ReadFrom(r); readErr != nil {
+				t.Fatalf("failed to read output: %v", readErr)
 			}
 
-			if err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
+			AssertError(t, err, false, tt.name)
 		})
 	}
 }
