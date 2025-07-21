@@ -101,13 +101,6 @@ func ValidateJailExists(jail string, jails []string) error {
 
 // Command execution helpers
 
-// GetCurrentRunner safely retrieves the current runner instance
-func GetCurrentRunner() Runner {
-	globalRunnerManager.mu.RLock()
-	defer globalRunnerManager.mu.RUnlock()
-	return globalRunnerManager.runner
-}
-
 // Parsing helpers
 
 // ParseJailList parses the jail list output from fail2ban-client status

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/sirupsen/logrus"
 )
@@ -25,9 +26,9 @@ type OptimizedLogProcessor struct {
 	linePool    sync.Pool
 	scannerPool sync.Pool
 
-	// Statistics
-	cacheHits   int64
-	cacheMisses int64
+	// Statistics (thread-safe atomic counters)
+	cacheHits   atomic.Int64
+	cacheMisses atomic.Int64
 }
 
 // CachedFileInfo holds cached information about a log file
@@ -81,7 +82,7 @@ func NewOptimizedLogProcessor() *OptimizedLogProcessor {
 // GetLogLinesOptimized provides optimized log line retrieval with caching
 func (olp *OptimizedLogProcessor) GetLogLinesOptimized(jailFilter, ipFilter string, maxLines int) ([]string, error) {
 	// Fast path for log directory pattern caching
-	pattern := filepath.Join(logDir, "fail2ban.log*")
+	pattern := filepath.Join(GetLogDir(), "fail2ban.log*")
 	files, err := olp.getCachedGlobResults(pattern)
 	if err != nil {
 		return nil, fmt.Errorf("error listing log files: %w", err)
@@ -216,11 +217,11 @@ func (olp *OptimizedLogProcessor) extractLogNumberOptimized(basename string) int
 // getCachedFileInfo gets or creates cached file information
 func (olp *OptimizedLogProcessor) getCachedFileInfo(path string) *CachedFileInfo {
 	if cached, ok := olp.fileInfoCache.Load(path); ok {
-		olp.cacheHits++
+		olp.cacheHits.Add(1)
 		return cached.(*CachedFileInfo)
 	}
 
-	olp.cacheMisses++
+	olp.cacheMisses.Add(1)
 
 	// Create new file info
 	info := &CachedFileInfo{
@@ -462,16 +463,29 @@ func (olp *OptimizedLogProcessor) fastContains(haystack, needle []byte) bool {
 
 // GetCacheStats returns cache performance statistics
 func (olp *OptimizedLogProcessor) GetCacheStats() (hits, misses int64) {
-	return olp.cacheHits, olp.cacheMisses
+	return olp.cacheHits.Load(), olp.cacheMisses.Load()
 }
 
 // ClearCaches clears all caches (useful for testing or memory management)
 func (olp *OptimizedLogProcessor) ClearCaches() {
-	olp.gzipCache = sync.Map{}
-	olp.pathCache = sync.Map{}
-	olp.fileInfoCache = sync.Map{}
-	olp.cacheHits = 0
-	olp.cacheMisses = 0
+	// Use sync.Map's Range and Delete methods for thread-safe clearing
+	olp.gzipCache.Range(func(key, _ interface{}) bool {
+		olp.gzipCache.Delete(key)
+		return true
+	})
+
+	olp.pathCache.Range(func(key, _ interface{}) bool {
+		olp.pathCache.Delete(key)
+		return true
+	})
+
+	olp.fileInfoCache.Range(func(key, _ interface{}) bool {
+		olp.fileInfoCache.Delete(key)
+		return true
+	})
+
+	olp.cacheHits.Store(0)
+	olp.cacheMisses.Store(0)
 }
 
 // Global optimized processor instance
@@ -479,10 +493,5 @@ var optimizedLogProcessor = NewOptimizedLogProcessor()
 
 // GetLogLinesUltraOptimized provides ultra-optimized log line retrieval
 func GetLogLinesUltraOptimized(jailFilter, ipFilter string, maxLines int) ([]string, error) {
-	return optimizedLogProcessor.GetLogLinesOptimized(jailFilter, ipFilter, maxLines)
-}
-
-// GetLogLinesWithLimitUltraOptimized provides ultra-optimized log line retrieval with custom limits
-func GetLogLinesWithLimitUltraOptimized(jailFilter, ipFilter string, maxLines int) ([]string, error) {
 	return optimizedLogProcessor.GetLogLinesOptimized(jailFilter, ipFilter, maxLines)
 }

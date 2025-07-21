@@ -26,16 +26,20 @@ const (
 )
 
 var logDir = DefaultLogDir // base directory for fail2ban logs
+var logDirMu sync.RWMutex  // protects logDir from concurrent access
 var filterDir = DefaultFilterDir
 
 // SetLogDir sets the directory path for log files.
 func SetLogDir(dir string) {
+	logDirMu.Lock()
+	defer logDirMu.Unlock()
 	logDir = dir
 }
 
-// GetLogDir returns the current log directory path
 // GetLogDir returns the current log directory path.
 func GetLogDir() string {
+	logDirMu.RLock()
+	defer logDirMu.RUnlock()
 	return logDir
 }
 
@@ -194,6 +198,7 @@ func RunnerCombinedOutputWithSudoContext(ctx context.Context, name string, args 
 
 // MockRunner is a simple mock for Runner, used in unit tests.
 type MockRunner struct {
+	mu        sync.Mutex // protects concurrent access to fields
 	Responses map[string][]byte
 	Errors    map[string]error
 	CallLog   []string
@@ -215,6 +220,9 @@ func (m *MockRunner) CombinedOutput(name string, args ...string) ([]byte, error)
 	if name == "sudo" {
 		return nil, fmt.Errorf("sudo should not be called directly in tests")
 	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	key := name + " " + strings.Join(args, " ")
 	m.CallLog = append(m.CallLog, key)
@@ -242,15 +250,21 @@ func (m *MockRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte
 	// If command requires sudo and we have privileges, mock with sudo
 	if RequiresSudo(name, args...) && checker.HasSudoPrivileges() {
 		sudoKey := "sudo " + name + " " + strings.Join(args, " ")
+
+		// Check for sudo-specific response first (with lock protection)
+		m.mu.Lock()
 		m.CallLog = append(m.CallLog, sudoKey)
 
 		if err, exists := m.Errors[sudoKey]; exists {
+			m.mu.Unlock()
 			return nil, err
 		}
 
 		if response, exists := m.Responses[sudoKey]; exists {
+			m.mu.Unlock()
 			return response, nil
 		}
+		m.mu.Unlock()
 
 		// Fall back to non-sudo version if sudo version not mocked
 		return m.CombinedOutput(name, args...)
@@ -262,17 +276,26 @@ func (m *MockRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte
 
 // SetResponse sets a response for a command.
 func (m *MockRunner) SetResponse(cmd string, response []byte) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.Responses[cmd] = response
 }
 
 // SetError sets an error for a command.
 func (m *MockRunner) SetError(cmd string, err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.Errors[cmd] = err
 }
 
 // GetCalls returns the log of commands called.
 func (m *MockRunner) GetCalls() []string {
-	return m.CallLog
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	// Return a copy to prevent external modification
+	calls := make([]string, len(m.CallLog))
+	copy(calls, m.CallLog)
+	return calls
 }
 
 // CombinedOutputWithContext returns a mocked response or error for a command with context support.
@@ -314,7 +337,7 @@ func runnerCombinedRunWithSudo(name string, args ...string) error {
 }
 
 func (c *RealClient) fetchJails() ([]string, error) {
-	currentRunner := GetCurrentRunner()
+	currentRunner := GetRunner()
 	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "status")
 	if err != nil {
 		return nil, err
@@ -324,14 +347,14 @@ func (c *RealClient) fetchJails() ([]string, error) {
 
 // StatusAll returns the status of all fail2ban jails.
 func (c *RealClient) StatusAll() (string, error) {
-	currentRunner := GetCurrentRunner()
+	currentRunner := GetRunner()
 	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "status")
 	return string(out), err
 }
 
 // StatusJail returns the status of a specific fail2ban jail.
 func (c *RealClient) StatusJail(j string) (string, error) {
-	currentRunner := GetCurrentRunner()
+	currentRunner := GetRunner()
 	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "status", j)
 	return string(out), err
 }
@@ -350,7 +373,7 @@ func (c *RealClient) BanIP(ip, jail string) (int, error) {
 		return 0, err
 	}
 
-	currentRunner := GetCurrentRunner()
+	currentRunner := GetRunner()
 	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "set", jail, "banip", ip)
 	if err != nil {
 		return 0, fmt.Errorf("failed to ban IP %s in jail %s: %w", ip, jail, err)
@@ -379,7 +402,7 @@ func (c *RealClient) UnbanIP(ip, jail string) (int, error) {
 		return 0, err
 	}
 
-	currentRunner := GetCurrentRunner()
+	currentRunner := GetRunner()
 	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "set", jail, "unbanip", ip)
 	if err != nil {
 		return 0, fmt.Errorf("failed to unban IP %s in jail %s: %w", ip, jail, err)
@@ -400,7 +423,7 @@ func (c *RealClient) BannedIn(ip string) ([]string, error) {
 		return nil, err
 	}
 
-	currentRunner := GetCurrentRunner()
+	currentRunner := GetRunner()
 	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "banned", ip)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check if IP %s is banned: %w", ip, err)

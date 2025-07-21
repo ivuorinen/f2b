@@ -33,7 +33,7 @@ func GetLogLines(jailFilter string, ipFilter string) ([]string, error) {
 
 // GetLogLinesWithLimit returns log lines with configurable limits for memory management.
 func GetLogLinesWithLimit(jailFilter string, ipFilter string, maxLines int) ([]string, error) {
-	pattern := filepath.Join(logDir, "fail2ban.log*")
+	pattern := filepath.Join(GetLogDir(), "fail2ban.log*")
 	files, err := filepath.Glob(pattern)
 	if err != nil {
 		return nil, fmt.Errorf("error listing log files: %w", err)
@@ -108,7 +108,7 @@ func GetLogLinesWithLimit(jailFilter string, ipFilter string, maxLines int) ([]s
 // GetLogLinesLegacy returns log lines using the original memory-intensive approach.
 // DEPRECATED: Use GetLogLines or GetLogLinesWithLimit instead.
 func GetLogLinesLegacy(jailFilter string, ipFilter string) ([]string, error) {
-	pattern := filepath.Join(logDir, "fail2ban.log*")
+	pattern := filepath.Join(GetLogDir(), "fail2ban.log*")
 	files, err := filepath.Glob(pattern)
 	if err != nil {
 		return nil, fmt.Errorf("error listing log files: %w", err)
@@ -240,10 +240,10 @@ type PathSecurityConfig struct {
 // validateLogPath validates and sanitizes the log file path with comprehensive security checks
 func validateLogPath(path string) (string, error) {
 	config := PathSecurityConfig{
-		AllowedBasePaths: []string{logDir}, // Use configured log directory
-		MaxPathLength:    4096,             // Reasonable path length limit
-		AllowSymlinks:    false,            // Disable symlinks for security
-		ResolveSymlinks:  true,             // Resolve symlinks before validation
+		AllowedBasePaths: []string{GetLogDir()}, // Use configured log directory
+		MaxPathLength:    4096,                  // Reasonable path length limit
+		AllowSymlinks:    false,                 // Disable symlinks for security
+		ResolveSymlinks:  true,                  // Resolve symlinks before validation
 	}
 
 	return validatePathWithSecurity(path, config)
@@ -517,15 +517,10 @@ func passesFilters(line string, config LogReadConfig) bool {
 // readLogFile reads the contents of a log file, handling gzip compression if necessary.
 // DEPRECATED: Use streamLogFile instead for better memory efficiency.
 func readLogFile(path string) ([]byte, error) {
-	// Validate path for security
-	cleanPath, err := filepath.Abs(filepath.Clean(path))
+	// Validate path for security using comprehensive validation
+	cleanPath, err := validateLogPath(path)
 	if err != nil {
-		return nil, fmt.Errorf("invalid log file path: %w", err)
-	}
-
-	// Additional security check: ensure path doesn't contain dangerous patterns
-	if strings.Contains(cleanPath, "..") {
-		return nil, fmt.Errorf("invalid log file path: contains path traversal")
+		return nil, err
 	}
 
 	// Use consolidated gzip detection utility

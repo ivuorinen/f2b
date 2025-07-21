@@ -1,6 +1,7 @@
 package fail2ban
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -152,7 +153,7 @@ func TestValidateCommandConcurrency(t *testing.T) {
 				}
 				// Test with invalid commands
 				if err := ValidateCommand("malicious"); err == nil {
-					errChan <- err
+					errChan <- fmt.Errorf("ValidateCommand should have rejected malicious command")
 					return
 				}
 			}
