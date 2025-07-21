@@ -188,7 +188,7 @@ func TestLogsWatchCmdLimit(t *testing.T) {
 	}
 }
 
-func TestEqualFunction(t *testing.T) {
+func TestComputeHashEquivalence(t *testing.T) {
 	tests := []struct {
 		name     string
 		a        []string
@@ -229,9 +229,11 @@ func TestEqualFunction(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := equal(tt.a, tt.b)
+			hashA := computeHash(tt.a)
+			hashB := computeHash(tt.b)
+			result := hashA == hashB
 			if result != tt.expected {
-				t.Errorf("equal(%v, %v) = %v, want %v", tt.a, tt.b, result, tt.expected)
+				t.Errorf("computeHash equivalence for (%v, %v) = %v, want %v", tt.a, tt.b, result, tt.expected)
 			}
 		})
 	}

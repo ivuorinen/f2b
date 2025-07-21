@@ -20,7 +20,7 @@ func ValidateIP(ip string) error {
 	// Check for valid IPv4 or IPv6 address
 	parsed := net.ParseIP(ip)
 	if parsed == nil {
-		return fmt.Errorf("invalid IP address: %s", ip)
+		return fmt.Errorf("invalid IP address format")
 	}
 	return nil
 }
@@ -32,19 +32,19 @@ func ValidateJail(jail string) error {
 	}
 	// Jail names should be reasonable length
 	if len(jail) > 64 {
-		return fmt.Errorf("jail name too long: %s", jail)
+		return fmt.Errorf("jail name too long")
 	}
 	// First character should be alphanumeric
 	if len(jail) > 0 {
 		first := rune(jail[0])
 		if !unicode.IsLetter(first) && !unicode.IsDigit(first) {
-			return fmt.Errorf("invalid jail name: %s", jail)
+			return fmt.Errorf("invalid jail name format")
 		}
 	}
 	// Rest can be alphanumeric, dash, underscore, or dot
 	for _, r := range jail {
 		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' && r != '.' {
-			return fmt.Errorf("invalid jail name: %s", jail)
+			return fmt.Errorf("invalid jail name format")
 		}
 	}
 	return nil
@@ -201,6 +201,7 @@ func ValidateCommand(command string) error {
 	allowedCommands := map[string]bool{
 		"fail2ban-client": true,
 		"fail2ban-regex":  true,
+		"fail2ban-server": true,
 		"service":         true,
 		"systemctl":       true,
 		"sudo":            true, // Only when used internally

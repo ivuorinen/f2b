@@ -531,51 +531,6 @@ func (c *RealClient) GetLogLinesWithLimit(jail, ip string, maxLines int) ([]stri
 	return allLines, nil
 }
 
-// GetLogLinesLegacy returns log lines using the original memory-intensive approach.
-// DEPRECATED: Use GetLogLines or GetLogLinesWithLimit instead.
-func (c *RealClient) GetLogLinesLegacy(jail, ip string) ([]string, error) {
-	pattern := filepath.Join(c.LogDir, "fail2ban.log*")
-	files, err := filepath.Glob(pattern)
-	if err != nil {
-		return nil, err
-	}
-	var lines []string
-	for _, fpath := range files {
-		data, err := readLogFile(fpath)
-		if err != nil {
-			// Log the error so users are aware of unreadable or corrupted log files
-			fmt.Fprintf(os.Stderr, "Warning: Error reading log file %s: %v\n", fpath, err)
-			continue
-		}
-		for _, l := range strings.Split(string(data), "\n") {
-			if l == "" {
-				continue
-			}
-			lines = append(lines, l)
-		}
-	}
-	if jail != "" && jail != AllFilter {
-		key := fmt.Sprintf("[%s]", jail)
-		var filt []string
-		for _, l := range lines {
-			if strings.Contains(l, key) {
-				filt = append(filt, l)
-			}
-		}
-		lines = filt
-	}
-	if ip != "" && ip != AllFilter {
-		var filt []string
-		for _, l := range lines {
-			if strings.Contains(l, ip) {
-				filt = append(filt, l)
-			}
-		}
-		lines = filt
-	}
-	return lines, nil
-}
-
 // ListFilters returns a list of available fail2ban filter files.
 func ListFilters() ([]string, error) {
 	entries, err := os.ReadDir(filterDir)

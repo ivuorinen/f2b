@@ -107,17 +107,3 @@ func computeHash(lines []string) string {
 	}
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
-
-// equal compares two string slices for equality (kept for compatibility)
-// DEPRECATED: Use computeHash for more efficient comparisons
-func equal(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}

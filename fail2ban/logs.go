@@ -105,25 +105,6 @@ func GetLogLinesWithLimit(jailFilter string, ipFilter string, maxLines int) ([]s
 	return allLines, nil
 }
 
-// GetLogLinesLegacy returns log lines using the original memory-intensive approach.
-// DEPRECATED: Use GetLogLines or GetLogLinesWithLimit instead.
-func GetLogLinesLegacy(jailFilter string, ipFilter string) ([]string, error) {
-	pattern := filepath.Join(GetLogDir(), "fail2ban.log*")
-	files, err := filepath.Glob(pattern)
-	if err != nil {
-		return nil, fmt.Errorf("error listing log files: %w", err)
-	}
-	if len(files) == 0 {
-		return []string{}, nil
-	}
-
-	currentLog, rotated := parseLogFiles(files)
-	lines := readAllLogFiles(currentLog, rotated)
-	lines = applyFilters(lines, jailFilter, ipFilter)
-
-	return lines, nil
-}
-
 // parseLogFiles parses log file names and returns the current log and a slice of rotated logs
 // (sorted oldest to newest).
 func parseLogFiles(files []string) (string, []rotatedLog) {
@@ -163,41 +144,6 @@ func extractLogNumber(base string) int {
 type rotatedLog struct {
 	num  int
 	path string
-}
-
-// readAllLogFiles reads all log files in chronological order (oldest rotated first, then current).
-func readAllLogFiles(currentLog string, rotated []rotatedLog) []string {
-	var lines []string
-
-	// Read rotated logs first (oldest to newest)
-	for _, entry := range rotated {
-		lines = append(lines, readLogFileLines(entry.path)...)
-	}
-
-	// Read current log last
-	if currentLog != "" {
-		lines = append(lines, readLogFileLines(currentLog)...)
-	}
-
-	return lines
-}
-
-// readLogFileLines reads a single log file and returns non-empty lines.
-func readLogFileLines(path string) []string {
-	content, err := readLogFile(path)
-	if err != nil {
-		// Log the error so users are aware of unreadable or corrupted log files
-		fmt.Fprintf(os.Stderr, "Warning: Error reading log file %s: %v\n", path, err)
-		return []string{}
-	}
-
-	var lines []string
-	for _, line := range strings.Split(string(content), "\n") {
-		if line != "" {
-			lines = append(lines, line)
-		}
-	}
-	return lines
 }
 
 // LogReadConfig holds configuration for streaming log reading
@@ -535,38 +481,4 @@ func readLogFile(path string) ([]byte, error) {
 	}()
 
 	return io.ReadAll(reader)
-}
-
-// applyFilters applies jail and IP filters to log lines.
-func applyFilters(lines []string, jailFilter, ipFilter string) []string {
-	if jailFilter != "" && jailFilter != AllFilter {
-		lines = filterByJail(lines, jailFilter)
-	}
-	if ipFilter != "" && ipFilter != AllFilter {
-		lines = filterByIP(lines, ipFilter)
-	}
-	return lines
-}
-
-// filterByJail filters lines by jail name.
-func filterByJail(lines []string, jailFilter string) []string {
-	identifier := fmt.Sprintf("[%s]", jailFilter)
-	var filtered []string
-	for _, line := range lines {
-		if strings.Contains(line, identifier) {
-			filtered = append(filtered, line)
-		}
-	}
-	return filtered
-}
-
-// filterByIP filters lines by IP address.
-func filterByIP(lines []string, ipFilter string) []string {
-	var filtered []string
-	for _, line := range lines {
-		if strings.Contains(line, ipFilter) {
-			filtered = append(filtered, line)
-		}
-	}
-	return filtered
 }
