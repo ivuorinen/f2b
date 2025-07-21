@@ -186,6 +186,8 @@ func readAllLogFiles(currentLog string, rotated []rotatedLog) []string {
 func readLogFileLines(path string) []string {
 	content, err := readLogFile(path)
 	if err != nil {
+		// Log the error so users are aware of unreadable or corrupted log files
+		fmt.Fprintf(os.Stderr, "Warning: Error reading log file %s: %v\n", path, err)
 		return []string{}
 	}
 

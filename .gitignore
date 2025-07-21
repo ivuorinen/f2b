@@ -6,3 +6,4 @@ coverage.*
 *.exe
 *.dll
 .DS_Store
+/*.test

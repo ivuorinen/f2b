@@ -1,14 +1,11 @@
 package cmd
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 	"testing"
-
-	"github.com/spf13/cobra"
 
 	"github.com/ivuorinen/f2b/fail2ban"
 )
@@ -29,72 +26,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// Type alias for the enhanced MockClient from fail2ban package
-type MockClient = fail2ban.MockClient
-
-// NewMockClient creates a new MockClient for testing
-func NewMockClient() *MockClient {
-	return fail2ban.NewMockClient()
-}
-
-// Helper function to set jails for the enhanced MockClient
-func setMockJails(mock *MockClient, jails []string) {
-	mock.Jails = make(map[string]struct{})
-	for _, jail := range jails {
-		mock.Jails[jail] = struct{}{}
-	}
-}
-
-// Context-aware methods for MockClient
-
-// Use centralized validation functions from fail2ban package
-// No need for duplicate validation logic here
-
-// Helper function to capture command output
-func executeCommand(client fail2ban.Client, args ...string) (string, error) {
-	// Suppress logrus output during tests
-	oldLoggerOut := Logger.Out
-	Logger.SetOutput(io.Discard)
-	defer Logger.SetOutput(oldLoggerOut)
-
-	// Ensure mock sudo checker is set for commands that need it
-	originalChecker := fail2ban.GetSudoChecker()
-	mockChecker := fail2ban.NewMockSudoCheckerWithPrivileges(true)
-	fail2ban.SetSudoChecker(mockChecker)
-	defer fail2ban.SetSudoChecker(originalChecker)
-
-	rootCmd := &cobra.Command{Use: "f2b"}
-	config := Config{Format: "plain"}
-	rootCmd.AddCommand(ListJailsCmd(client))
-	rootCmd.AddCommand(StatusCmd(client, &config))
-	rootCmd.AddCommand(BanCmd(client, &config))
-	rootCmd.AddCommand(UnbanCmd(client, &config))
-	rootCmd.AddCommand(TestIPCmd(client, "plain"))
-	rootCmd.AddCommand(LogsCmd(client, &config))
-	rootCmd.AddCommand(BannedCmd(client, "plain"))
-	rootCmd.AddCommand(VersionCmd("plain"))
-	rootCmd.AddCommand(TestFilterCmd(client, &config))
-
-	var buf bytes.Buffer
-	rootCmd.SetOut(&buf)
-	rootCmd.SetErr(&buf)
-	rootCmd.SetArgs(args)
-	err := rootCmd.Execute()
-
-	// Filter out logrus lines (starting with "time="), but keep "Error:" lines for error output tests
-	lines := strings.Split(buf.String(), "\n")
-	var filtered []string
-	for _, line := range lines {
-		if !strings.HasPrefix(line, "time=") {
-			filtered = append(filtered, line)
-		}
-	}
-	// Remove trailing empty lines
-	for len(filtered) > 0 && filtered[len(filtered)-1] == "" {
-		filtered = filtered[:len(filtered)-1]
-	}
-	return strings.Join(filtered, "\n") + "\n", err
-}
+// All common test helpers are now in test_helpers.go to eliminate duplication
 
 // Helper function to set up commands (mimics the real cmd package)
 

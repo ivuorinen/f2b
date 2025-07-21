@@ -71,15 +71,13 @@ func (r *RealSudoChecker) InSudoGroup() bool {
 			continue
 		}
 
-		// Check common sudo group names
+		// Check common sudo group names (portable across systems)
 		if group.Name == "sudo" || group.Name == "wheel" || group.Name == "admin" {
 			return true
 		}
 
-		// Check common sudo group IDs
-		if gid == "27" || gid == "1001" { // Common sudo group IDs
-			return true
-		}
+		// Removed hard-coded GID checks for better portability
+		// Group name lookup above handles all standard sudo groups
 	}
 
 	return false

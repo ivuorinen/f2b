@@ -520,6 +520,8 @@ func (c *RealClient) GetLogLinesLegacy(jail, ip string) ([]string, error) {
 	for _, fpath := range files {
 		data, err := readLogFile(fpath)
 		if err != nil {
+			// Log the error so users are aware of unreadable or corrupted log files
+			fmt.Fprintf(os.Stderr, "Warning: Error reading log file %s: %v\n", fpath, err)
 			continue
 		}
 		for _, l := range strings.Split(string(data), "\n") {
