@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -87,7 +88,11 @@ func (env *TestEnvironment) WithMockRunner() *TestEnvironment {
 // WithStdoutCapture captures stdout for testing output
 func (env *TestEnvironment) WithStdoutCapture() *TestEnvironment {
 	env.originalStdout = os.Stdout
-	r, w, _ := os.Pipe()
+	r, w, err := os.Pipe()
+	if err != nil {
+		// Return early with nil fields to indicate failure
+		return env
+	}
 	env.stdoutReader = r
 	env.stdoutWriter = w
 	os.Stdout = w
@@ -117,11 +122,17 @@ func (env *TestEnvironment) ReadStdout() string {
 		return ""
 	}
 
-	_ = env.stdoutWriter.Close()
+	// Close writer if not already closed
+	if env.stdoutWriter != nil {
+		_ = env.stdoutWriter.Close()
+		env.stdoutWriter = nil // Prevent multiple closures
+	}
 
-	buf := make([]byte, 1024)
-	n, _ := env.stdoutReader.Read(buf)
-	return string(buf[:n])
+	// Use io.ReadAll for dynamic buffer reading
+	if data, err := io.ReadAll(env.stdoutReader); err == nil {
+		return string(data)
+	}
+	return ""
 }
 
 // NewCommandTest creates a new command test builder

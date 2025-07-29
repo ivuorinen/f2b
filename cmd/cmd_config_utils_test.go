@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -121,7 +122,7 @@ func TestValidateConfigPathSecurity(t *testing.T) {
 			if err == nil {
 				t.Errorf("validateConfigPath should have rejected malicious path: %s", path)
 			}
-			if !containsString(err.Error(), "path traversal") {
+			if !strings.Contains(err.Error(), "path traversal") {
 				t.Errorf("Error should mention path traversal, got: %s", err.Error())
 			}
 		})
@@ -145,23 +146,6 @@ func TestValidateConfigPathLegitimate(t *testing.T) {
 			}
 		})
 	}
-}
-
-// Helper function to check if a string contains a substring
-func containsString(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
-		(len(s) > len(substr) && s[:len(substr)] == substr) ||
-		(len(s) > len(substr) && s[len(s)-len(substr):] == substr) ||
-		containsStringHelper(s, substr))
-}
-
-func containsStringHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
 
 // Benchmark the new security function

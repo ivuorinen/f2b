@@ -307,14 +307,17 @@ func TestExecute(t *testing.T) {
 
 			// Capture stdout to prevent output during tests
 			oldStdout := os.Stdout
-			r, w, _ := os.Pipe()
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatalf("failed to create pipe: %v", err)
+			}
 			os.Stdout = w
 
 			// Set up a simple test command that will exit quickly
 			originalArgs := os.Args
 			os.Args = []string{"f2b", "version"}
 
-			err := Execute(client, tt.config)
+			err = Execute(client, tt.config)
 
 			// Restore stdout
 			if err := w.Close(); err != nil {
@@ -353,13 +356,16 @@ func TestExecuteWithRealCommands(t *testing.T) {
 
 	// Capture stdout
 	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create pipe: %v", err)
+	}
 	os.Stdout = w
 
 	originalArgs := os.Args
 	os.Args = []string{"f2b", "help"}
 
-	err := Execute(client, config)
+	err = Execute(client, config)
 
 	// Restore
 	if err := w.Close(); err != nil {
@@ -615,7 +621,10 @@ func TestPersistentPreRunWithInvalidLogFile(t *testing.T) {
 
 	// Capture stderr to check for error message
 	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create pipe: %v", err)
+	}
 	os.Stderr = w
 
 	// This should handle the error gracefully
@@ -742,13 +751,16 @@ func TestExecuteIntegration(t *testing.T) {
 
 			// Capture output
 			oldStdout := os.Stdout
-			r, w, _ := os.Pipe()
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatalf("failed to create pipe: %v", err)
+			}
 			os.Stdout = w
 
 			originalArgs := os.Args
 			os.Args = tt.args
 
-			err := Execute(client, tt.config)
+			err = Execute(client, tt.config)
 
 			// Restore
 			if closeErr := w.Close(); closeErr != nil {

@@ -53,7 +53,10 @@ func TestPrintOutput(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Capture stdout
 			oldStdout := os.Stdout
-			r, w, _ := os.Pipe()
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatalf("failed to create pipe: %v", err)
+			}
 			os.Stdout = w
 
 			PrintOutput(tt.data, tt.format)
@@ -158,7 +161,10 @@ func TestPrintError(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Capture stderr
 			oldStderr := os.Stderr
-			r, w, _ := os.Pipe()
+			r, w, err := os.Pipe()
+			if err != nil {
+				t.Fatalf("failed to create pipe: %v", err)
+			}
 			os.Stderr = w
 
 			// Capture log output
@@ -200,7 +206,10 @@ func TestPrintError(t *testing.T) {
 func TestPrintErrorf(t *testing.T) {
 	// Capture stderr
 	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create pipe: %v", err)
+	}
 	os.Stderr = w
 
 	// Capture log output

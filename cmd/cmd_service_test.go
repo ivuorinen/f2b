@@ -263,7 +263,15 @@ func BenchmarkServiceCmd(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		cmd := ServiceCmd(config)
 		oldStdout := os.Stdout
-		r, w, _ := os.Pipe()
+		r, w, err := os.Pipe()
+		if err != nil {
+			b.Fatalf("failed to create pipe: %v", err)
+		}
+		defer func() {
+			_ = w.Close()
+			_ = r.Close()
+			os.Stdout = oldStdout
+		}()
 		os.Stdout = w
 
 		cmd.SetArgs([]string{"status"})

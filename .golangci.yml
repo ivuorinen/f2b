@@ -92,6 +92,9 @@ linters:
     errorlint:
       errorf: false # Allow %v instead of %w for some cases
 
+    lll:
+      line-length: 120 # Set maximum line length to 120 characters
+
 formatters:
   enable:
     - gofmt
