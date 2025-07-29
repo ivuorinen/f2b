@@ -64,6 +64,5 @@ repos:
       - id: editorconfig-checker
         name: EditorConfig Checker
         entry: editorconfig-checker
-        args: [-format, gcc]
         language: system
         files: .
