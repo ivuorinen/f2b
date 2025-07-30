@@ -28,6 +28,24 @@ func AddLogFlags(cmd *cobra.Command) {
 	cmd.Flags().IntP("limit", "n", 0, "Show only the last N log lines")
 }
 
+// IsSkipCommand returns true if the command doesn't require a fail2ban client
+func IsSkipCommand(command string) bool {
+	skipCommands := []string{
+		"service",
+		"version",
+		"test-filter",
+		"completion",
+		"help",
+	}
+
+	for _, skip := range skipCommands {
+		if command == skip {
+			return true
+		}
+	}
+	return false
+}
+
 // AddWatchFlags adds common watch-related flags to a command
 func AddWatchFlags(cmd *cobra.Command, interval *time.Duration) {
 	cmd.Flags().DurationVarP(interval, "interval", "i", 5*time.Second, "Polling interval")

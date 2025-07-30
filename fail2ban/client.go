@@ -91,7 +91,31 @@ func NewClient(logDir, filterDir string) (*RealClient, error) {
 		filterDir = DefaultFilterDir
 	}
 
-	rc := &RealClient{Path: path, LogDir: logDir, FilterDir: filterDir}
+	// Validate log directory
+	logConfig := PathSecurityConfig{
+		AllowedBasePaths: []string{"/var/log", "/tmp", "/opt", "/usr/local", "/home"},
+		MaxPathLength:    4096,
+		AllowSymlinks:    false,
+		ResolveSymlinks:  true,
+	}
+	validatedLogDir, err := validatePathWithSecurity(logDir, logConfig)
+	if err != nil {
+		return nil, fmt.Errorf("invalid log directory: %w", err)
+	}
+
+	// Validate filter directory
+	filterConfig := PathSecurityConfig{
+		AllowedBasePaths: []string{"/etc/fail2ban", "/usr/local/etc/fail2ban", "/opt/fail2ban", "/home"},
+		MaxPathLength:    4096,
+		AllowSymlinks:    false,
+		ResolveSymlinks:  true,
+	}
+	validatedFilterDir, err := validatePathWithSecurity(filterDir, filterConfig)
+	if err != nil {
+		return nil, fmt.Errorf("invalid filter directory: %w", err)
+	}
+
+	rc := &RealClient{Path: path, LogDir: validatedLogDir, FilterDir: validatedFilterDir}
 
 	// Version check - use sudo if needed
 	out, err := RunnerCombinedOutputWithSudo(path, "-V")

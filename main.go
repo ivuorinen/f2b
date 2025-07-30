@@ -20,10 +20,7 @@ func main() {
 
 	skip := false
 	if len(args) > 1 {
-		switch args[1] {
-		case "service", "version", "test-filter", "completion", "help":
-			skip = true
-		}
+		skip = cmd.IsSkipCommand(args[1])
 	}
 
 	if !skip {
