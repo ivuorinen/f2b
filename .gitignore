@@ -2,7 +2,8 @@
 !*/testdata/**/*.log
 /f2b*
 coverage.*
-.env*
+.env               # real secrets
+!.env.example      # keep the template under VCS
 *.exe
 *.dll
 .DS_Store
