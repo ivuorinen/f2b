@@ -6,10 +6,21 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/sirupsen/logrus"
+)
+
+const (
+	// DefaultCommandTimeout is the default timeout for individual fail2ban commands
+	DefaultCommandTimeout = 30 * time.Second
+	// DefaultFileTimeout is the default timeout for file operations
+	DefaultFileTimeout = 10 * time.Second
+	// DefaultParallelTimeout is the default timeout for parallel operations
+	DefaultParallelTimeout = 60 * time.Second
 )
 
 // containsPathTraversal performs comprehensive path traversal detection
@@ -220,6 +231,43 @@ func NewConfigFromEnv() Config {
 	}
 	cfg.FilterDir = validatedFilterDir
 
+	// Configure timeouts from environment variables
+	cfg.CommandTimeout = parseTimeoutFromEnv("F2B_COMMAND_TIMEOUT", DefaultCommandTimeout)
+	cfg.FileTimeout = parseTimeoutFromEnv("F2B_FILE_TIMEOUT", DefaultFileTimeout)
+	cfg.ParallelTimeout = parseTimeoutFromEnv("F2B_PARALLEL_TIMEOUT", DefaultParallelTimeout)
+
 	cfg.Format = "plain"
 	return cfg
+}
+
+// parseTimeoutFromEnv parses timeout duration from environment variable with fallback
+func parseTimeoutFromEnv(envVar string, defaultTimeout time.Duration) time.Duration {
+	envValue := os.Getenv(envVar)
+	if envValue == "" {
+		return defaultTimeout
+	}
+
+	// Try parsing as duration first (e.g., "30s", "1m30s")
+	if duration, err := time.ParseDuration(envValue); err == nil {
+		if duration <= 0 {
+			logrus.WithField("env_var", envVar).WithField("value", envValue).
+				Warn("Invalid timeout value, using default")
+			return defaultTimeout
+		}
+		return duration
+	}
+
+	// Try parsing as seconds (for backward compatibility)
+	if seconds, err := strconv.Atoi(envValue); err == nil {
+		if seconds <= 0 {
+			logrus.WithField("env_var", envVar).WithField("value", envValue).
+				Warn("Invalid timeout value, using default")
+			return defaultTimeout
+		}
+		return time.Duration(seconds) * time.Second
+	}
+
+	logrus.WithField("env_var", envVar).WithField("value", envValue).
+		Warn("Failed to parse timeout value, using default")
+	return defaultTimeout
 }

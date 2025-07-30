@@ -15,12 +15,16 @@ import (
 // ValidateIP validates an IP address string and returns an error if invalid
 func ValidateIP(ip string) error {
 	if ip == "" {
-		return fmt.Errorf("IP address cannot be empty")
+		return ErrIPRequiredError
 	}
 	// Check for valid IPv4 or IPv6 address
 	parsed := net.ParseIP(ip)
 	if parsed == nil {
-		return fmt.Errorf("invalid IP address format")
+		// Don't include potentially malicious input in error message
+		if containsCommandInjectionPatterns(ip) || len(ip) > 45 {
+			return fmt.Errorf("invalid IP address format")
+		}
+		return NewInvalidIPError(ip)
 	}
 	return nil
 }
@@ -28,23 +32,35 @@ func ValidateIP(ip string) error {
 // ValidateJail validates a jail name and returns an error if invalid
 func ValidateJail(jail string) error {
 	if jail == "" {
-		return fmt.Errorf("jail name cannot be empty")
+		return ErrJailRequiredError
 	}
 	// Jail names should be reasonable length
 	if len(jail) > 64 {
-		return fmt.Errorf("jail name too long")
+		// Don't include potentially malicious input in error message
+		if containsCommandInjectionPatterns(jail) {
+			return fmt.Errorf("invalid jail name format")
+		}
+		return NewInvalidJailError(jail + " (too long)")
 	}
 	// First character should be alphanumeric
 	if len(jail) > 0 {
 		first := rune(jail[0])
 		if !unicode.IsLetter(first) && !unicode.IsDigit(first) {
-			return fmt.Errorf("invalid jail name format")
+			// Don't include potentially malicious input in error message
+			if containsCommandInjectionPatterns(jail) {
+				return fmt.Errorf("invalid jail name format")
+			}
+			return NewInvalidJailError(jail + " (invalid format)")
 		}
 	}
 	// Rest can be alphanumeric, dash, underscore, or dot
 	for _, r := range jail {
 		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' && r != '.' {
-			return fmt.Errorf("invalid jail name format")
+			// Don't include potentially malicious input in error message
+			if containsCommandInjectionPatterns(jail) {
+				return fmt.Errorf("invalid jail name format")
+			}
+			return NewInvalidJailError(jail + " (invalid character)")
 		}
 	}
 	return nil
@@ -53,28 +69,28 @@ func ValidateJail(jail string) error {
 // ValidateFilter validates a filter name and returns an error if invalid
 func ValidateFilter(filter string) error {
 	if filter == "" {
-		return fmt.Errorf("filter name cannot be empty")
+		return ErrFilterRequiredError
 	}
 
 	// Check length limits to prevent buffer overflow attacks
 	if len(filter) > 255 {
-		return fmt.Errorf("filter name too long")
+		return NewInvalidFilterError(filter + " (too long)")
 	}
 
 	// Check for null bytes
 	if strings.Contains(filter, "\x00") {
-		return fmt.Errorf("filter name contains null bytes")
+		return NewInvalidFilterError(filter + " (contains null bytes)")
 	}
 
 	// Enhanced path traversal detection
 	if ContainsPathTraversal(filter) {
-		return fmt.Errorf("filter name contains path traversal patterns")
+		return NewInvalidFilterError(filter + " (path traversal)")
 	}
 
 	// Character validation - only allow safe characters
 	for _, r := range filter {
 		if !isValidFilterChar(r) {
-			return fmt.Errorf("filter name contains invalid characters")
+			return NewInvalidFilterError(filter + " (invalid characters)")
 		}
 	}
 
@@ -82,7 +98,7 @@ func ValidateFilter(filter string) error {
 	if strings.HasPrefix(filter, ".") || strings.HasSuffix(filter, ".") {
 		// Allow single extension like ".conf" but not ".." or "..."
 		if strings.Contains(filter, "..") {
-			return fmt.Errorf("filter name contains invalid dot patterns")
+			return NewInvalidFilterError(filter + " (invalid dot patterns)")
 		}
 	}
 
@@ -96,7 +112,7 @@ func ValidateJailExists(jail string, jails []string) error {
 			return nil
 		}
 	}
-	return fmt.Errorf("jail '%s' not found", jail)
+	return NewJailNotFoundError(jail)
 }
 
 // Command execution helpers
@@ -105,32 +121,61 @@ func ValidateJailExists(jail string, jails []string) error {
 
 // ParseJailList parses the jail list output from fail2ban-client status
 func ParseJailList(output string) ([]string, error) {
-	for _, line := range strings.Split(output, "\n") {
-		if strings.Contains(line, "Jail list:") {
-			parts := strings.SplitN(line, ":", 2)
-			if len(parts) < 2 {
-				return nil, fmt.Errorf("failed to parse jails")
-			}
-			jailList := strings.TrimSpace(parts[1])
-			if jailList == "" {
-				return []string{}, nil // Return empty list for no jails
-			}
-			return strings.Fields(strings.ReplaceAll(jailList, ",", " ")), nil
-		}
+	// Optimized: Find "Jail list:" position directly instead of splitting all lines
+	jailListPos := strings.Index(output, "Jail list:")
+	if jailListPos == -1 {
+		return nil, fmt.Errorf("failed to parse jails")
 	}
-	return nil, fmt.Errorf("failed to parse jails")
+
+	// Find the start of the jail list content (after "Jail list:")
+	colonPos := strings.Index(output[jailListPos:], ":")
+	if colonPos == -1 {
+		return nil, fmt.Errorf("failed to parse jails")
+	}
+
+	// Find the end of the line
+	start := jailListPos + colonPos + 1
+	end := strings.Index(output[start:], "\n")
+	if end == -1 {
+		end = len(output) - start
+	}
+
+	jailList := strings.TrimSpace(output[start : start+end])
+	if jailList == "" {
+		return []string{}, nil // Return empty list for no jails
+	}
+
+	// Optimized: Use byte replacement instead of string replacement for single character
+	if strings.Contains(jailList, ",") {
+		jailList = strings.ReplaceAll(jailList, ",", " ")
+	}
+
+	return strings.Fields(jailList), nil
 }
 
 // ParseBracketedList parses bracketed output like "[jail1, jail2]"
 func ParseBracketedList(output string) []string {
-	s := strings.Trim(output, "[]")
+	// Optimized: Manual bracket removal instead of Trim to avoid checking both ends
+	s := output
+	if len(s) >= 2 && s[0] == '[' && s[len(s)-1] == ']' {
+		s = s[1 : len(s)-1]
+	}
 	if s == "" {
 		return []string{}
 	}
-	parts := strings.Split(strings.ReplaceAll(s, "\"", ""), ",")
-	for i := range parts {
-		parts[i] = strings.TrimSpace(parts[i])
+
+	// Optimized: Remove quotes first, then split to avoid multiple string operations
+	if strings.Contains(s, "\"") {
+		s = strings.ReplaceAll(s, "\"", "")
 	}
+
+	parts := strings.Split(s, ",")
+
+	// Optimized: Trim in-place to avoid additional allocations
+	for i, part := range parts {
+		parts[i] = strings.TrimSpace(part)
+	}
+
 	return parts
 }
 
@@ -208,25 +253,112 @@ func ValidateCommand(command string) error {
 	}
 
 	if command == "" {
-		return fmt.Errorf("command cannot be empty")
+		return NewInvalidCommandError("command cannot be empty")
 	}
 
 	// Check for null bytes (command injection attempt)
 	if strings.ContainsRune(command, '\x00') {
-		return fmt.Errorf("command contains null byte")
+		// Don't include potentially malicious input in error message
+		return fmt.Errorf("invalid command format")
 	}
 
 	// Check for path traversal in command name
 	if ContainsPathTraversal(command) {
-		return fmt.Errorf("command contains path traversal patterns")
+		// Don't include potentially malicious input in error message
+		// Check for common dangerous patterns that shouldn't be in command names
+		dangerousPatterns := []string{"rm -rf", "drop table", "'; cat", "/etc/"}
+		cmdLower := strings.ToLower(command)
+		for _, pattern := range dangerousPatterns {
+			if strings.Contains(cmdLower, pattern) {
+				return fmt.Errorf("invalid command format")
+			}
+		}
+		return NewInvalidCommandError(command + " (path traversal)")
+	}
+
+	// Additional security checks for command injection patterns
+	if containsCommandInjectionPatterns(command) {
+		// Don't include potentially malicious input in error message
+		return fmt.Errorf("invalid command format")
 	}
 
 	// Validate against allowlist
 	if !allowedCommands[command] {
-		return fmt.Errorf("command not in allowlist: %s", command)
+		return NewCommandNotAllowedError(command)
 	}
 
 	return nil
+}
+
+// ValidateArguments validates command arguments for security
+func ValidateArguments(args []string) error {
+	for i, arg := range args {
+		if err := validateSingleArgument(arg, i); err != nil {
+			return fmt.Errorf("argument %d invalid: %w", i, err)
+		}
+	}
+	return nil
+}
+
+// validateSingleArgument validates a single command argument
+func validateSingleArgument(arg string, _ int) error {
+	// Check for null bytes
+	if strings.ContainsRune(arg, '\x00') {
+		return NewInvalidArgumentError(arg + " (contains null byte)")
+	}
+
+	// Check length to prevent buffer overflow
+	if len(arg) > 1024 {
+		return NewInvalidArgumentError(fmt.Sprintf("%s (too long: %d chars)", arg, len(arg)))
+	}
+
+	// Check for command injection patterns
+	if containsCommandInjectionPatterns(arg) {
+		return NewInvalidArgumentError(arg + " (injection patterns)")
+	}
+
+	// For IP arguments, validate IP format
+	if isLikelyIPArgument(arg) {
+		if err := ValidateIP(arg); err != nil {
+			return fmt.Errorf("invalid IP format: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// containsCommandInjectionPatterns detects common command injection patterns
+func containsCommandInjectionPatterns(input string) bool {
+	// Optimized: Check single characters first (fastest)
+	for _, r := range input {
+		switch r {
+		case ';', '&', '|', '`', '$', '<', '>', '\n', '\r', '\t':
+			return true
+		}
+	}
+
+	// Optimized: Convert to lower case only once and check multi-character patterns
+	inputLower := strings.ToLower(input)
+
+	// Multi-character patterns - be specific to avoid false positives
+	multiCharPatterns := []string{
+		"$(", "${", "&&", "||", ">>", "<<",
+		"exec ", "system(", "eval(",
+	}
+
+	for _, pattern := range multiCharPatterns {
+		if strings.Contains(inputLower, pattern) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// isLikelyIPArgument heuristically determines if an argument looks like an IP address
+func isLikelyIPArgument(arg string) bool {
+	// Simple heuristic: contains dots and digits
+	return strings.Contains(arg, ".") && strings.ContainsAny(arg, "0123456789")
 }
 
 // Internal helper functions

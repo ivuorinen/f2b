@@ -2,6 +2,7 @@ package fail2ban
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"net/url"
@@ -173,6 +174,34 @@ func streamLogFile(path string, config LogReadConfig) ([]string, error) {
 	defer cleanup()
 
 	return scanLogLines(scanner, config)
+}
+
+// streamLogFileWithContext reads a log file line by line with memory limits,
+// filtering, and context support for timeouts
+func streamLogFileWithContext(ctx context.Context, path string, config LogReadConfig) ([]string, error) {
+	// Check context before starting
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
+	cleanPath, err := validateLogPath(path)
+	if err != nil {
+		return nil, err
+	}
+
+	if shouldSkipFile(cleanPath, config.MaxFileSize) {
+		return []string{}, nil
+	}
+
+	scanner, cleanup, err := createLogScanner(cleanPath)
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
+
+	return scanLogLinesWithContext(ctx, scanner, config)
 }
 
 // PathSecurityConfig holds configuration for path security validation
@@ -418,6 +447,47 @@ func scanLogLines(scanner *bufio.Scanner, config LogReadConfig) ([]string, error
 	lineCount := 0
 
 	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+
+		if !passesFilters(line, config) {
+			continue
+		}
+
+		lines = append(lines, line)
+		lineCount++
+
+		if config.MaxLines > 0 && lineCount >= config.MaxLines {
+			break
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error scanning log file: %w", err)
+	}
+
+	return lines, nil
+}
+
+// scanLogLinesWithContext scans log lines with context support for timeout handling
+func scanLogLinesWithContext(ctx context.Context, scanner *bufio.Scanner, config LogReadConfig) ([]string, error) {
+	var lines []string
+	lineCount := 0
+	linesProcessed := 0
+
+	for scanner.Scan() {
+		// Check context periodically (every 100 lines to avoid excessive overhead)
+		if linesProcessed%100 == 0 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			default:
+			}
+		}
+		linesProcessed++
+
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
 			continue

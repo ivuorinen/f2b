@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -9,6 +10,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ivuorinen/f2b/fail2ban"
+)
+
+const (
+	// DefaultPollingInterval is the default interval for polling operations
+	DefaultPollingInterval = 5 * time.Second
 )
 
 // Command creation helpers
@@ -48,7 +54,7 @@ func IsSkipCommand(command string) bool {
 
 // AddWatchFlags adds common watch-related flags to a command
 func AddWatchFlags(cmd *cobra.Command, interval *time.Duration) {
-	cmd.Flags().DurationVarP(interval, "interval", "i", 5*time.Second, "Polling interval")
+	cmd.Flags().DurationVarP(interval, "interval", "i", DefaultPollingInterval, "Polling interval")
 }
 
 // Validation helpers
@@ -94,6 +100,24 @@ func GetJailsFromArgs(client fail2ban.Client, args []string, startIndex int) ([]
 	}
 
 	jails, err := client.ListJails()
+	if err != nil {
+		return nil, err
+	}
+	return jails, nil
+}
+
+// GetJailsFromArgsWithContext gets jail list from arguments or client with timeout context
+func GetJailsFromArgsWithContext(
+	ctx context.Context,
+	client fail2ban.Client,
+	args []string,
+	startIndex int,
+) ([]string, error) {
+	if len(args) > startIndex {
+		return []string{strings.ToLower(args[startIndex])}, nil
+	}
+
+	jails, err := client.ListJailsWithContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -191,12 +215,76 @@ func ProcessBanOperation(client fail2ban.Client, ip string, jails []string) ([]O
 	return results, nil
 }
 
+// ProcessBanOperationWithContext processes ban operations across multiple jails with timeout context
+func ProcessBanOperationWithContext(
+	ctx context.Context,
+	client fail2ban.Client,
+	ip string,
+	jails []string,
+) ([]OperationResult, error) {
+	results := make([]OperationResult, 0, len(jails))
+
+	for _, jail := range jails {
+		code, err := client.BanIPWithContext(ctx, ip, jail)
+		if err != nil {
+			return nil, err
+		}
+
+		status := InterpretBanStatus(code, "ban")
+		Logger.WithFields(map[string]interface{}{
+			"ip":     ip,
+			"jail":   jail,
+			"status": status,
+		}).Info("Ban result")
+
+		results = append(results, OperationResult{
+			IP:     ip,
+			Jail:   jail,
+			Status: status,
+		})
+	}
+
+	return results, nil
+}
+
 // ProcessUnbanOperation processes unban operations across multiple jails
 func ProcessUnbanOperation(client fail2ban.Client, ip string, jails []string) ([]OperationResult, error) {
 	results := make([]OperationResult, 0, len(jails))
 
 	for _, jail := range jails {
 		code, err := client.UnbanIP(ip, jail)
+		if err != nil {
+			return nil, err
+		}
+
+		status := InterpretBanStatus(code, "unban")
+		Logger.WithFields(map[string]interface{}{
+			"ip":     ip,
+			"jail":   jail,
+			"status": status,
+		}).Info("Unban result")
+
+		results = append(results, OperationResult{
+			IP:     ip,
+			Jail:   jail,
+			Status: status,
+		})
+	}
+
+	return results, nil
+}
+
+// ProcessUnbanOperationWithContext processes unban operations across multiple jails with timeout context
+func ProcessUnbanOperationWithContext(
+	ctx context.Context,
+	client fail2ban.Client,
+	ip string,
+	jails []string,
+) ([]OperationResult, error) {
+	results := make([]OperationResult, 0, len(jails))
+
+	for _, jail := range jails {
+		code, err := client.UnbanIPWithContext(ctx, ip, jail)
 		if err != nil {
 			return nil, err
 		}

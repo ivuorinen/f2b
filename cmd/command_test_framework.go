@@ -280,11 +280,11 @@ func (ctb *CommandTestBuilder) executeCommand() (string, error) {
 	case "status":
 		cmd = StatusCmd(ctb.mockClient, ctb.config)
 	case "list-jails":
-		cmd = ListJailsCmd(ctb.mockClient)
+		cmd = ListJailsCmd(ctb.mockClient, ctb.config)
 	case "banned":
-		cmd = BannedCmd(ctb.mockClient, ctb.config.Format)
+		cmd = BannedCmd(ctb.mockClient, ctb.config)
 	case "test":
-		cmd = TestIPCmd(ctb.mockClient, ctb.config.Format)
+		cmd = TestIPCmd(ctb.mockClient, ctb.config)
 	case "logs":
 		cmd = LogsCmd(ctb.mockClient, ctb.config)
 	case "service":

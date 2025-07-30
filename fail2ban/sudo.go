@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+const (
+	// DefaultSudoTimeout is the default timeout for sudo privilege checks
+	DefaultSudoTimeout = 5 * time.Second
+)
+
 // SudoChecker provides methods to check sudo privileges
 type SudoChecker interface {
 	// IsRoot returns true if the current user is root (UID 0)
@@ -90,8 +95,8 @@ func (r *RealSudoChecker) CanUseSudo() bool {
 		return false // Default to false in tests unless mocked
 	}
 
-	// Create a context with 5-second timeout to prevent hanging processes
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// Create a context with timeout to prevent hanging processes
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultSudoTimeout)
 	defer cancel()
 
 	// Try to run 'sudo -n true' (non-interactive) to test sudo access

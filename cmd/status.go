@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"fmt"
+	"context"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -16,8 +16,12 @@ func StatusCmd(client fail2ban.Client, config *Config) *cobra.Command {
 		"Show status of all jails or a specific jail",
 		[]string{"st", "stat", "show-status"},
 		func(cmd *cobra.Command, args []string) error {
+			// Create timeout context for the entire status operation
+			ctx, cancel := context.WithTimeout(context.Background(), config.CommandTimeout)
+			defer cancel()
+
 			if len(args) == 0 {
-				jails, _ := client.ListJails()
+				jails, _ := client.ListJailsWithContext(ctx)
 				PrintOutputTo(
 					GetCmdOutput(cmd),
 					"Usage: "+cmd.Root().Use+" status all   (show all jails)",
@@ -34,7 +38,7 @@ func StatusCmd(client fail2ban.Client, config *Config) *cobra.Command {
 
 			target := strings.ToLower(args[0])
 			if target == "all" {
-				out, err := client.StatusAll()
+				out, err := client.StatusAllWithContext(ctx)
 				if err != nil {
 					return HandleClientError(err)
 				}
@@ -43,8 +47,8 @@ func StatusCmd(client fail2ban.Client, config *Config) *cobra.Command {
 				return nil
 			}
 
-			// Check if jail exists
-			jails, _ := client.ListJails()
+			// Check if jail exists (with timeout context)
+			jails, _ := client.ListJailsWithContext(ctx)
 			jailExists := false
 			for _, j := range jails {
 				if j == target {
@@ -54,10 +58,10 @@ func StatusCmd(client fail2ban.Client, config *Config) *cobra.Command {
 			}
 
 			if !jailExists {
-				return PrintErrorAndReturn(fmt.Errorf("jail '%s' not found", target))
+				return PrintErrorAndReturn(fail2ban.NewJailNotFoundError(target))
 			}
 
-			out, err := client.StatusJail(target)
+			out, err := client.StatusJailWithContext(ctx, target)
 			if err != nil {
 				return HandleClientError(err)
 			}

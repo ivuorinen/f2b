@@ -342,7 +342,9 @@ func (olp *OptimizedLogProcessor) createOptimizedScanner(path string, isGzip boo
 	scanner.Buffer(buf, 64*1024) // 64KB max line size
 
 	cleanup := func() {
-		_ = file.Close()        // Ignore error in cleanup function
+		if err := file.Close(); err != nil {
+			logrus.WithError(err).WithField("file", path).Warn("Failed to close file during cleanup")
+		}
 		*bufPtr = (*bufPtr)[:0] // Reset buffer
 		olp.scannerPool.Put(bufPtr)
 	}

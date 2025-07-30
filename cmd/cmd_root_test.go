@@ -487,16 +487,16 @@ func TestCompletionCmdExecution(t *testing.T) {
 			testConfig := Config{Format: "plain"}
 
 			// Add all the f2b subcommands to create a realistic structure
-			testRoot.AddCommand(ListJailsCmd(mockClient))
+			testRoot.AddCommand(ListJailsCmd(mockClient, &testConfig))
 			testRoot.AddCommand(StatusCmd(mockClient, &testConfig))
-			testRoot.AddCommand(BannedCmd(mockClient, testConfig.Format))
+			testRoot.AddCommand(BannedCmd(mockClient, &testConfig))
 			testRoot.AddCommand(BanCmd(mockClient, &testConfig))
 			testRoot.AddCommand(UnbanCmd(mockClient, &testConfig))
-			testRoot.AddCommand(TestIPCmd(mockClient, testConfig.Format))
+			testRoot.AddCommand(TestIPCmd(mockClient, &testConfig))
 			testRoot.AddCommand(LogsCmd(mockClient, &testConfig))
 			testRoot.AddCommand(LogsWatchCmd(context.Background(), mockClient, &testConfig))
 			testRoot.AddCommand(ServiceCmd(&testConfig))
-			testRoot.AddCommand(VersionCmd(testConfig.Format))
+			testRoot.AddCommand(VersionCmd(&testConfig))
 			testRoot.AddCommand(TestFilterCmd(mockClient, &testConfig))
 			testRoot.AddCommand(completionCmd())
 

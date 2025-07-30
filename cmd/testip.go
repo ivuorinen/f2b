@@ -1,27 +1,33 @@
 package cmd
 
 import (
+	"context"
+
 	"github.com/spf13/cobra"
 )
 
 // TestIPCmd returns the test command with injected client and config
 func TestIPCmd(client interface {
-	BannedIn(string) ([]string, error)
-}, format string) *cobra.Command {
+	BannedInWithContext(context.Context, string) ([]string, error)
+}, config *Config) *cobra.Command {
 	return NewCommand("test <ip>", "Test if an IP is banned", nil, func(cmd *cobra.Command, args []string) error {
+		// Create timeout context for testing IP
+		ctx, cancel := context.WithTimeout(context.Background(), config.CommandTimeout)
+		defer cancel()
+
 		// Validate IP argument
 		ip, err := ValidateIPArgument(args)
 		if err != nil {
 			return PrintErrorAndReturn(err)
 		}
 
-		jails, err := client.BannedIn(ip)
+		jails, err := client.BannedInWithContext(ctx, ip)
 		if err != nil {
 			return HandleClientError(err)
 		}
 
 		result := FormatBannedResult(ip, jails)
-		PrintOutputTo(GetCmdOutput(cmd), result, format)
+		PrintOutputTo(GetCmdOutput(cmd), result, config.Format)
 		return nil
 	})
 }

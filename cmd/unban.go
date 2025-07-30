@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -15,24 +16,31 @@ func UnbanCmd(client fail2ban.Client, config *Config) *cobra.Command {
 		"Unban an IP address",
 		[]string{"unbanip", "ub"},
 		func(cmd *cobra.Command, args []string) error {
+			// Create timeout context for the entire unban operation
+			ctx, cancel := context.WithTimeout(context.Background(), config.CommandTimeout)
+			defer cancel()
+
 			// Validate IP argument
 			ip, err := ValidateIPArgument(args)
 			if err != nil {
 				return PrintErrorAndReturn(err)
 			}
 
-			// Get jails from arguments or client
-			jails, err := GetJailsFromArgs(client, args, 1)
+			// Get jails from arguments or client (with timeout context)
+			jails, err := GetJailsFromArgsWithContext(ctx, client, args, 1)
 			if err != nil {
 				return HandleClientError(err)
 			}
 
-			// Process unban operation (use parallel processing for multiple jails)
+			// Process unban operation with timeout context (use parallel processing for multiple jails)
 			var results []OperationResult
 			if len(jails) > 1 {
-				results, err = ProcessUnbanOperationParallel(client, ip, jails)
+				// Use parallel timeout for multi-jail operations
+				parallelCtx, parallelCancel := context.WithTimeout(ctx, config.ParallelTimeout)
+				defer parallelCancel()
+				results, err = ProcessUnbanOperationParallelWithContext(parallelCtx, client, ip, jails)
 			} else {
-				results, err = ProcessUnbanOperation(client, ip, jails)
+				results, err = ProcessUnbanOperationWithContext(ctx, client, ip, jails)
 			}
 			if err != nil {
 				return HandleClientError(err)

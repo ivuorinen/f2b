@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"runtime"
 	"sync"
 
@@ -33,9 +34,41 @@ func (pop *ParallelOperationProcessor) ProcessBanOperationParallel(
 		return ProcessBanOperation(client, ip, jails)
 	}
 
-	return pop.processOperations(client, ip, jails, func(client fail2ban.Client, ip, jail string) (int, error) {
-		return client.BanIP(ip, jail)
-	}, "ban")
+	return pop.processOperations(
+		context.Background(),
+		client,
+		ip,
+		jails,
+		func(ctx context.Context, client fail2ban.Client, ip, jail string) (int, error) {
+			return client.BanIPWithContext(ctx, ip, jail)
+		},
+		"ban",
+	)
+}
+
+// ProcessBanOperationParallelWithContext processes ban operations across
+// multiple jails in parallel with timeout context
+func (pop *ParallelOperationProcessor) ProcessBanOperationParallelWithContext(
+	ctx context.Context,
+	client fail2ban.Client,
+	ip string,
+	jails []string,
+) ([]OperationResult, error) {
+	if len(jails) <= 1 {
+		// For single jail, use sequential processing to avoid overhead
+		return ProcessBanOperationWithContext(ctx, client, ip, jails)
+	}
+
+	return pop.processOperations(
+		ctx,
+		client,
+		ip,
+		jails,
+		func(opCtx context.Context, client fail2ban.Client, ip, jail string) (int, error) {
+			return client.BanIPWithContext(opCtx, ip, jail)
+		},
+		"ban",
+	)
 }
 
 // ProcessUnbanOperationParallel processes unban operations across multiple jails in parallel
@@ -49,16 +82,49 @@ func (pop *ParallelOperationProcessor) ProcessUnbanOperationParallel(
 		return ProcessUnbanOperation(client, ip, jails)
 	}
 
-	return pop.processOperations(client, ip, jails, func(client fail2ban.Client, ip, jail string) (int, error) {
-		return client.UnbanIP(ip, jail)
-	}, "unban")
+	return pop.processOperations(
+		context.Background(),
+		client,
+		ip,
+		jails,
+		func(ctx context.Context, client fail2ban.Client, ip, jail string) (int, error) {
+			return client.UnbanIPWithContext(ctx, ip, jail)
+		},
+		"unban",
+	)
 }
 
-// operationFunc represents a ban or unban operation
-type operationFunc func(client fail2ban.Client, ip, jail string) (int, error)
+// ProcessUnbanOperationParallelWithContext processes unban operations across
+// multiple jails in parallel with timeout context
+func (pop *ParallelOperationProcessor) ProcessUnbanOperationParallelWithContext(
+	ctx context.Context,
+	client fail2ban.Client,
+	ip string,
+	jails []string,
+) ([]OperationResult, error) {
+	if len(jails) <= 1 {
+		// For single jail, use sequential processing to avoid overhead
+		return ProcessUnbanOperationWithContext(ctx, client, ip, jails)
+	}
+
+	return pop.processOperations(
+		ctx,
+		client,
+		ip,
+		jails,
+		func(opCtx context.Context, client fail2ban.Client, ip, jail string) (int, error) {
+			return client.UnbanIPWithContext(opCtx, ip, jail)
+		},
+		"unban",
+	)
+}
+
+// operationFunc represents a ban or unban operation with context
+type operationFunc func(ctx context.Context, client fail2ban.Client, ip, jail string) (int, error)
 
 // processOperations handles the parallel processing of operations
 func (pop *ParallelOperationProcessor) processOperations(
+	ctx context.Context,
 	client fail2ban.Client,
 	ip string,
 	jails []string,
@@ -82,7 +148,7 @@ func (pop *ParallelOperationProcessor) processOperations(
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			pop.worker(client, ip, operation, operationType, jailCh, resultCh)
+			pop.worker(ctx, client, ip, operation, operationType, jailCh, resultCh)
 		}()
 	}
 
@@ -124,6 +190,7 @@ type operationResult struct {
 
 // worker processes jail operations
 func (pop *ParallelOperationProcessor) worker(
+	ctx context.Context,
 	client fail2ban.Client,
 	ip string,
 	operation operationFunc,
@@ -132,7 +199,7 @@ func (pop *ParallelOperationProcessor) worker(
 	resultCh chan<- operationResult,
 ) {
 	for work := range jailCh {
-		code, err := operation(client, ip, work.jail)
+		code, err := operation(ctx, client, ip, work.jail)
 
 		var status string
 		if err != nil {
@@ -168,7 +235,29 @@ func ProcessBanOperationParallel(client fail2ban.Client, ip string, jails []stri
 	return defaultParallelProcessor.ProcessBanOperationParallel(client, ip, jails)
 }
 
+// ProcessBanOperationParallelWithContext processes ban operations in parallel using the default processor with context
+func ProcessBanOperationParallelWithContext(
+	ctx context.Context,
+	client fail2ban.Client,
+	ip string,
+	jails []string,
+) ([]OperationResult, error) {
+	return defaultParallelProcessor.ProcessBanOperationParallelWithContext(
+		ctx, client, ip, jails)
+}
+
 // ProcessUnbanOperationParallel processes unban operations in parallel using the default processor
 func ProcessUnbanOperationParallel(client fail2ban.Client, ip string, jails []string) ([]OperationResult, error) {
 	return defaultParallelProcessor.ProcessUnbanOperationParallel(client, ip, jails)
+}
+
+// ProcessUnbanOperationParallelWithContext processes unban operations in
+// parallel using the default processor with context
+func ProcessUnbanOperationParallelWithContext(
+	ctx context.Context,
+	client fail2ban.Client,
+	ip string,
+	jails []string,
+) ([]OperationResult, error) {
+	return defaultParallelProcessor.ProcessUnbanOperationParallelWithContext(ctx, client, ip, jails)
 }

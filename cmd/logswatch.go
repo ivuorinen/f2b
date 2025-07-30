@@ -12,6 +12,11 @@ import (
 	"github.com/ivuorinen/f2b/fail2ban"
 )
 
+const (
+	// DefaultLogWatchLimit is the default limit for log lines in watch mode
+	DefaultLogWatchLimit = 10
+)
+
 // LogsWatchCmd returns the logs-watch command with injected client and config
 func LogsWatchCmd(ctx context.Context, client fail2ban.Client, config *Config) *cobra.Command {
 	var limit int
@@ -33,8 +38,8 @@ func LogsWatchCmd(ctx context.Context, client fail2ban.Client, config *Config) *
 				maxLines = 1000 // Default safe limit
 			}
 
-			// Get initial log lines with memory limits
-			prev, err := getLogLinesWithLimit(client, jail, ip, maxLines)
+			// Get initial log lines with memory limits (with file timeout)
+			prev, err := getLogLinesWithLimitAndContext(ctx, client, jail, ip, maxLines, config.FileTimeout)
 			if err != nil {
 				return HandleClientError(err)
 			}
@@ -53,7 +58,7 @@ func LogsWatchCmd(ctx context.Context, client fail2ban.Client, config *Config) *
 				case <-ctx.Done():
 					return nil
 				case <-ticker.C:
-					curr, err := getLogLinesWithLimit(client, jail, ip, maxLines)
+					curr, err := getLogLinesWithLimitAndContext(ctx, client, jail, ip, maxLines, config.FileTimeout)
 					if err != nil {
 						return HandleClientError(err)
 					}
@@ -67,21 +72,32 @@ func LogsWatchCmd(ctx context.Context, client fail2ban.Client, config *Config) *
 			}
 		})
 
-	cmd.Flags().IntVarP(&limit, "limit", "n", 10, "Number of log lines to show/tail")
-	cmd.Flags().DurationVarP(&interval, "interval", "i", 5*time.Second, "Polling interval for checking new logs")
+	cmd.Flags().IntVarP(&limit, "limit", "n", DefaultLogWatchLimit, "Number of log lines to show/tail")
+	cmd.Flags().
+		DurationVarP(&interval, "interval", "i", DefaultPollingInterval, "Polling interval for checking new logs")
 	return cmd
 }
 
-// getLogLinesWithLimit tries to use the new memory-efficient method if available,
+// getLogLinesWithLimitAndContext tries to use the new memory-efficient method with timeout context,
 // otherwise falls back to the standard method with post-processing limits
-func getLogLinesWithLimit(client fail2ban.Client, jail, ip string, maxLines int) ([]string, error) {
+func getLogLinesWithLimitAndContext(
+	ctx context.Context,
+	client fail2ban.Client,
+	jail, ip string,
+	maxLines int,
+	timeout time.Duration,
+) ([]string, error) {
+	// Create timeout context for this specific operation
+	logCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	// Try to use the new method if it's available (RealClient has GetLogLinesWithLimit)
 	if realClient, ok := client.(*fail2ban.RealClient); ok {
 		return realClient.GetLogLinesWithLimit(jail, ip, maxLines)
 	}
 
-	// Fallback to standard method with post-processing limit
-	lines, err := client.GetLogLines(jail, ip)
+	// Fallback to standard method with timeout context and post-processing limit
+	lines, err := client.GetLogLinesWithContext(logCtx, jail, ip)
 	if err != nil {
 		return nil, err
 	}

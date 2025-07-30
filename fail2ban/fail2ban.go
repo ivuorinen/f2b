@@ -23,6 +23,10 @@ const (
 	DefaultFilterDir = "/etc/fail2ban/filter.d"
 	// AllFilter represents all jails/IPs filter
 	AllFilter = "all"
+	// DefaultMaxFileSize is the default maximum file size for log reading (100MB)
+	DefaultMaxFileSize = 100 * 1024 * 1024
+	// DefaultLogLinesLimit is the default limit for log lines returned
+	DefaultLogLinesLimit = 1000
 )
 
 var logDir = DefaultLogDir // base directory for fail2ban logs
@@ -77,6 +81,10 @@ func (r *OSRunner) CombinedOutput(name string, args ...string) ([]byte, error) {
 	if err := ValidateCommand(name); err != nil {
 		return nil, fmt.Errorf("command validation failed: %w", err)
 	}
+	// Validate arguments for security
+	if err := ValidateArguments(args); err != nil {
+		return nil, fmt.Errorf("argument validation failed: %w", err)
+	}
 	return exec.Command(name, args...).CombinedOutput()
 }
 
@@ -86,6 +94,10 @@ func (r *OSRunner) CombinedOutputWithContext(ctx context.Context, name string, a
 	if err := ValidateCommand(name); err != nil {
 		return nil, fmt.Errorf("command validation failed: %w", err)
 	}
+	// Validate arguments for security
+	if err := ValidateArguments(args); err != nil {
+		return nil, fmt.Errorf("argument validation failed: %w", err)
+	}
 	return exec.CommandContext(ctx, name, args...).CombinedOutput()
 }
 
@@ -94,6 +106,10 @@ func (r *OSRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte, 
 	// Validate command for security
 	if err := ValidateCommand(name); err != nil {
 		return nil, fmt.Errorf("command validation failed: %w", err)
+	}
+	// Validate arguments for security
+	if err := ValidateArguments(args); err != nil {
+		return nil, fmt.Errorf("argument validation failed: %w", err)
 	}
 
 	checker := GetSudoChecker()
@@ -120,6 +136,10 @@ func (r *OSRunner) CombinedOutputWithSudoContext(ctx context.Context, name strin
 	// Validate command for security
 	if err := ValidateCommand(name); err != nil {
 		return nil, fmt.Errorf("command validation failed: %w", err)
+	}
+	// Validate arguments for security
+	if err := ValidateArguments(args); err != nil {
+		return nil, fmt.Errorf("argument validation failed: %w", err)
 	}
 
 	checker := GetSudoChecker()
@@ -460,32 +480,51 @@ func (c *RealClient) getBanRecordsInternal(ctx context.Context, jails []string) 
 	globalRunnerManager.mu.RUnlock()
 
 	// Use parallel processing for multiple jails
-	allRecords, err := ProcessJailsParallel(ctx, toQuery, func(_ context.Context, jail string) ([]BanRecord, error) {
-		out, err := currentRunner.CombinedOutputWithSudo(c.Path, "get", jail, "banip", "--with-time")
-		if err != nil {
-			return []BanRecord{}, nil // Return empty slice instead of error (original behavior)
-		}
+	allRecords, err := ProcessJailsParallel(
+		ctx,
+		toQuery,
+		func(operationCtx context.Context, jail string) ([]BanRecord, error) {
+			out, err := currentRunner.CombinedOutputWithSudoContext(
+				operationCtx,
+				c.Path,
+				"get",
+				jail,
+				"banip",
+				"--with-time",
+			)
+			if err != nil {
+				// Log error but continue processing (backward compatibility)
+				logrus.WithError(err).WithField("jail", jail).
+					Warn("Failed to get ban records for jail")
+				return []BanRecord{}, nil // Return empty slice instead of error (original behavior)
+			}
 
-		// Use ultra-optimized parser for this jail's records
-		jailRecords, parseErr := ParseBanRecordsUltraOptimized(string(out), jail)
-		if parseErr != nil {
-			return []BanRecord{}, nil // Return empty slice on parse error
-		}
+			// Use ultra-optimized parser for this jail's records
+			jailRecords, parseErr := ParseBanRecordsUltraOptimized(string(out), jail)
+			if parseErr != nil {
+				// Log parse errors to help with debugging
+				logrus.WithError(parseErr).WithField("jail", jail).
+					Warn("Failed to parse ban records for jail")
+				return []BanRecord{}, nil // Return empty slice on parse error
+			}
 
-		return jailRecords, nil
-	})
+			return jailRecords, nil
+		},
+	)
 
 	if err != nil {
 		return nil, err
 	}
 
-	sort.Slice(allRecords, func(i, j int) bool { return allRecords[i].BannedAt.Before(allRecords[j].BannedAt) })
+	sort.Slice(allRecords, func(i, j int) bool {
+		return allRecords[i].BannedAt.Before(allRecords[j].BannedAt)
+	})
 	return allRecords, nil
 }
 
 // GetLogLines retrieves log lines related to an IP address from the specified jail.
 func (c *RealClient) GetLogLines(jail, ip string) ([]string, error) {
-	return c.GetLogLinesWithLimit(jail, ip, 1000) // Default limit for safety
+	return c.GetLogLinesWithLimit(jail, ip, DefaultLogLinesLimit)
 }
 
 // GetLogLinesWithLimit returns log lines with configurable limits for memory management.
@@ -506,7 +545,7 @@ func (c *RealClient) GetLogLinesWithLimit(jail, ip string, maxLines int) ([]stri
 	// Use streaming approach with memory limits
 	config := LogReadConfig{
 		MaxLines:    maxLines,
-		MaxFileSize: 100 * 1024 * 1024, // 100MB file size limit
+		MaxFileSize: DefaultMaxFileSize,
 		JailFilter:  jail,
 		IPFilter:    ip,
 	}
@@ -542,21 +581,6 @@ func (c *RealClient) GetLogLinesWithLimit(jail, ip string, maxLines int) ([]stri
 }
 
 // ListFilters returns a list of available fail2ban filter files.
-func ListFilters() ([]string, error) {
-	entries, err := os.ReadDir(filterDir)
-	if err != nil {
-		return nil, err
-	}
-	var names []string
-	for _, e := range entries {
-		if strings.HasSuffix(e.Name(), ".conf") {
-			names = append(names, strings.TrimSuffix(e.Name(), ".conf"))
-		}
-	}
-	return names, nil
-}
-
-// ListFilters returns a list of available fail2ban filter files.
 func (c *RealClient) ListFilters() ([]string, error) {
 	entries, err := os.ReadDir(c.FilterDir)
 	if err != nil {
@@ -570,59 +594,6 @@ func (c *RealClient) ListFilters() ([]string, error) {
 		}
 	}
 	return filters, nil
-}
-
-// TestFilter tests a fail2ban filter against its configured log files and returns the test output.
-func TestFilter(filter string) (string, error) {
-	if err := ValidateFilter(filter); err != nil {
-		return "", err
-	}
-	path := filepath.Join(filterDir, filter+".conf")
-
-	// Additional security check: ensure path doesn't escape filter directory
-	cleanPath, err := filepath.Abs(filepath.Clean(path))
-	if err != nil {
-		return "", fmt.Errorf("invalid filter path: %w", err)
-	}
-
-	cleanFilterDir, err := filepath.Abs(filepath.Clean(filterDir))
-	if err != nil {
-		return "", fmt.Errorf("invalid filter directory: %w", err)
-	}
-
-	// Ensure the resolved path is within the filter directory
-	if !strings.HasPrefix(cleanPath, cleanFilterDir+string(filepath.Separator)) {
-		return "", fmt.Errorf("filter path outside allowed directory")
-	}
-
-	// #nosec G304 - Path is validated, sanitized, and restricted to filter directory above
-	data, err := os.ReadFile(cleanPath)
-	if err != nil {
-		return "", fmt.Errorf("filter not found: %w", err)
-	}
-	content := string(data)
-	var logPath string
-	var patterns []string
-	for _, line := range strings.Split(content, "\n") {
-		if strings.HasPrefix(strings.ToLower(line), "logpath") {
-			parts := strings.SplitN(line, "=", 2)
-			logPath = strings.TrimSpace(parts[1])
-		}
-		if strings.HasPrefix(strings.ToLower(line), "failregex") {
-			parts := strings.SplitN(line, "=", 2)
-			patterns = append(patterns, strings.TrimSpace(parts[1]))
-		}
-	}
-	if logPath == "" || len(patterns) == 0 {
-		return "", errors.New("invalid filter file")
-	}
-
-	globalRunnerManager.mu.RLock()
-	currentRunner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
-
-	output, err := currentRunner.CombinedOutputWithSudo("fail2ban-regex", logPath, path)
-	return string(output), err
 }
 
 // Context-aware implementations for RealClient
@@ -730,7 +701,82 @@ func (c *RealClient) GetBanRecordsWithContext(ctx context.Context, jails []strin
 
 // GetLogLinesWithContext retrieves log lines related to an IP address from the specified jail with context support.
 func (c *RealClient) GetLogLinesWithContext(ctx context.Context, jail, ip string) ([]string, error) {
-	return wrapWithContext2(c.GetLogLines)(ctx, jail, ip)
+	return c.GetLogLinesWithLimitAndContext(ctx, jail, ip, DefaultLogLinesLimit)
+}
+
+// GetLogLinesWithLimitAndContext returns log lines with configurable limits
+// and context support for memory management and timeouts.
+func (c *RealClient) GetLogLinesWithLimitAndContext(
+	ctx context.Context,
+	jail, ip string,
+	maxLines int,
+) ([]string, error) {
+	// Check context before starting
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
+	pattern := filepath.Join(c.LogDir, "fail2ban.log*")
+	files, err := filepath.Glob(pattern)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(files) == 0 {
+		return []string{}, nil
+	}
+
+	// Sort files to read in order (current log first, then rotated logs newest to oldest)
+	sort.Strings(files)
+
+	// Use streaming approach with memory limits and context support
+	config := LogReadConfig{
+		MaxLines:    maxLines,
+		MaxFileSize: DefaultMaxFileSize,
+		JailFilter:  jail,
+		IPFilter:    ip,
+	}
+
+	var allLines []string
+	totalLines := 0
+
+	for _, fpath := range files {
+		// Check context before processing each file
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		if config.MaxLines > 0 && totalLines >= config.MaxLines {
+			break
+		}
+
+		// Adjust remaining lines limit
+		remainingLines := config.MaxLines - totalLines
+		if remainingLines <= 0 {
+			break
+		}
+
+		fileConfig := config
+		fileConfig.MaxLines = remainingLines
+
+		lines, err := streamLogFileWithContext(ctx, fpath, fileConfig)
+		if err != nil {
+			if errors.Is(err, ctx.Err()) {
+				return nil, err // Return context error immediately
+			}
+			logrus.WithError(err).WithField("file", fpath).Error("Failed to read log file")
+			continue
+		}
+
+		allLines = append(allLines, lines...)
+		totalLines += len(lines)
+	}
+
+	return allLines, nil
 }
 
 // ListFiltersWithContext returns a list of available fail2ban filter files with context support.
@@ -738,33 +784,33 @@ func (c *RealClient) ListFiltersWithContext(ctx context.Context) ([]string, erro
 	return wrapWithContext0(c.ListFilters)(ctx)
 }
 
-// TestFilterWithContext tests a fail2ban filter against its configured log files with context support.
-func (c *RealClient) TestFilterWithContext(ctx context.Context, filter string) (string, error) {
+// validateFilterPath validates filter name and returns secure path, log path and patterns
+func (c *RealClient) validateFilterPath(filter string) (string, string, []string, error) {
 	if err := ValidateFilter(filter); err != nil {
-		return "", err
+		return "", "", nil, err
 	}
 	path := filepath.Join(c.FilterDir, filter+".conf")
 
 	// Additional security check: ensure path doesn't escape filter directory
 	cleanPath, err := filepath.Abs(filepath.Clean(path))
 	if err != nil {
-		return "", fmt.Errorf("invalid filter path: %w", err)
+		return "", "", nil, fmt.Errorf("invalid filter path: %w", err)
 	}
 
 	cleanFilterDir, err := filepath.Abs(filepath.Clean(c.FilterDir))
 	if err != nil {
-		return "", fmt.Errorf("invalid filter directory: %w", err)
+		return "", "", nil, fmt.Errorf("invalid filter directory: %w", err)
 	}
 
 	// Ensure the resolved path is within the filter directory
 	if !strings.HasPrefix(cleanPath, cleanFilterDir+string(filepath.Separator)) {
-		return "", fmt.Errorf("filter path outside allowed directory")
+		return "", "", nil, fmt.Errorf("filter path outside allowed directory")
 	}
 
 	// #nosec G304 - Path is validated, sanitized, and restricted to filter directory above
 	data, err := os.ReadFile(cleanPath)
 	if err != nil {
-		return "", fmt.Errorf("filter not found: %w", err)
+		return "", "", nil, fmt.Errorf("filter not found: %w", err)
 	}
 	content := string(data)
 
@@ -781,66 +827,38 @@ func (c *RealClient) TestFilterWithContext(ctx context.Context, filter string) (
 		}
 	}
 	if logPath == "" || len(patterns) == 0 {
-		return "", errors.New("invalid filter file")
+		return "", "", nil, errors.New("invalid filter file")
+	}
+
+	return cleanPath, logPath, patterns, nil
+}
+
+// TestFilterWithContext tests a fail2ban filter against its configured log files with context support.
+func (c *RealClient) TestFilterWithContext(ctx context.Context, filter string) (string, error) {
+	cleanPath, logPath, _, err := c.validateFilterPath(filter)
+	if err != nil {
+		return "", err
 	}
 
 	globalRunnerManager.mu.RLock()
 	currentRunner := globalRunnerManager.runner
 	globalRunnerManager.mu.RUnlock()
 
-	output, err := currentRunner.CombinedOutputWithSudoContext(ctx, "fail2ban-regex", logPath, path)
+	output, err := currentRunner.CombinedOutputWithSudoContext(ctx, "fail2ban-regex", logPath, cleanPath)
 	return string(output), err
 }
 
 // TestFilter tests a fail2ban filter against its configured log files and returns the test output.
 func (c *RealClient) TestFilter(filter string) (string, error) {
-	if err := ValidateFilter(filter); err != nil {
+	cleanPath, logPath, _, err := c.validateFilterPath(filter)
+	if err != nil {
 		return "", err
-	}
-	path := filepath.Join(c.FilterDir, filter+".conf")
-
-	// Additional security check: ensure path doesn't escape filter directory
-	cleanPath, err := filepath.Abs(filepath.Clean(path))
-	if err != nil {
-		return "", fmt.Errorf("invalid filter path: %w", err)
-	}
-
-	cleanFilterDir, err := filepath.Abs(filepath.Clean(c.FilterDir))
-	if err != nil {
-		return "", fmt.Errorf("invalid filter directory: %w", err)
-	}
-
-	// Ensure the resolved path is within the filter directory
-	if !strings.HasPrefix(cleanPath, cleanFilterDir+string(filepath.Separator)) {
-		return "", fmt.Errorf("filter path outside allowed directory")
-	}
-
-	// #nosec G304 - Path is validated, sanitized, and restricted to filter directory above
-	data, err := os.ReadFile(cleanPath)
-	if err != nil {
-		return "", fmt.Errorf("filter not found: %w", err)
-	}
-	content := string(data)
-	var logPath string
-	var patterns []string
-	for _, line := range strings.Split(content, "\n") {
-		if strings.HasPrefix(strings.ToLower(line), "logpath") {
-			parts := strings.SplitN(line, "=", 2)
-			logPath = strings.TrimSpace(parts[1])
-		}
-		if strings.HasPrefix(strings.ToLower(line), "failregex") {
-			parts := strings.SplitN(line, "=", 2)
-			patterns = append(patterns, strings.TrimSpace(parts[1]))
-		}
-	}
-	if logPath == "" || len(patterns) == 0 {
-		return "", errors.New("invalid filter file")
 	}
 
 	globalRunnerManager.mu.RLock()
 	currentRunner := globalRunnerManager.runner
 	globalRunnerManager.mu.RUnlock()
 
-	output, err := currentRunner.CombinedOutputWithSudo("fail2ban-regex", logPath, path)
+	output, err := currentRunner.CombinedOutputWithSudo("fail2ban-regex", logPath, cleanPath)
 	return string(output), err
 }

@@ -34,6 +34,10 @@ func PrintOutput(data interface{}, format string) {
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(data); err != nil {
 			Logger.WithError(err).Error("Failed to encode JSON output")
+			// Fallback to plain text output
+			if _, printErr := fmt.Fprintln(os.Stdout, data); printErr != nil {
+				Logger.WithError(printErr).Error("Failed to write fallback output")
+			}
 		}
 	default:
 		fmt.Println(data)
@@ -48,6 +52,10 @@ func PrintOutputTo(w io.Writer, data interface{}, format string) {
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(data); err != nil {
 			Logger.WithError(err).Error("Failed to encode JSON output")
+			// Fallback to plain text output
+			if _, printErr := fmt.Fprintln(w, data); printErr != nil {
+				Logger.WithError(printErr).Error("Failed to write fallback output")
+			}
 		}
 	default:
 		if _, err := fmt.Fprintln(w, data); err != nil {

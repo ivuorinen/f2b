@@ -84,7 +84,7 @@ func TestOSRunnerWithSudo(t *testing.T) {
 
 	// Test with a command that would use sudo
 	// Note: This might fail in CI/test environments without sudo
-	_, err := runner.CombinedOutput("echo", "hello")
+	_, err := runner.CombinedOutput("sudo", "echo", "hello")
 	if err != nil {
 		t.Logf("sudo command failed as expected in test environment: %v", err)
 	}
@@ -154,7 +154,9 @@ func TestLogFileReading(t *testing.T) {
 
 				gzWriter := gzip.NewWriter(file)
 				_, err = gzWriter.Write([]byte(tt.content))
-				fail2ban.AssertError(t, err, false, "write compressed content")
+				if err != nil {
+					t.Fatalf("failed to write compressed content: %v", err)
+				}
 				if err := gzWriter.Close(); err != nil {
 					t.Fatalf("failed to close gzip writer: %v", err)
 				}
@@ -172,7 +174,9 @@ func TestLogFileReading(t *testing.T) {
 			}
 
 			for i, expected := range tt.expected {
-				if i >= len(lines) || lines[i] != expected {
+				if i >= len(lines) {
+					t.Errorf("expected line %d to be %q, but only got %d lines", i, expected, len(lines))
+				} else if lines[i] != expected {
 					t.Errorf("expected line %d to be %q, got %q", i, expected, lines[i])
 				}
 			}

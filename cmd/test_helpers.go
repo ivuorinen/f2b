@@ -52,14 +52,14 @@ func executeCommand(client fail2ban.Client, args ...string) (string, error) {
 
 	rootCmd := &cobra.Command{Use: "f2b"}
 	config := Config{Format: "plain"}
-	rootCmd.AddCommand(ListJailsCmd(client))
+	rootCmd.AddCommand(ListJailsCmd(client, &config))
 	rootCmd.AddCommand(StatusCmd(client, &config))
 	rootCmd.AddCommand(BanCmd(client, &config))
 	rootCmd.AddCommand(UnbanCmd(client, &config))
-	rootCmd.AddCommand(TestIPCmd(client, "plain"))
+	rootCmd.AddCommand(TestIPCmd(client, &config))
 	rootCmd.AddCommand(LogsCmd(client, &config))
-	rootCmd.AddCommand(BannedCmd(client, "plain"))
-	rootCmd.AddCommand(VersionCmd("plain"))
+	rootCmd.AddCommand(BannedCmd(client, &config))
+	rootCmd.AddCommand(VersionCmd(&config))
 	rootCmd.AddCommand(TestFilterCmd(client, &config))
 
 	var buf bytes.Buffer

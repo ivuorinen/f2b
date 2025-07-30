@@ -1,7 +1,7 @@
 package cmd
 
 import (
-	"fmt"
+	"context"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -16,21 +16,25 @@ func TestFilterCmd(client fail2ban.Client, config *Config) *cobra.Command {
 		"Test a Fail2Ban filter",
 		nil,
 		func(cmd *cobra.Command, args []string) error {
+			// Create timeout context for filter testing (use file timeout as it involves file operations)
+			ctx, cancel := context.WithTimeout(context.Background(), config.FileTimeout)
+			defer cancel()
+
 			if len(args) < 1 {
-				filters, err := client.ListFilters()
+				filters, err := client.ListFiltersWithContext(ctx)
 				if err != nil {
 					return HandleClientError(err)
 				}
 				PrintOutputTo(GetCmdOutput(cmd), "Available filters: "+strings.Join(filters, ", "), config.Format)
-				return PrintErrorAndReturn(fmt.Errorf("filter name required"))
+				return PrintErrorAndReturn(fail2ban.ErrFilterRequiredError)
 			}
 
-			filterName := strings.ToLower(args[0])
+			filterName := args[0]
 			if err := RequireNonEmptyArgument(filterName, "filter name"); err != nil {
 				return PrintErrorAndReturn(err)
 			}
 
-			out, err := client.TestFilter(filterName)
+			out, err := client.TestFilterWithContext(ctx, filterName)
 			if err != nil {
 				return HandleClientError(err)
 			}

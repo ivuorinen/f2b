@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/sirupsen/logrus"
 )
 
 // GzipDetector provides utilities for detecting and handling gzip-compressed files
@@ -58,7 +60,9 @@ func (gd *GzipDetector) OpenGzipAwareReader(path string) (io.ReadCloser, error) 
 
 	isGzip, err := gd.IsGzipFile(path)
 	if err != nil {
-		_ = f.Close() // Ignore close error, return original error
+		if closeErr := f.Close(); closeErr != nil {
+			logrus.WithError(closeErr).WithField("file", path).Warn("Failed to close file during error handling")
+		}
 		return nil, err
 	}
 
@@ -66,13 +70,21 @@ func (gd *GzipDetector) OpenGzipAwareReader(path string) (io.ReadCloser, error) 
 		// For gzip files, we need to position at the beginning and create gzip reader
 		_, err = f.Seek(0, io.SeekStart)
 		if err != nil {
-			_ = f.Close() // Ignore close error, return original error
+			if closeErr := f.Close(); closeErr != nil {
+				logrus.WithError(closeErr).
+					WithField("file", path).
+					Warn("Failed to close file during seek error handling")
+			}
 			return nil, err
 		}
 
 		gz, err := gzip.NewReader(f)
 		if err != nil {
-			_ = f.Close() // Ignore close error, return original error
+			if closeErr := f.Close(); closeErr != nil {
+				logrus.WithError(closeErr).
+					WithField("file", path).
+					Warn("Failed to close file during gzip reader error handling")
+			}
 			return nil, err
 		}
 
@@ -104,7 +116,9 @@ func (gd *GzipDetector) CreateGzipAwareScannerWithBuffer(path string, maxLineSiz
 	}
 
 	cleanup := func() {
-		_ = reader.Close() // Ignore error in cleanup
+		if err := reader.Close(); err != nil {
+			logrus.WithError(err).WithField("file", path).Warn("Failed to close reader during cleanup")
+		}
 	}
 
 	return scanner, cleanup, nil

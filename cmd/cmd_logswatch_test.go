@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/ivuorinen/f2b/fail2ban"
@@ -270,8 +271,12 @@ func TestLogsWatchCmdFlags(t *testing.T) {
 	if intervalFlag.Shorthand != "i" {
 		t.Errorf("expected interval flag shorthand to be 'i', got %q", intervalFlag.Shorthand)
 	}
-	if intervalFlag.DefValue != "5s" {
-		t.Errorf("expected interval flag default value to be '5s', got %q", intervalFlag.DefValue)
+	if intervalFlag.DefValue != DefaultPollingInterval.String() {
+		t.Errorf(
+			"expected interval flag default value to be %q, got %q",
+			DefaultPollingInterval.String(),
+			intervalFlag.DefValue,
+		)
 	}
 }
 
@@ -283,24 +288,47 @@ type MockLogsWatchClient struct {
 	callCount   int
 }
 
-func (m *MockLogsWatchClient) GetLogLines(_, _ string) ([]string, error) {
+func (m *MockLogsWatchClient) GetLogLines(jail, ip string) ([]string, error) {
 	if m.shouldError {
 		return nil, fmt.Errorf("mock error getting log lines")
 	}
 
 	m.callCount++
 
+	var logs []string
 	// Return initial logs on first call, then simulate new logs on subsequent calls
 	if m.callCount == 1 {
-		return m.initialLogs, nil
+		logs = m.initialLogs
+	} else {
+		// Simulate new logs being added
+		logs = make([]string, len(m.initialLogs))
+		copy(logs, m.initialLogs)
+		logs = append(logs, fmt.Sprintf("new log line %d", m.callCount))
 	}
 
-	// Simulate new logs being added
-	newLogs := make([]string, len(m.initialLogs))
-	copy(newLogs, m.initialLogs)
-	newLogs = append(newLogs, fmt.Sprintf("new log line %d", m.callCount))
+	// Apply jail filtering if specified
+	if jail != "" && jail != "all" {
+		var filtered []string
+		for _, line := range logs {
+			if strings.Contains(line, "["+jail+"]") {
+				filtered = append(filtered, line)
+			}
+		}
+		logs = filtered
+	}
 
-	return newLogs, nil
+	// Apply IP filtering if specified
+	if ip != "" && ip != "all" {
+		var filtered []string
+		for _, line := range logs {
+			if strings.Contains(line, ip) {
+				filtered = append(filtered, line)
+			}
+		}
+		logs = filtered
+	}
+
+	return logs, nil
 }
 
 // Implement other required methods for the interface
