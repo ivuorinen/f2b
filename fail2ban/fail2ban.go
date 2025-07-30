@@ -28,6 +28,14 @@ const (
 var logDir = DefaultLogDir // base directory for fail2ban logs
 var logDirMu sync.RWMutex  // protects logDir from concurrent access
 var filterDir = DefaultFilterDir
+var filterDirMu sync.RWMutex // protects filterDir from concurrent access
+
+// GetFilterDir returns the current filter directory path.
+func GetFilterDir() string {
+	filterDirMu.RLock()
+	defer filterDirMu.RUnlock()
+	return filterDir
+}
 
 // SetLogDir sets the directory path for log files.
 func SetLogDir(dir string) {
@@ -45,6 +53,8 @@ func GetLogDir() string {
 
 // SetFilterDir sets the directory path for filter configuration files.
 func SetFilterDir(dir string) {
+	filterDirMu.Lock()
+	defer filterDirMu.Unlock()
 	filterDir = dir
 }
 

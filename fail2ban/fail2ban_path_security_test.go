@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -158,6 +159,20 @@ func TestFileTypeValidation(t *testing.T) {
 	if err != nil {
 		t.Errorf("non-existent file should pass validation: %v", err)
 	}
+
+	// Test special files (should fail validation if validateFileType rejects them)
+	// Note: Creating actual device files requires elevated privileges, so we can
+	// test the function's behavior with mock paths or skip if not supported
+
+	// Example: Named pipe (FIFO)
+	pipePath := filepath.Join(tempDir, "test.pipe")
+	if err := syscall.Mkfifo(pipePath, 0600); err == nil {
+		err = validateFileType(pipePath)
+		if err == nil {
+			t.Error("named pipe should fail validation if special files are not allowed")
+		}
+		_ = os.Remove(pipePath)
+	}
 }
 
 // TestUnicodeNormalization tests unicode character normalization
@@ -271,7 +286,6 @@ func TestFilterValidation(t *testing.T) {
 }
 
 // TestBasePathValidation tests base path containment
-func TestBasePathValidation(t *testing.T) {
 func TestBasePathValidation(t *testing.T) {
 	tempDir1 := t.TempDir()
 	tempDir2 := t.TempDir()

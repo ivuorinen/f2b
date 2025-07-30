@@ -1,6 +1,7 @@
 package fail2ban
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -279,7 +280,7 @@ func BenchmarkLargeLogDataset(b *testing.B) {
 	limits := []int{100, 500, 1000, 5000}
 
 	for _, limit := range limits {
-		b.Run("original_"+b.Name()+"_lines_"+string(rune(limit+'0')), func(b *testing.B) {
+		b.Run(fmt.Sprintf("original_lines_%d", limit), func(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 
@@ -291,7 +292,7 @@ func BenchmarkLargeLogDataset(b *testing.B) {
 			}
 		})
 
-		b.Run("optimized_"+b.Name()+"_lines_"+string(rune(limit+'0')), func(b *testing.B) {
+		b.Run(fmt.Sprintf("optimized_lines_%d", limit), func(b *testing.B) {
 			b.ResetTimer()
 			b.ReportAllocs()
 

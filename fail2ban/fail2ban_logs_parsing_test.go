@@ -47,7 +47,11 @@ func extractIPFromAction(line, action string) string {
 	ipParts := strings.Split(line, action+" ")
 	if len(ipParts) > 1 {
 		if action == "Found" {
-			return strings.Fields(ipParts[1])[0]
+			fields := strings.Fields(ipParts[1])
+			if len(fields) > 0 {
+				return fields[0]
+			}
+			return ""
 		}
 		return strings.TrimSpace(ipParts[1])
 	}
