@@ -270,7 +270,8 @@ func TestFilterValidation(t *testing.T) {
 	}
 }
 
-// TestBasePath​Validation tests base path containment
+// TestBasePathValidation tests base path containment
+func TestBasePathValidation(t *testing.T) {
 func TestBasePathValidation(t *testing.T) {
 	tempDir1 := t.TempDir()
 	tempDir2 := t.TempDir()
