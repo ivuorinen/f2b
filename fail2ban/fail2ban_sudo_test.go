@@ -97,7 +97,11 @@ func TestMockSudoChecker(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := NewMockSudoChecker(tt.isRoot, tt.inSudoGroup, tt.canUseSudo)
+			mock := &MockSudoChecker{
+				MockIsRoot:      tt.isRoot,
+				MockInSudoGroup: tt.inSudoGroup,
+				MockCanUseSudo:  tt.canUseSudo,
+			}
 
 			if mock.IsRoot() != tt.isRoot {
 				t.Errorf("IsRoot() = %v, want %v", mock.IsRoot(), tt.isRoot)
@@ -132,7 +136,10 @@ func TestMockSudoCheckerWithPrivileges(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := NewMockSudoCheckerWithPrivileges(tt.hasPrivileges)
+			mock := &MockSudoChecker{
+				MockHasPrivileges:     tt.hasPrivileges,
+				ExplicitPrivilegesSet: true,
+			}
 
 			if mock.HasSudoPrivileges() != tt.hasPrivileges {
 				t.Errorf("HasSudoPrivileges() = %v, want %v", mock.HasSudoPrivileges(), tt.hasPrivileges)
@@ -306,7 +313,7 @@ func TestCheckSudoRequirements(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up mock environment with specified privileges
+			// Modern standardized setup with automatic cleanup
 			_, cleanup := SetupMockEnvironmentWithSudo(t, tt.hasPrivileges)
 			defer cleanup()
 
@@ -318,12 +325,16 @@ func TestCheckSudoRequirements(t *testing.T) {
 }
 
 func TestSetAndGetSudoChecker(t *testing.T) {
-	// Set up mock environment
+	// Modern standardized setup with automatic cleanup
 	_, cleanup := SetupMockEnvironment(t)
 	defer cleanup()
 
 	// Create a custom mock checker for this specific test
-	mock := NewMockSudoChecker(true, false, false)
+	mock := &MockSudoChecker{
+		MockIsRoot:      true,
+		MockInSudoGroup: false,
+		MockCanUseSudo:  false,
+	}
 
 	// Set and verify
 	SetSudoChecker(mock)
@@ -374,12 +385,16 @@ func TestGetCurrentUserInfo(t *testing.T) {
 }
 
 func TestGetCurrentUserInfoWithMockChecker(t *testing.T) {
-	// Set up mock environment
+	// Modern standardized setup with automatic cleanup
 	_, cleanup := SetupMockEnvironment(t)
 	defer cleanup()
 
 	// Set custom mock checker with known values for this test
-	mock := NewMockSudoChecker(true, true, true)
+	mock := &MockSudoChecker{
+		MockIsRoot:      true,
+		MockInSudoGroup: true,
+		MockCanUseSudo:  true,
+	}
 	SetSudoChecker(mock)
 
 	info := GetCurrentUserInfo()
@@ -446,12 +461,16 @@ func TestSudoCheckingIntegration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up mock environment
+			// Modern standardized setup with automatic cleanup
 			_, cleanup := SetupMockEnvironment(t)
 			defer cleanup()
 
 			// Set custom mock checker for this test
-			mock := NewMockSudoChecker(tt.mockIsRoot, tt.mockInSudoGroup, tt.mockCanUseSudo)
+			mock := &MockSudoChecker{
+				MockIsRoot:      tt.mockIsRoot,
+				MockInSudoGroup: tt.mockInSudoGroup,
+				MockCanUseSudo:  tt.mockCanUseSudo,
+			}
 			SetSudoChecker(mock)
 
 			// Test individual methods
@@ -546,7 +565,11 @@ func BenchmarkSudoChecking(b *testing.B) {
 	})
 
 	b.Run("MockChecker", func(b *testing.B) {
-		mock := NewMockSudoChecker(false, true, false)
+		mock := &MockSudoChecker{
+			MockIsRoot:      false,
+			MockInSudoGroup: true,
+			MockCanUseSudo:  false,
+		}
 		for i := 0; i < b.N; i++ {
 			mock.HasSudoPrivileges()
 		}

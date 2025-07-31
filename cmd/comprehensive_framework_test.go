@@ -223,11 +223,11 @@ func BenchmarkFrameworkOverhead(b *testing.B) {
 func TestFrameworkCompatibility(t *testing.T) {
 	// Test that framework can work alongside existing test helpers
 	t.Run("mixed_approach", func(t *testing.T) {
-		// Use old approach for setup
+		// Manual mock setup when needed
 		mock := NewMockClient()
 		setMockJails(mock, []string{"sshd", "apache"})
 
-		// Use new framework for execution and validation
+		// Use framework for execution and validation
 		NewCommandTest(t, "list-jails").
 			WithMockClient(mock).
 			ExpectSuccess().

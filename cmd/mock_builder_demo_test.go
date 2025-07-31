@@ -55,26 +55,8 @@ func TestMockClientBuilder(t *testing.T) {
 			AssertContains("192.168.1.102")
 	})
 
-	t.Run("builder_comparison_old_vs_new", func(t *testing.T) {
-		// This test shows the difference between old setup and new builder
-
-		// OLD WAY (would require 15+ lines):
-		// mock := NewMockClient()
-		// setMockJails(mock, []string{"sshd", "apache"})
-		// mock.BanRecords = []fail2ban.BanRecord{
-		//     {Jail: "sshd", IP: "192.168.1.100", Remaining: "01:30:00"},
-		//     {Jail: "apache", IP: "192.168.1.101", Remaining: "02:15:30"},
-		// }
-		// mock.LogLines = []string{
-		//     "2024-01-01 12:00:00 [sshd] Ban 192.168.1.100",
-		//     "2024-01-01 12:01:00 [apache] Ban 192.168.1.101",
-		// }
-		// if mock.StatusJailData == nil {
-		//     mock.StatusJailData = make(map[string]string)
-		// }
-		// mock.StatusJailData["sshd"] = "Mock status for jail sshd"
-
-		// NEW WAY (fluent builder pattern):
+	t.Run("complex_multi_command_scenario", func(t *testing.T) {
+		// Demonstrate comprehensive mock setup for multiple commands
 		mockBuilder := NewMockClientBuilder().
 			WithJails("sshd", "apache").
 			WithBanRecord("sshd", "192.168.1.100", "01:30:00").

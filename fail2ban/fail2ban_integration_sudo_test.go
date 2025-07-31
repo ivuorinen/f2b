@@ -42,7 +42,7 @@ func TestSudoIntegrationWithClient(t *testing.T) {
 			// Set environment variable to force sudo checking in tests
 			t.Setenv("F2B_TEST_SUDO", "true")
 
-			// Set up mock environment with specific privileges
+			// Modern standardized setup with automatic cleanup
 			_, cleanup := SetupMockEnvironmentWithSudo(t, tt.hasPrivileges)
 			defer cleanup()
 
@@ -191,7 +191,7 @@ func TestSudoCommandSelection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up mock environment with specific privileges
+			// Modern standardized setup with automatic cleanup
 			_, cleanup := SetupMockEnvironmentWithSudo(t, tt.hasPrivileges)
 			defer cleanup()
 
@@ -256,7 +256,7 @@ func TestSudoErrorPropagation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up mock environment with specific privileges
+			// Modern standardized setup with automatic cleanup
 			_, cleanup := SetupMockEnvironmentWithSudo(t, tt.hasPrivileges)
 			defer cleanup()
 
@@ -281,12 +281,16 @@ func TestSudoErrorPropagation(t *testing.T) {
 
 // TestSudoWithDifferentCommands tests sudo behavior with various command types
 func TestSudoWithDifferentCommands(t *testing.T) {
-	// Set up mock environment with sudo privileges (not root)
+	// Modern standardized setup with sudo privileges (not root)
 	_, cleanup := SetupMockEnvironmentWithSudo(t, true)
 	defer cleanup()
 
 	// Set custom mock checker for this test (not root, but has sudo)
-	mock := NewMockSudoChecker(false, true, true) // not root, but in sudo group and can sudo
+	mock := &MockSudoChecker{
+		MockIsRoot:      false,
+		MockInSudoGroup: true,
+		MockCanUseSudo:  true,
+	} // not root, but in sudo group and can sudo
 	SetSudoChecker(mock)
 
 	tests := []struct {
@@ -419,7 +423,7 @@ func TestSudoPrivilegeEscalation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up mock environment with specific privileges
+			// Modern standardized setup with automatic cleanup
 			_, cleanup := SetupMockEnvironmentWithSudo(t, tt.initialPrivs)
 			defer cleanup()
 
@@ -506,7 +510,11 @@ func TestSudoMockConsistency(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := NewMockSudoChecker(tt.isRoot, tt.inSudoGroup, tt.canUseSudo)
+			mock := &MockSudoChecker{
+				MockIsRoot:      tt.isRoot,
+				MockInSudoGroup: tt.inSudoGroup,
+				MockCanUseSudo:  tt.canUseSudo,
+			}
 
 			// Test individual methods
 			if mock.IsRoot() != tt.isRoot {

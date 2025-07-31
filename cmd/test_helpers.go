@@ -30,7 +30,10 @@ func setMockJails(mock *MockClient, jails []string) {
 func setupMockEnvironment() func() {
 	// Set up mock sudo checker
 	originalChecker := fail2ban.GetSudoChecker()
-	mockChecker := fail2ban.NewMockSudoCheckerWithPrivileges(true)
+	mockChecker := &fail2ban.MockSudoChecker{
+		MockHasPrivileges:     true,
+		ExplicitPrivilegesSet: true,
+	}
 	fail2ban.SetSudoChecker(mockChecker)
 
 	// Return cleanup function

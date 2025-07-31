@@ -232,21 +232,3 @@ func GetCurrentUserInfo() map[string]interface{} {
 
 	return info
 }
-
-// NewMockSudoChecker creates a new MockSudoChecker with specified privileges
-func NewMockSudoChecker(isRoot, inSudoGroup, canUseSudo bool) *MockSudoChecker {
-	return &MockSudoChecker{
-		MockIsRoot:            isRoot,
-		MockInSudoGroup:       inSudoGroup,
-		MockCanUseSudo:        canUseSudo,
-		ExplicitPrivilegesSet: false, // Let HasSudoPrivileges() compute from individual flags
-	}
-}
-
-// NewMockSudoCheckerWithPrivileges creates a MockSudoChecker with explicit privilege setting
-func NewMockSudoCheckerWithPrivileges(hasPrivileges bool) *MockSudoChecker {
-	return &MockSudoChecker{
-		MockHasPrivileges:     hasPrivileges,
-		ExplicitPrivilegesSet: true,
-	}
-}

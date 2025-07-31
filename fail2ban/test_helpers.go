@@ -66,7 +66,10 @@ func SetupMockEnvironment(t TestingInterface) (client *MockClient, cleanup func(
 
 	// Set up mocks
 	mockClient := NewMockClient()
-	mockChecker := NewMockSudoCheckerWithPrivileges(true)
+	mockChecker := &MockSudoChecker{
+		MockHasPrivileges:     true,
+		ExplicitPrivilegesSet: true,
+	}
 	mockRunner := NewMockRunner()
 
 	SetSudoChecker(mockChecker)
@@ -107,7 +110,10 @@ func SetupMockEnvironmentWithSudo(t TestingInterface, hasSudo bool) (client *Moc
 
 	// Set up mocks
 	mockClient := NewMockClient()
-	mockChecker := NewMockSudoCheckerWithPrivileges(hasSudo)
+	mockChecker := &MockSudoChecker{
+		MockHasPrivileges:     hasSudo,
+		ExplicitPrivilegesSet: true,
+	}
 	mockRunner := NewMockRunner()
 
 	SetSudoChecker(mockChecker)

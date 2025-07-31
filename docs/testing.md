@@ -167,17 +167,11 @@ func TestCommandsWithFramework(t *testing.T) {
 
 #### Standardized Field Naming Conventions
 
-**✅ Consistent Patterns (USE THESE):**
+**✅ Consistent Patterns:**
 
 - `wantOutput` - Expected output content
 - `wantError` - Whether error is expected
 - `wantErrorMsg` - Specific error message to check
-
-**❌ Deprecated Patterns (DO NOT USE):**
-
-- `expectedOut`, `expectedOutput`, `expected` → Use `wantOutput`
-- `expectError`, `isError` → Use `wantError`
-- `expectedError` → Use `wantErrorMsg`
 
 This standardization improves code maintainability and aligns with Go testing conventions.
 
@@ -207,28 +201,12 @@ This standardization improves code maintainability and aligns with Go testing co
 - `cmd_root_test.go`: Completion and execute tests standardized
 - `cmd_logswatch_test.go`: Logs watch tests standardized
 
-### Migration Guide
+### Framework Example
 
-#### Before (Old Pattern)
-
-```go
-// 10+ lines of setup and validation
-mock := NewMockClient()
-setMockJails(mock, []string{"sshd"})
-mock.StatusAllData = "Status for all jails"
-
-output, err := executeCommand(mock, "status", "all")
-AssertError(t, err, false, "status all command")
-
-if !strings.Contains(output, "Status for all jails") {
-    t.Errorf("expected output to contain 'Status for all jails', got %q", output)
-}
-```
-
-#### After (New Framework)
+The modern testing framework provides a clean, fluent interface:
 
 ```go
-// 4 lines with fluent interface
+// Modern framework approach
 NewCommandTest(t, "status").
     WithArgs("all").
     WithSetup(func(mock *fail2ban.MockClient) {
@@ -240,7 +218,7 @@ NewCommandTest(t, "status").
     Run()
 ```
 
-The new framework achieves the same functionality with **70% less code** and **better readability**.
+This approach provides **excellent readability** and **reduced boilerplate**.
 
 ## Mock Patterns
 
@@ -285,15 +263,11 @@ mockRunner.SetResponse("fail2ban-client status", []byte("Jail list: sshd"))
 For testing privilege scenarios:
 
 ```go
-// Save original checker and set up mock with privileges
-originalChecker := fail2ban.GetSudoChecker()
-defer fail2ban.SetSudoChecker(originalChecker)
-mockChecker := fail2ban.NewMockSudoCheckerWithPrivileges(true)
-fail2ban.SetSudoChecker(mockChecker)
+// Modern standardized setup with automatic cleanup
+_, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, true)
+defer cleanup()
 
-// Enable sudo checking in tests
-os.Setenv("F2B_TEST_SUDO", "true")
-defer os.Unsetenv("F2B_TEST_SUDO")
+// The mock environment is now fully configured with privileges
 ```
 
 ## Testing Requirements
@@ -309,20 +283,11 @@ defer os.Unsetenv("F2B_TEST_SUDO")
 
 ```go
 func TestWithMocks(t *testing.T) {
-    // Set up environment for sudo testing
-    os.Setenv("F2B_TEST_SUDO", "true")
-    defer os.Unsetenv("F2B_TEST_SUDO")
+    // Modern standardized setup with automatic cleanup
+    _, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, true)
+    defer cleanup()
 
-    // Mock all system interactions
-    originalChecker := fail2ban.GetSudoChecker()
-    defer fail2ban.SetSudoChecker(originalChecker)
-    fail2ban.SetSudoChecker(fail2ban.NewMockSudoCheckerWithPrivileges(true))
-
-    originalRunner := fail2ban.GetRunner()
-    defer fail2ban.SetRunner(originalRunner)
-    fail2ban.SetRunner(fail2ban.NewMockRunner())
-
-    // Test implementation
+    // All mock environment is configured - proceed with test implementation
 }
 ```
 
@@ -343,9 +308,9 @@ func TestBanCommand_RequiresPrivileges(t *testing.T) {
 
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
-            // Set up privilege scenario
-            mockChecker := fail2ban.NewMockSudoCheckerWithPrivileges(tt.hasPrivileges)
-            fail2ban.SetSudoChecker(mockChecker)
+            // Set up privilege scenario using modern helper
+            _, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, tt.hasPrivileges)
+            defer cleanup()
 
             // Test command execution
             // ...
@@ -407,8 +372,12 @@ func TestCommandOutput_JSONFormat(t *testing.T) {
 
 ```go
 func TestIntegration_BanUnbanFlow(t *testing.T) {
-    mock := fail2ban.NewMockClient()
-    setupMockEnvironment(t, mock)
+    // Modern setup with automatic cleanup
+    _, cleanup := fail2ban.SetupMockEnvironment(t)
+    defer cleanup()
+
+    // Get the configured mock client
+    mock := fail2ban.GetClient().(*fail2ban.MockClient)
 
     // Test complete workflow
     steps := []struct {
@@ -442,8 +411,11 @@ func TestIntegration_BanUnbanFlow(t *testing.T) {
 
 ```go
 func BenchmarkBanCommand(b *testing.B) {
-    mock := fail2ban.NewMockClient()
-    setupMockEnvironment(b, mock)
+    // Modern setup for benchmarks
+    _, cleanup := fail2ban.SetupMockEnvironment(b)
+    defer cleanup()
+
+    mock := fail2ban.GetClient().(*fail2ban.MockClient)
 
     b.ResetTimer()
     for i := 0; i < b.N; i++ {
@@ -555,21 +527,15 @@ defer cleanup()
 - `WithStdoutCapture()` - Capture stdout for validation
 - `Cleanup()` - Restore original environment
 
-### Legacy Test Helpers (Still Supported)
+### Standard Test Setup Example
 
 ```go
-// setupMockEnvironment configures standard test environment
-func setupMockEnvironment(t testing.TB, mock *fail2ban.MockClient) {
-    os.Setenv("F2B_TEST_SUDO", "true")
-    t.Cleanup(func() { os.Unsetenv("F2B_TEST_SUDO") })
+// SetupMockEnvironmentWithSudo configures standard test environment with privileges
+func TestExample(t *testing.T) {
+    _, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, true)
+    defer cleanup()
 
-    originalChecker := fail2ban.GetSudoChecker()
-    fail2ban.SetSudoChecker(fail2ban.NewMockSudoCheckerWithPrivileges(true))
-    t.Cleanup(func() { fail2ban.SetSudoChecker(originalChecker) })
-
-    originalRunner := fail2ban.GetRunner()
-    fail2ban.SetRunner(fail2ban.NewMockRunner())
-    t.Cleanup(func() { fail2ban.SetRunner(originalRunner) })
+    // Test implementation here
 }
 
 // executeCommand runs a command with mock client

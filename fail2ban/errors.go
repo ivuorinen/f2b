@@ -2,21 +2,21 @@ package fail2ban
 
 import "fmt"
 
-// Common error messages as constants to reduce string allocations and ensure consistency
+// Enhanced error messages with context and remediation hints
 const (
-	ErrJailNotFound       = "jail '%s' not found"
-	ErrInvalidIP          = "invalid IP address: %s"
-	ErrInvalidJail        = "invalid jail name: %s"
-	ErrInvalidFilter      = "invalid filter name: %s"
-	ErrFilterNotFound     = "filter %s not found"
-	ErrClientNotAvailable = "fail2ban client not available for this command"
-	ErrIPRequired         = "IP address required"
-	ErrJailRequired       = "jail name required"
-	ErrFilterRequired     = "filter name required"
-	ErrActionRequired     = "action required"
-	ErrInvalidCommand     = "invalid command: %s"
-	ErrCommandNotAllowed  = "command not allowed: %s"
-	ErrInvalidArgument    = "invalid argument: %s"
+	ErrJailNotFound       = "jail '%s' not found. Use 'f2b status' to list available jails"
+	ErrInvalidIP          = "invalid IP address: %s. Expected: IPv4 (192.168.1.1) or IPv6 (2001:db8::1)"
+	ErrInvalidJail        = "invalid jail name: %s. Must contain only alphanumeric, hyphens, underscores"
+	ErrInvalidFilter      = "invalid filter name: %s. Must contain only alphanumeric, hyphens, underscores"
+	ErrFilterNotFound     = "filter %s not found in filter directory. Use 'f2b filter' to list available filters"
+	ErrClientNotAvailable = "fail2ban client not available for this command. Ensure fail2ban is installed and running"
+	ErrIPRequired         = "IP address required. Usage: f2b <command> <ip-address> [jail]"
+	ErrJailRequired       = "jail name required. Use 'f2b status' to list available jails"
+	ErrFilterRequired     = "filter name required. Use 'f2b filter' to list available filters"
+	ErrActionRequired     = "action required. Valid actions: start, stop, restart, status, reload, enable, disable"
+	ErrInvalidCommand     = "invalid command: %s. Use 'f2b --help' to see available commands"
+	ErrCommandNotAllowed  = "command not allowed: %s. This command contains potentially dangerous characters"
+	ErrInvalidArgument    = "invalid argument: %s. Check command usage with 'f2b <command> --help'"
 )
 
 // NewJailNotFoundError creates a formatted error for jail not found scenarios.
@@ -59,11 +59,95 @@ func NewInvalidArgumentError(arg string) error {
 	return fmt.Errorf(ErrInvalidArgument, arg)
 }
 
-// Common validation errors
+// ErrorCategory represents the category of an error for better error handling
+type ErrorCategory string
+
+// Error category constants for categorizing different types of errors
+const (
+	ErrorCategoryValidation ErrorCategory = "validation" // Input validation errors
+	ErrorCategoryNetwork    ErrorCategory = "network"    // Network-related errors
+	ErrorCategoryPermission ErrorCategory = "permission" // Permission/authentication errors
+	ErrorCategorySystem     ErrorCategory = "system"     // System-level errors
+	ErrorCategoryConfig     ErrorCategory = "config"     // Configuration errors
+)
+
+// ContextualError provides enhanced error information with category and remediation
+type ContextualError struct {
+	Message     string
+	Category    ErrorCategory
+	Remediation string
+	Cause       error
+}
+
+func (e *ContextualError) Error() string {
+	return e.Message
+}
+
+func (e *ContextualError) Unwrap() error {
+	return e.Cause
+}
+
+// GetRemediation returns suggested remediation for the error
+func (e *ContextualError) GetRemediation() string {
+	return e.Remediation
+}
+
+// GetCategory returns the error category
+func (e *ContextualError) GetCategory() ErrorCategory {
+	return e.Category
+}
+
+// Enhanced error constructors with remediation hints
+
+// NewValidationError creates a validation error with remediation
+func NewValidationError(message, remediation string) *ContextualError {
+	return &ContextualError{
+		Message:     message,
+		Category:    ErrorCategoryValidation,
+		Remediation: remediation,
+	}
+}
+
+// NewSystemError creates a system error with remediation
+func NewSystemError(message, remediation string, cause error) *ContextualError {
+	return &ContextualError{
+		Message:     message,
+		Category:    ErrorCategorySystem,
+		Remediation: remediation,
+		Cause:       cause,
+	}
+}
+
+// NewPermissionError creates a permission error with remediation
+func NewPermissionError(message, remediation string) *ContextualError {
+	return &ContextualError{
+		Message:     message,
+		Category:    ErrorCategoryPermission,
+		Remediation: remediation,
+	}
+}
+
+// Common validation errors with enhanced context
 var (
-	ErrClientNotAvailableError = fmt.Errorf("%s", ErrClientNotAvailable)
-	ErrIPRequiredError         = fmt.Errorf("%s", ErrIPRequired)
-	ErrJailRequiredError       = fmt.Errorf("%s", ErrJailRequired)
-	ErrFilterRequiredError     = fmt.Errorf("%s", ErrFilterRequired)
-	ErrActionRequiredError     = fmt.Errorf("%s", ErrActionRequired)
+	ErrClientNotAvailableError = NewSystemError(
+		ErrClientNotAvailable,
+		"Check if fail2ban service is running: 'sudo systemctl status fail2ban'",
+		nil,
+	)
+	ErrIPRequiredError = NewValidationError(
+		ErrIPRequired,
+		"Provide a valid IPv4 or IPv6 address as the first argument",
+	)
+	ErrJailRequiredError = NewValidationError(
+		ErrJailRequired,
+		"Specify a jail name or use 'f2b status' to see available jails",
+	)
+	ErrFilterRequiredError = NewValidationError(
+		ErrFilterRequired,
+		"Specify a filter name or use 'f2b filter' to see available filters",
+	)
+	ErrActionRequiredError = NewValidationError(
+		ErrActionRequired,
+		"Choose from: start, stop, restart, status, reload, enable, disable",
+	)
 )

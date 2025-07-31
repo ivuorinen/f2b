@@ -1,0 +1,210 @@
+package cmd
+
+import (
+	"context"
+	"os"
+	"time"
+
+	"github.com/sirupsen/logrus"
+)
+
+// ContextKey represents keys for context values
+type ContextKey string
+
+const (
+	// LoggerContextKey is the key for logger in context
+	LoggerContextKey ContextKey = "logger"
+	// RequestIDKey is the key for request ID in context
+	RequestIDKey ContextKey = "request_id"
+	// OperationKey is the key for operation name in context
+	OperationKey ContextKey = "operation"
+	// IPKey is the key for IP address in context
+	IPKey ContextKey = "ip"
+	// JailKey is the key for jail name in context
+	JailKey ContextKey = "jail"
+	// CommandKey is the key for command name in context
+	CommandKey ContextKey = "command"
+)
+
+// ContextualLogger provides structured logging with context propagation
+type ContextualLogger struct {
+	*logrus.Logger
+	defaultFields logrus.Fields
+}
+
+// NewContextualLogger creates a new contextual logger with default configuration
+func NewContextualLogger() *ContextualLogger {
+	logger := logrus.New()
+	logger.SetOutput(os.Stderr)
+	logger.SetFormatter(&logrus.JSONFormatter{
+		TimestampFormat: time.RFC3339Nano,
+		FieldMap: logrus.FieldMap{
+			logrus.FieldKeyTime:  "timestamp",
+			logrus.FieldKeyLevel: "level",
+			logrus.FieldKeyMsg:   "message",
+		},
+	})
+
+	// Set log level from environment
+	if level := os.Getenv("F2B_LOG_LEVEL"); level != "" {
+		if parsedLevel, err := logrus.ParseLevel(level); err == nil {
+			logger.SetLevel(parsedLevel)
+		}
+	} else {
+		logger.SetLevel(logrus.InfoLevel)
+	}
+
+	return &ContextualLogger{
+		Logger: logger,
+		defaultFields: logrus.Fields{
+			"service": "f2b",
+			"version": getVersion(),
+		},
+	}
+}
+
+// Build-time variables set via ldflags
+var (
+	version = "dev"
+	// Additional build variables that may be used in the future
+	_ = "unknown" // commit placeholder
+	_ = "unknown" // date placeholder
+	_ = "unknown" // builtBy placeholder
+)
+
+// getVersion returns the version from build variables or default
+func getVersion() string {
+	return version
+}
+
+// WithContext creates a logger entry with context values
+func (cl *ContextualLogger) WithContext(ctx context.Context) *logrus.Entry {
+	entry := cl.WithFields(cl.defaultFields)
+
+	// Extract context values and add as fields
+	if requestID := ctx.Value(RequestIDKey); requestID != nil {
+		entry = entry.WithField("request_id", requestID)
+	}
+
+	if operation := ctx.Value(OperationKey); operation != nil {
+		entry = entry.WithField("operation", operation)
+	}
+
+	if ip := ctx.Value(IPKey); ip != nil {
+		entry = entry.WithField("ip", ip)
+	}
+
+	if jail := ctx.Value(JailKey); jail != nil {
+		entry = entry.WithField("jail", jail)
+	}
+
+	if command := ctx.Value(CommandKey); command != nil {
+		entry = entry.WithField("command", command)
+	}
+
+	return entry
+}
+
+// WithOperation adds operation context and returns a new context
+func WithOperation(ctx context.Context, operation string) context.Context {
+	return context.WithValue(ctx, OperationKey, operation)
+}
+
+// WithIP adds IP context and returns a new context
+func WithIP(ctx context.Context, ip string) context.Context {
+	return context.WithValue(ctx, IPKey, ip)
+}
+
+// WithJail adds jail context and returns a new context
+func WithJail(ctx context.Context, jail string) context.Context {
+	return context.WithValue(ctx, JailKey, jail)
+}
+
+// WithCommand adds command context and returns a new context
+func WithCommand(ctx context.Context, command string) context.Context {
+	return context.WithValue(ctx, CommandKey, command)
+}
+
+// WithRequestID adds request ID context and returns a new context
+func WithRequestID(ctx context.Context, requestID string) context.Context {
+	return context.WithValue(ctx, RequestIDKey, requestID)
+}
+
+// LogOperation logs the start and end of an operation with timing
+func (cl *ContextualLogger) LogOperation(ctx context.Context, operation string, fn func() error) error {
+	start := time.Now()
+	ctx = WithOperation(ctx, operation)
+
+	cl.WithContext(ctx).WithField("duration", "start").Info("Operation started")
+
+	err := fn()
+	duration := time.Since(start)
+
+	entry := cl.WithContext(ctx).WithField("duration_ms", duration.Milliseconds())
+
+	if err != nil {
+		entry.WithError(err).Error("Operation failed")
+	} else {
+		entry.Info("Operation completed")
+	}
+
+	return err
+}
+
+// LogBanOperation logs ban/unban operations with structured context
+func (cl *ContextualLogger) LogBanOperation(
+	ctx context.Context,
+	operation, ip, jail string,
+	success bool,
+	duration time.Duration,
+) {
+	ctx = WithOperation(ctx, operation)
+	ctx = WithIP(ctx, ip)
+	ctx = WithJail(ctx, jail)
+
+	entry := cl.WithContext(ctx).WithFields(logrus.Fields{
+		"success":     success,
+		"duration_ms": duration.Milliseconds(),
+	})
+
+	if success {
+		entry.Info("Ban operation completed")
+	} else {
+		entry.Error("Ban operation failed")
+	}
+}
+
+// LogCommandExecution logs command execution with context
+func (cl *ContextualLogger) LogCommandExecution(
+	ctx context.Context,
+	command string,
+	args []string,
+	duration time.Duration,
+	err error,
+) {
+	ctx = WithCommand(ctx, command)
+
+	entry := cl.WithContext(ctx).WithFields(logrus.Fields{
+		"args":        args,
+		"duration_ms": duration.Milliseconds(),
+	})
+
+	if err != nil {
+		entry.WithError(err).Error("Command execution failed")
+	} else {
+		entry.Info("Command executed successfully")
+	}
+}
+
+// Global contextual logger instance
+var contextualLogger = NewContextualLogger()
+
+// GetContextualLogger returns the global contextual logger
+func GetContextualLogger() *ContextualLogger {
+	return contextualLogger
+}
+
+// SetContextualLogger sets a new global contextual logger
+func SetContextualLogger(logger *ContextualLogger) {
+	contextualLogger = logger
+}

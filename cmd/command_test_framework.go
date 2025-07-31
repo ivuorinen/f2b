@@ -57,7 +57,10 @@ func NewTestEnvironment() *TestEnvironment {
 // WithPrivileges sets up sudo checker with specified privileges
 func (env *TestEnvironment) WithPrivileges(hasPrivileges bool) *TestEnvironment {
 	env.originalChecker = fail2ban.GetSudoChecker()
-	mockChecker := fail2ban.NewMockSudoCheckerWithPrivileges(hasPrivileges)
+	mockChecker := &fail2ban.MockSudoChecker{
+		MockHasPrivileges:     hasPrivileges,
+		ExplicitPrivilegesSet: true,
+	}
 	fail2ban.SetSudoChecker(mockChecker)
 	env.cleanup = append(env.cleanup, func() {
 		fail2ban.SetSudoChecker(env.originalChecker)
@@ -184,7 +187,10 @@ func (ctb *CommandTestBuilder) WithSetup(setupFunc func(*fail2ban.MockClient)) *
 func (ctb *CommandTestBuilder) WithServiceSetup(setupFunc func(*fail2ban.MockRunner)) *CommandTestBuilder {
 	ctb.setupFunc = func(_ *fail2ban.MockClient) {
 		// Set up sudo checker
-		mockChecker := fail2ban.NewMockSudoCheckerWithPrivileges(true)
+		mockChecker := &fail2ban.MockSudoChecker{
+			MockHasPrivileges:     true,
+			ExplicitPrivilegesSet: true,
+		}
 		fail2ban.SetSudoChecker(mockChecker)
 
 		// Create and set up mock runner

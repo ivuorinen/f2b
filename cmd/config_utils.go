@@ -271,3 +271,58 @@ func parseTimeoutFromEnv(envVar string, defaultTimeout time.Duration) time.Durat
 		Warn("Failed to parse timeout value, using default")
 	return defaultTimeout
 }
+
+// ValidateConfig performs comprehensive validation of the Config struct
+func (c *Config) ValidateConfig() error {
+	var errors []string
+
+	// Validate LogDir
+	if c.LogDir == "" {
+		errors = append(errors, "log directory cannot be empty")
+	} else if _, err := validateConfigPath(c.LogDir, "log"); err != nil {
+		errors = append(errors, fmt.Sprintf("invalid log directory: %v", err))
+	}
+
+	// Validate FilterDir
+	if c.FilterDir == "" {
+		errors = append(errors, "filter directory cannot be empty")
+	} else if _, err := validateConfigPath(c.FilterDir, "filter"); err != nil {
+		errors = append(errors, fmt.Sprintf("invalid filter directory: %v", err))
+	}
+
+	// Validate Format
+	validFormats := map[string]bool{"plain": true, "json": true}
+	if !validFormats[c.Format] {
+		errors = append(errors, fmt.Sprintf("invalid format '%s', must be 'plain' or 'json'", c.Format))
+	}
+
+	// Validate Timeouts
+	if c.CommandTimeout <= 0 {
+		errors = append(errors, "command timeout must be positive")
+	} else if c.CommandTimeout > 10*time.Minute {
+		errors = append(errors, "command timeout too large (max 10 minutes)")
+	}
+
+	if c.FileTimeout <= 0 {
+		errors = append(errors, "file timeout must be positive")
+	} else if c.FileTimeout > 5*time.Minute {
+		errors = append(errors, "file timeout too large (max 5 minutes)")
+	}
+
+	if c.ParallelTimeout <= 0 {
+		errors = append(errors, "parallel timeout must be positive")
+	} else if c.ParallelTimeout > 30*time.Minute {
+		errors = append(errors, "parallel timeout too large (max 30 minutes)")
+	}
+
+	// Check timeout relationships
+	if c.ParallelTimeout < c.CommandTimeout {
+		errors = append(errors, "parallel timeout should be >= command timeout")
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("configuration validation failed: %s", strings.Join(errors, "; "))
+	}
+
+	return nil
+}

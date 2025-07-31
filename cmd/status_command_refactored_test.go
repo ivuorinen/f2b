@@ -1,13 +1,12 @@
 package cmd
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/ivuorinen/f2b/fail2ban"
 )
 
-// TestStatusCommandRefactored demonstrates the new framework vs the old approach
+// TestStatusCommandRefactored demonstrates comprehensive status command testing with the modern framework
 func TestStatusCommandRefactored(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -51,24 +50,8 @@ func TestStatusCommandRefactored(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		// OLD WAY (current approach - 10 lines of setup and validation per test)
-		t.Run("old_"+tt.name, func(t *testing.T) {
-			mock := NewMockClient()
-			setMockJails(mock, tt.jails)
-			mock.StatusAllData = tt.statusAll
-			mock.StatusJailData = tt.statusJail
-
-			output, err := executeCommand(mock, append([]string{"status"}, tt.args...)...)
-
-			AssertError(t, err, tt.wantError, tt.name)
-
-			if tt.wantOutput != "" && !strings.Contains(output, tt.wantOutput) {
-				t.Errorf("expected output to contain %q, got %q", tt.wantOutput, output)
-			}
-		})
-
-		// NEW WAY (framework approach - 1 concise fluent call)
-		t.Run("new_"+tt.name, func(t *testing.T) {
+		// Framework approach with fluent interface
+		t.Run(tt.name, func(t *testing.T) {
 			builder := NewCommandTest(t, "status").
 				WithArgs(tt.args...).
 				WithSetup(func(mock *fail2ban.MockClient) {

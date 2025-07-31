@@ -188,18 +188,13 @@ func (r *RealRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte
 **Critical Rule**: Never execute real sudo commands in tests
 
 ```go
-// CORRECT - Use MockSudoChecker
+// CORRECT - Use modern standardized helpers
 func TestBanCommand_WithPrivileges(t *testing.T) {
-    originalChecker := fail2ban.GetSudoChecker()
-    defer fail2ban.SetSudoChecker(originalChecker)
+    // Modern standardized setup with automatic cleanup
+    _, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, true)
+    defer cleanup()
 
-    mockChecker := fail2ban.NewMockSudoCheckerWithPrivileges(true)
-    fail2ban.SetSudoChecker(mockChecker)
-
-    os.Setenv("F2B_TEST_SUDO", "true")
-    defer os.Unsetenv("F2B_TEST_SUDO")
-
-    // Test implementation
+    // Test implementation - environment is fully configured
 }
 ```
 
@@ -207,21 +202,11 @@ func TestBanCommand_WithPrivileges(t *testing.T) {
 
 ```go
 func setupSecureTestEnvironment(t *testing.T) {
-    // Prevent real sudo execution
-    os.Setenv("F2B_TEST_SUDO", "true")
-    t.Cleanup(func() { os.Unsetenv("F2B_TEST_SUDO") })
+    // Modern standardized setup with complete isolation
+    _, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, true)
+    defer cleanup()
 
-    // Mock all system interactions
-    originalRunner := fail2ban.GetRunner()
-    mockRunner := fail2ban.NewMockRunner()
-    fail2ban.SetRunner(mockRunner)
-    t.Cleanup(func() { fail2ban.SetRunner(originalRunner) })
-
-    // Mock privilege checking
-    originalChecker := fail2ban.GetSudoChecker()
-    mockChecker := fail2ban.NewMockSudoCheckerWithPrivileges(false)
-    fail2ban.SetSudoChecker(mockChecker)
-    t.Cleanup(func() { fail2ban.SetSudoChecker(originalChecker) })
+    // All mock environment is configured with proper isolation and privilege handling
 }
 ```
 

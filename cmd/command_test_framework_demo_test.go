@@ -6,31 +6,10 @@ import (
 	"github.com/ivuorinen/f2b/fail2ban"
 )
 
-// TestDemoCommandTestFramework shows how to use the new framework vs old patterns
+// TestDemoCommandTestFramework demonstrates the modern testing framework capabilities
 func TestDemoCommandTestFramework(t *testing.T) {
-	// OLD WAY (verbose, lots of setup code):
-	t.Run("old_way_example", func(t *testing.T) {
-		// Setup mock client (8 lines of repetitive code)
-		mock := NewMockClient()
-		setMockJails(mock, []string{"sshd", "apache"})
-		mock.StatusAllData = "Status for all jails"
-		mock.StatusJailData = map[string]string{
-			"sshd":   "Status for sshd jail",
-			"apache": "Status for apache jail",
-		}
-
-		// Execute command (3 lines)
-		output, err := executeCommand(mock, "status", "all")
-
-		// Validate results (4-5 lines)
-		AssertError(t, err, false, "status all command")
-		if output != "Status for all jails\n" {
-			t.Errorf("expected 'Status for all jails\\n', got %q", output)
-		}
-	})
-
-	// NEW WAY (concise, fluent interface):
-	t.Run("new_way_example", func(t *testing.T) {
+	// Simple command test with fluent interface
+	t.Run("basic_command_example", func(t *testing.T) {
 		NewCommandTest(t, "status").
 			WithArgs("all").
 			WithSetup(func(mock *fail2ban.MockClient) {
@@ -60,7 +39,7 @@ func TestDemoCommandTestFramework(t *testing.T) {
 			Run()
 	})
 
-	// JSON output testing example
+	// JSON output validation example
 	t.Run("json_output_example", func(t *testing.T) {
 		NewCommandTest(t, "banned").
 			WithArgs("sshd").
@@ -75,7 +54,7 @@ func TestDemoCommandTestFramework(t *testing.T) {
 			AssertJSONField("Jail", "sshd")
 	})
 
-	// Error testing example
+	// Error handling example
 	t.Run("error_handling_example", func(t *testing.T) {
 		NewCommandTest(t, "ban").
 			WithArgs("192.168.1.100", "nonexistent").

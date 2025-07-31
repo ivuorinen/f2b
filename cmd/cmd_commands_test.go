@@ -440,7 +440,7 @@ func TestTestFilterCommand(t *testing.T) {
 }
 
 func TestVersionCommand(t *testing.T) {
-	// Version command testing - using old approach as framework doesn't support version command
+	// Version command testing - manual approach for version command
 	mock := NewMockClient()
 
 	output, err := executeCommand(mock, "version")

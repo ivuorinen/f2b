@@ -57,17 +57,12 @@ For detailed architecture documentation, see [docs/architecture.md](docs/archite
 Quick mock setup pattern:
 
 ```go
-// Enable test mode and set up mocks
-os.Setenv("F2B_TEST_SUDO", "true")
-defer os.Unsetenv("F2B_TEST_SUDO")
+// Modern standardized setup with automatic cleanup
+_, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, true)
+defer cleanup()
 
-// Mock privilege checker
-mockChecker := fail2ban.NewMockSudoCheckerWithPrivileges(true)
-fail2ban.SetSudoChecker(mockChecker)
-
-// Mock command runner
-mockRunner := fail2ban.NewMockRunner()
-fail2ban.SetRunner(mockRunner)
+// Access the mock runner for additional setup if needed
+mockRunner := fail2ban.GetRunner().(*fail2ban.MockRunner)
 mockRunner.SetResponse("fail2ban-client status", []byte("Jail list: sshd"))
 ```
 

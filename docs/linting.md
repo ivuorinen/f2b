@@ -58,10 +58,9 @@ pre-commit run markdownlint-cli2 --all-files
 pre-commit run checkmake --all-files
 ```
 
-**Legacy Method (Individual Tools):**
+**Individual Tool Commands:**
 
 ```bash
-make lint-legacy        # All tools individually
 make lint-go           # Go only
 make lint-yaml         # YAML only
 make lint-actions      # GitHub Actions only

@@ -2,12 +2,15 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+
+	"github.com/ivuorinen/f2b/fail2ban"
 )
 
 const (
@@ -64,13 +67,28 @@ func PrintOutputTo(w io.Writer, data interface{}, format string) {
 	}
 }
 
-// PrintError logs and prints an error to stderr in a consistent way.
+// PrintError logs and prints an error to stderr with enhanced context if available.
 func PrintError(err error) {
 	if err == nil {
 		return
 	}
-	Logger.WithError(err).Error("Command failed")
-	fmt.Fprintln(os.Stderr, "Error:", err)
+
+	// Check if error provides enhanced context
+	var contextErr *fail2ban.ContextualError
+	if errors.As(err, &contextErr) {
+		Logger.WithFields(map[string]interface{}{
+			"error":    err.Error(),
+			"category": string(contextErr.GetCategory()),
+		}).Error("Command failed")
+
+		fmt.Fprintln(os.Stderr, "Error:", err)
+		if remediation := contextErr.GetRemediation(); remediation != "" {
+			fmt.Fprintln(os.Stderr, "Hint:", remediation)
+		}
+	} else {
+		Logger.WithError(err).Error("Command failed")
+		fmt.Fprintln(os.Stderr, "Error:", err)
+	}
 }
 
 // PrintErrorf logs and prints a formatted error to stderr.
