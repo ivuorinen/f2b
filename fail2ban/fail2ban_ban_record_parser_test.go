@@ -351,52 +351,93 @@ func TestProductionLogTimingPatterns(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			record, err := parser.ParseBanRecordLine(tt.line, "sshd")
-
-			if !tt.wantParsed {
-				if record != nil || err == nil {
-					t.Error("Expected no record or error")
-				}
-				return
-			}
-
-			if err != nil && !errors.Is(err, ErrEmptyLine) && !errors.Is(err, ErrInsufficientFields) &&
-				!errors.Is(err, ErrInvalidBanTime) {
-				t.Fatalf("Unexpected error: %v", err)
-			}
-
-			if record == nil {
-				t.Fatal("Expected record, got nil")
-			}
-
-			// Verify IP
-			if record.IP != tt.wantIP {
-				t.Errorf("IP mismatch: got %s, want %s", record.IP, tt.wantIP)
-			}
-
-			// Verify ban time is set (even if it's current time for simple format)
-			if record.BannedAt.IsZero() {
-				t.Error("Ban time should not be zero")
-			}
-
-			// For full format, verify it parses the time from the record
-			if tt.checkTime && len(strings.Fields(tt.line)) >= 8 {
-				// The ban time should be from the record, not current time
-				parts := strings.Fields(tt.line)
-				expectedDate := parts[1]
-				expectedTime := parts[2]
-
-				// Just verify it's not using current time
-				now := time.Now()
-				if record.BannedAt.Year() == now.Year() &&
-					record.BannedAt.Month() == now.Month() &&
-					record.BannedAt.Day() == now.Day() &&
-					record.BannedAt.Hour() == now.Hour() {
-					// Likely using current time instead of parsing
-					t.Logf("Warning: Ban time might be using current time instead of parsed time")
-					t.Logf("Expected to parse date %s time %s", expectedDate, expectedTime)
-				}
-			}
+			testSingleProductionPattern(t, parser, tt)
 		})
+	}
+}
+
+// testSingleProductionPattern tests a single production log pattern
+func testSingleProductionPattern(t *testing.T, parser *BanRecordParser, tt struct {
+	name       string
+	line       string
+	wantIP     string
+	checkTime  bool
+	wantParsed bool
+}) {
+	t.Helper()
+	record, err := parser.ParseBanRecordLine(tt.line, "sshd")
+
+	if !tt.wantParsed {
+		if record != nil || err == nil {
+			t.Error("Expected no record or error")
+		}
+		return
+	}
+
+	if !isExpectedError(err) {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if record == nil {
+		t.Fatal("Expected record, got nil")
+	}
+
+	validateParsedRecord(t, record, tt)
+}
+
+// isExpectedError checks if the error is one of the expected error types
+func isExpectedError(err error) bool {
+	if err == nil {
+		return true
+	}
+	return errors.Is(err, ErrEmptyLine) ||
+		errors.Is(err, ErrInsufficientFields) ||
+		errors.Is(err, ErrInvalidBanTime)
+}
+
+// validateParsedRecord validates the parsed ban record
+func validateParsedRecord(t *testing.T, record *BanRecord, tt struct {
+	name       string
+	line       string
+	wantIP     string
+	checkTime  bool
+	wantParsed bool
+}) {
+	t.Helper()
+	// Verify IP
+	if record.IP != tt.wantIP {
+		t.Errorf("IP mismatch: got %s, want %s", record.IP, tt.wantIP)
+	}
+
+	// Verify ban time is set
+	if record.BannedAt.IsZero() {
+		t.Error("Ban time should not be zero")
+	}
+
+	// For full format, verify time parsing
+	if tt.checkTime {
+		validateTimeParsing(t, record, tt.line)
+	}
+}
+
+// validateTimeParsing validates that the time was parsed correctly from the record
+func validateTimeParsing(t *testing.T, record *BanRecord, line string) {
+	t.Helper()
+	if len(strings.Fields(line)) < 8 {
+		return // Not full format
+	}
+
+	parts := strings.Fields(line)
+	expectedDate := parts[1]
+	expectedTime := parts[2]
+
+	// Check if using current time instead of parsed time
+	now := time.Now()
+	if record.BannedAt.Year() == now.Year() &&
+		record.BannedAt.Month() == now.Month() &&
+		record.BannedAt.Day() == now.Day() &&
+		record.BannedAt.Hour() == now.Hour() {
+		t.Logf("Warning: Ban time might be using current time instead of parsed time")
+		t.Logf("Expected to parse date %s time %s", expectedDate, expectedTime)
 	}
 }

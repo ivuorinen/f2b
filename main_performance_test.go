@@ -190,12 +190,12 @@ func BenchmarkGlobalStateAccess(b *testing.B) {
 func setupBenchmarkClient(b *testing.B) *fail2ban.RealClient {
 	b.Helper()
 
-	// Setup test environment
-	fail2ban.SetSudoChecker(fail2ban.NewMockSudoCheckerWithPrivileges(true))
-	mockRunner := fail2ban.NewMockRunner()
-	fail2ban.SetRunner(mockRunner)
+	// Setup mock environment
+	_, cleanup := fail2ban.SetupMockEnvironment(b)
+	b.Cleanup(cleanup)
 
-	// Mock responses
+	// Get the mock runner and add additional responses
+	mockRunner := fail2ban.GetRunner().(*fail2ban.MockRunner)
 	mockRunner.SetResponse("fail2ban-client -V", []byte("fail2ban-client v1.0.0"))
 	mockRunner.SetResponse("fail2ban-client status", []byte("Status: [sshd] Jail list: sshd"))
 	mockRunner.SetResponse(

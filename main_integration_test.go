@@ -10,11 +10,9 @@ import (
 
 // TestMainIntegration tests the main function logic without actual execution
 func TestMainIntegration(t *testing.T) {
-	// Set up mock sudo checker for integration tests
-	originalChecker := fail2ban.GetSudoChecker()
-	defer fail2ban.SetSudoChecker(originalChecker)
-	mockChecker := fail2ban.NewMockSudoCheckerWithPrivileges(true)
-	fail2ban.SetSudoChecker(mockChecker)
+	// Set up mock environment for integration tests
+	_, cleanup := fail2ban.SetupMockEnvironment(t)
+	defer cleanup()
 
 	// This test verifies the main function's logic structure
 	// without actually calling main() to avoid exit() calls

@@ -25,6 +25,9 @@ func LogsCmd(client fail2ban.Client, config *Config) *cobra.Command {
 			ip := parsedArgs[1]
 
 			limit, _ := cmd.Flags().GetInt("limit")
+			if limit < 0 {
+				limit = 0
+			}
 			lines, err := client.GetLogLinesWithContext(ctx, jail, ip)
 			if err != nil {
 				return HandleClientError(err)

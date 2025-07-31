@@ -86,19 +86,13 @@ func TestRunnerCombinedOutputConcurrency(t *testing.T) {
 // TestRunnerCombinedOutputWithSudoConcurrency tests concurrent calls to
 // RunnerCombinedOutputWithSudo.
 func TestRunnerCombinedOutputWithSudoConcurrency(t *testing.T) {
-	original := GetRunner()
-	defer SetRunner(original)
+	// Set up mock environment with root privileges to avoid sudo prefix
+	_, cleanup := SetupMockEnvironment(t)
+	defer cleanup()
 
-	originalChecker := GetSudoChecker()
-	defer SetSudoChecker(originalChecker)
-
-	mockRunner := NewMockRunner()
+	// Get the mock runner and configure additional responses
+	mockRunner := GetRunner().(*MockRunner)
 	mockRunner.SetResponse("fail2ban-client status", []byte("status output"))
-	SetRunner(mockRunner)
-
-	// Set up mock sudo checker as root to avoid sudo prefix
-	mockChecker := NewMockSudoChecker(true, true, true)
-	SetSudoChecker(mockChecker)
 
 	const numGoroutines = 50
 	var wg sync.WaitGroup

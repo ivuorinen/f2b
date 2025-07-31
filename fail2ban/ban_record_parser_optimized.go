@@ -197,7 +197,7 @@ func (obp *OptimizedBanRecordParser) parseFullFormat(fields []string, record *Ba
 			"ip":       record.IP,
 			"unbanStr": unbanStr,
 		}).Warnf("Failed to parse unban time: %v", err)
-		tUnban = time.Now().Add(24 * time.Hour) // 24h fallback
+		tUnban = time.Now().Add(DefaultBanDuration) // 24h fallback
 	}
 
 	// Calculate remaining time efficiently
@@ -323,10 +323,10 @@ func fastSplitLines(s string) []string {
 
 // formatDurationOptimized formats duration efficiently in DD:HH:MM:SS format to match original
 func formatDurationOptimized(sec int64) string {
-	days := sec / 86400
-	h := (sec % 86400) / 3600
-	m := (sec % 3600) / 60
-	s := sec % 60
+	days := sec / SecondsPerDay
+	h := (sec % SecondsPerDay) / SecondsPerHour
+	m := (sec % SecondsPerHour) / SecondsPerMinute
+	s := sec % SecondsPerMinute
 
 	// Pre-allocate buffer for DD:HH:MM:SS format (11 chars)
 	buf := make([]byte, 0, 11)

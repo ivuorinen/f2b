@@ -16,13 +16,13 @@ func ServiceCmd(config *Config) *cobra.Command {
 			// Validate service action argument
 			if err := RequireArguments(args, 1, "action required: start|stop|restart|status|reload|enable|disable"); err != nil {
 				PrintError(err)
-				return nil
+				return err
 			}
 
 			action := args[0]
 			if err := ValidateServiceAction(action); err != nil {
 				PrintError(err)
-				return nil
+				return err
 			}
 
 			out, err := fail2ban.RunnerCombinedOutputWithSudo("service", "fail2ban", action)

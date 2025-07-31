@@ -38,7 +38,11 @@ func (gd *GzipDetector) hasGzipMagicBytes(path string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer f.Close()
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil {
+			logrus.WithError(closeErr).WithField("path", path).Warn("Failed to close file in gzip magic byte check")
+		}
+	}()
 
 	var magic [2]byte
 	n, err := f.Read(magic[:])

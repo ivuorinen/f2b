@@ -129,42 +129,68 @@ func testLogLineParsing(t *testing.T, line, wantJail, wantIP, wantEvent string, 
 	}
 
 	// Extract and verify timestamp
+	if err := verifyLogTimestamp(t, line, wantTime, wantErr); err != nil {
+		return
+	}
+
+	// Extract event type and details
+	verifyLogEvent(t, line, wantJail, wantIP, wantEvent)
+}
+
+// verifyLogTimestamp extracts and verifies the timestamp from a log line
+func verifyLogTimestamp(t *testing.T, line string, wantTime time.Time, wantErr bool) error {
+	t.Helper()
 	parsedTime, err := parseTimestamp(line)
 	if err != nil && !wantErr {
 		t.Errorf("Failed to parse time: %v", err)
-		return
+		return err
 	}
 
 	if !wantErr && !parsedTime.Equal(wantTime) {
 		t.Errorf("Time mismatch: got %v, want %v", parsedTime, wantTime)
 	}
+	return nil
+}
 
-	// Extract event type and details
+// verifyLogEvent extracts and verifies the event details from a log line
+func verifyLogEvent(t *testing.T, line, wantJail, wantIP, wantEvent string) {
+	t.Helper()
 	if strings.Contains(line, "rollover") {
 		if wantEvent != "rollover" {
 			t.Errorf("Expected rollover event")
 		}
-	} else if strings.Contains(line, "[") && strings.Contains(line, "]") {
-		// Extract and verify jail
-		jail := extractJailFromLine(line)
-		if jail != wantJail {
-			t.Errorf("Jail mismatch: got %s, want %s", jail, wantJail)
-		}
-
-		// Extract and verify IP based on action type
-		var ip string
-		if strings.Contains(line, "Found") {
-			ip = extractIPFromAction(line, "Found")
-		} else if strings.Contains(line, "Ban ") {
-			ip = extractIPFromAction(line, "Ban")
-		} else if strings.Contains(line, "Unban ") {
-			ip = extractIPFromAction(line, "Unban")
-		}
-
-		if ip != wantIP {
-			t.Errorf("IP mismatch: got %s, want %s", ip, wantIP)
-		}
+		return
 	}
+
+	if !strings.Contains(line, "[") || !strings.Contains(line, "]") {
+		return
+	}
+
+	// Extract and verify jail
+	jail := extractJailFromLine(line)
+	if jail != wantJail {
+		t.Errorf("Jail mismatch: got %s, want %s", jail, wantJail)
+	}
+
+	// Extract and verify IP based on action type
+	ip := extractIPFromLogLine(line)
+	if ip != wantIP {
+		t.Errorf("IP mismatch: got %s, want %s", ip, wantIP)
+	}
+}
+
+// extractIPFromLogLine extracts IP address from log line based on action type
+func extractIPFromLogLine(line string) string {
+	if strings.Contains(line, "Found") {
+		return extractIPFromAction(line, "Found")
+	}
+	if strings.Contains(line, "Ban ") {
+		return extractIPFromAction(line, "Ban")
+	}
+	if strings.Contains(line, "Unban ") {
+		return extractIPFromAction(line, "Unban")
+	}
+	return ""
 }
 
 func TestGetLogLinesWithRealTestData(t *testing.T) {

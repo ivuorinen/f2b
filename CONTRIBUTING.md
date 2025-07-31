@@ -52,9 +52,9 @@ go test ./...
 
 ## Code Style
 
-- Use idiomatic Go and follow the [Effective Go][effective_go] guidelines.
-- Use tabs for Go code (see `.editorconfig`).
-- Use structured logging (`logrus`) and the provided output helpers.
+- Follow idiomatic Go style as described in the [Effective Go][effective_go] guidelines.
+- Prefer tabs for Go code (see `.editorconfig`).
+- Employ structured logging (`logrus`) together with the project's output helpers.
 - Validate all user input, especially IP addresses and jail names.
 - Prefer explicit error handling and error wrapping (`fmt.Errorf("...: %w", err)`).
 - Add GoDoc comments to all exported functions, types, and interfaces.

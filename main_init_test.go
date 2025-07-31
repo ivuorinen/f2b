@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"testing"
 
@@ -8,19 +9,27 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	// Set up mock sudo checker with privileges for all tests
-	originalChecker := fail2ban.GetSudoChecker()
-	mockChecker := fail2ban.NewMockSudoCheckerWithPrivileges(true)
-	fail2ban.SetSudoChecker(mockChecker)
+	// Set up mock environment for all tests
+	_, cleanup := fail2ban.SetupMockEnvironment(&testingT{})
+	defer cleanup()
 
 	// Run tests
 	code := m.Run()
 
-	// Restore original checker
-	fail2ban.SetSudoChecker(originalChecker)
-
 	os.Exit(code)
 }
+
+// testingT implements TestingInterface for TestMain
+type testingT struct{}
+
+func (t *testingT) Helper() {}
+func (t *testingT) Fatalf(format string, args ...interface{}) {
+	fmt.Printf("TestMain setup fatal: "+format+"\n", args...)
+}
+func (t *testingT) Skipf(format string, args ...interface{}) {
+	fmt.Printf("TestMain setup skip: "+format+"\n", args...)
+}
+func (t *testingT) TempDir() string { return os.TempDir() }
 
 // shouldSkipClientInit determines if client initialization should be skipped
 // based on the command arguments. Returns true for commands that don't require

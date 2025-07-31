@@ -39,19 +39,15 @@ func TestSudoIntegrationWithClient(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original checker
-			originalChecker := GetSudoChecker()
-			defer SetSudoChecker(originalChecker)
-
 			// Set environment variable to force sudo checking in tests
 			t.Setenv("F2B_TEST_SUDO", "true")
 
-			// Set mock checker
-			mock := NewMockSudoCheckerWithPrivileges(tt.hasPrivileges)
-			SetSudoChecker(mock)
+			// Set up mock environment with specific privileges
+			_, cleanup := SetupMockEnvironmentWithSudo(t, tt.hasPrivileges)
+			defer cleanup()
 
-			// Set up mock runner for successful operations
-			mockRunner := NewMockRunner()
+			// Get the mock runner and configure additional responses
+			mockRunner := GetRunner().(*MockRunner)
 			if tt.hasPrivileges {
 				// Set up responses for successful client creation
 				mockRunner.SetResponse("fail2ban-client -V", []byte("0.11.2"))
@@ -79,7 +75,6 @@ func TestSudoIntegrationWithClient(t *testing.T) {
 				mockRunner.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
 				mockRunner.SetResponse("fail2ban-client banned 192.168.1.100", []byte(`[]`))
 			}
-			SetRunner(mockRunner)
 
 			// Test client creation
 			client, err := NewClient(DefaultLogDir, DefaultFilterDir)
@@ -196,11 +191,11 @@ func TestSudoCommandSelection(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original checker
-			originalChecker := GetSudoChecker()
-			defer SetSudoChecker(originalChecker)
+			// Set up mock environment with specific privileges
+			_, cleanup := SetupMockEnvironmentWithSudo(t, tt.hasPrivileges)
+			defer cleanup()
 
-			// Set mock checker
+			// Set custom mock checker for this specific test
 			mock := &MockSudoChecker{
 				MockIsRoot:        tt.isRoot,
 				MockInSudoGroup:   tt.hasPrivileges && !tt.isRoot,
@@ -209,10 +204,9 @@ func TestSudoCommandSelection(t *testing.T) {
 			}
 			SetSudoChecker(mock)
 
-			// Set up mock runner that tracks what command was called
-			mockRunner := NewMockRunner()
+			// Get the mock runner and configure responses
+			mockRunner := GetRunner().(*MockRunner)
 			mockRunner.SetResponse(tt.expectedCommand, []byte("success"))
-			SetRunner(mockRunner)
 
 			// Test command selection logic using mock runner directly
 			_, err := mockRunner.CombinedOutputWithSudo(tt.command, tt.args...)
@@ -262,13 +256,9 @@ func TestSudoErrorPropagation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original checker
-			originalChecker := GetSudoChecker()
-			defer SetSudoChecker(originalChecker)
-
-			// Set mock checker
-			mock := NewMockSudoCheckerWithPrivileges(tt.hasPrivileges)
-			SetSudoChecker(mock)
+			// Set up mock environment with specific privileges
+			_, cleanup := SetupMockEnvironmentWithSudo(t, tt.hasPrivileges)
+			defer cleanup()
 
 			// Test CheckSudoRequirements directly
 			err := CheckSudoRequirements()
@@ -291,11 +281,11 @@ func TestSudoErrorPropagation(t *testing.T) {
 
 // TestSudoWithDifferentCommands tests sudo behavior with various command types
 func TestSudoWithDifferentCommands(t *testing.T) {
-	// Save original checker
-	originalChecker := GetSudoChecker()
-	defer SetSudoChecker(originalChecker)
+	// Set up mock environment with sudo privileges (not root)
+	_, cleanup := SetupMockEnvironmentWithSudo(t, true)
+	defer cleanup()
 
-	// Set up privileged user
+	// Set custom mock checker for this test (not root, but has sudo)
 	mock := NewMockSudoChecker(false, true, true) // not root, but in sudo group and can sudo
 	SetSudoChecker(mock)
 
@@ -358,11 +348,14 @@ func TestSudoWithDifferentCommands(t *testing.T) {
 				t.Errorf("RequiresSudo(%s, %v) = %v, want %v", tt.command, tt.args, requiresSudo, tt.expectsSudo)
 			}
 
-			// Test with mock runner to verify command construction
-			mockRunner := NewMockRunner()
+			// Reset to clean mock environment for this test iteration
+			_, cleanup := SetupMockEnvironment(t)
+			defer cleanup()
+
+			// Configure the mock runner with expected response
+			mockRunner := GetRunner().(*MockRunner)
 			expectedCall := tt.expectedPrefix + " " + strings.Join(tt.args, " ")
 			mockRunner.SetResponse(expectedCall, []byte("mock response"))
-			SetRunner(mockRunner)
 
 			// Execute command using mock runner directly to avoid OSRunner
 			_, err := mockRunner.CombinedOutputWithSudo(tt.command, tt.args...)
@@ -426,16 +419,12 @@ func TestSudoPrivilegeEscalation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original checker
-			originalChecker := GetSudoChecker()
-			defer SetSudoChecker(originalChecker)
+			// Set up mock environment with specific privileges
+			_, cleanup := SetupMockEnvironmentWithSudo(t, tt.initialPrivs)
+			defer cleanup()
 
-			// Set mock checker
-			mock := NewMockSudoCheckerWithPrivileges(tt.initialPrivs)
-			SetSudoChecker(mock)
-
-			// Set up mock runner
-			mockRunner := NewMockRunner()
+			// Get the mock runner and configure responses
+			mockRunner := GetRunner().(*MockRunner)
 
 			// Set up responses for both sudo and non-sudo versions
 			nonSudoCmd := tt.targetCommand + " " + strings.Join(tt.targetArgs, " ")
@@ -443,7 +432,6 @@ func TestSudoPrivilegeEscalation(t *testing.T) {
 
 			mockRunner.SetResponse(nonSudoCmd, []byte("non-sudo response"))
 			mockRunner.SetResponse(sudoCmd, []byte("sudo response"))
-			SetRunner(mockRunner)
 
 			// Execute command using mock runner directly
 			_, err := mockRunner.CombinedOutputWithSudo(tt.targetCommand, tt.targetArgs...)

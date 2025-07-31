@@ -85,7 +85,7 @@ func (brp *BanRecordParser) ParseBanRecordLine(line, jail string) (*BanRecord, e
 				"unbanStr": unbanStr,
 			}).Warnf("Failed to parse unban time: %v", err)
 			// Use current time as fallback for unban time calculation
-			tUnban = time.Now().Add(24 * time.Hour) // Assume 24h remaining
+			tUnban = time.Now().Add(DefaultBanDuration) // Assume 24h remaining
 		}
 
 		rem := tUnban.Unix() - time.Now().Unix()

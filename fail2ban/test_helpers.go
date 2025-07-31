@@ -197,7 +197,11 @@ func createTestGzipFile(t TestingInterface, path string, content []byte) {
 	if err != nil {
 		t.Fatalf("Failed to create gzip file: %v", err)
 	}
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			t.Fatalf("Failed to close file: %v", err)
+		}
+	}()
 
 	gz := gzip.NewWriter(f)
 

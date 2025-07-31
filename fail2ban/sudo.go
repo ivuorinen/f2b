@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"sync"
 	"time"
 )
 
@@ -38,15 +39,22 @@ type MockSudoChecker struct {
 	ExplicitPrivilegesSet bool // Track if MockHasPrivileges was explicitly set
 }
 
-var sudoChecker SudoChecker = &RealSudoChecker{}
+var (
+	sudoChecker   SudoChecker  = &RealSudoChecker{}
+	sudoCheckerMu sync.RWMutex // protects sudoChecker from concurrent access
+)
 
 // SetSudoChecker allows injecting a mock sudo checker for testing
 func SetSudoChecker(checker SudoChecker) {
+	sudoCheckerMu.Lock()
+	defer sudoCheckerMu.Unlock()
 	sudoChecker = checker
 }
 
 // GetSudoChecker returns the current sudo checker
 func GetSudoChecker() SudoChecker {
+	sudoCheckerMu.RLock()
+	defer sudoCheckerMu.RUnlock()
 	return sudoChecker
 }
 

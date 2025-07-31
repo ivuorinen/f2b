@@ -311,19 +311,13 @@ func TestSecurityAudit_ErrorMessages(t *testing.T) {
 
 // TestSecurityAudit_PrivilegeEscalation tests for privilege escalation vulnerabilities
 func TestSecurityAudit_PrivilegeEscalation(t *testing.T) {
-	// Setup test environment
-	originalChecker := fail2ban.GetSudoChecker()
-	defer fail2ban.SetSudoChecker(originalChecker)
-
 	t.Run("SudoValidation", func(t *testing.T) {
 		// Test with unprivileged user
-		fail2ban.SetSudoChecker(fail2ban.NewMockSudoCheckerWithPrivileges(false))
+		_, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, false)
+		defer cleanup()
 
-		// Commands that require sudo should be blocked
-		mockRunner := fail2ban.NewMockRunner()
-		originalRunner := fail2ban.GetRunner()
-		fail2ban.SetRunner(mockRunner)
-		defer fail2ban.SetRunner(originalRunner)
+		// Get the mock runner set up by the environment
+		mockRunner := fail2ban.GetRunner().(*fail2ban.MockRunner)
 
 		// Test that sudo-requiring operations are properly gated
 		testCases := []string{
@@ -342,7 +336,8 @@ func TestSecurityAudit_PrivilegeEscalation(t *testing.T) {
 
 	t.Run("RootPrivilegeDetection", func(t *testing.T) {
 		// Test with root privileges
-		fail2ban.SetSudoChecker(fail2ban.NewMockSudoCheckerWithPrivileges(true))
+		_, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, true)
+		defer cleanup()
 		checker := fail2ban.GetSudoChecker()
 
 		if !checker.HasSudoPrivileges() {

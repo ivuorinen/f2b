@@ -21,7 +21,12 @@ func StatusCmd(client fail2ban.Client, config *Config) *cobra.Command {
 			defer cancel()
 
 			if len(args) == 0 {
-				jails, _ := client.ListJailsWithContext(ctx)
+				jails, err := client.ListJailsWithContext(ctx)
+				if err != nil {
+					// Log error but continue with empty jail list for help display
+					Logger.WithError(err).Warn("Failed to fetch jails for help display")
+					jails = []string{}
+				}
 				PrintOutputTo(
 					GetCmdOutput(cmd),
 					"Usage: "+cmd.Root().Use+" status all   (show all jails)",
@@ -48,7 +53,10 @@ func StatusCmd(client fail2ban.Client, config *Config) *cobra.Command {
 			}
 
 			// Check if jail exists (with timeout context)
-			jails, _ := client.ListJailsWithContext(ctx)
+			jails, err := client.ListJailsWithContext(ctx)
+			if err != nil {
+				return HandleClientError(err)
+			}
 			jailExists := false
 			for _, j := range jails {
 				if j == target {

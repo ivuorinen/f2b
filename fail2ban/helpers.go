@@ -1,13 +1,55 @@
 package fail2ban
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
 	"strings"
+	"sync"
+	"time"
 	"unicode"
 
 	"github.com/hashicorp/go-version"
+	"github.com/sirupsen/logrus"
+)
+
+// Validation constants
+const (
+	// MaxIPAddressLength is the maximum length for an IP address string (IPv6 with brackets and port)
+	MaxIPAddressLength = 45
+	// MaxJailNameLength is the maximum length for a jail name
+	MaxJailNameLength = 64
+	// MaxFilterNameLength is the maximum length for a filter name
+	MaxFilterNameLength = 255
+	// MaxArgumentLength is the maximum length for a command argument
+	MaxArgumentLength = 1024
+)
+
+// Time constants for duration calculations
+const (
+	// SecondsPerMinute is the number of seconds in a minute
+	SecondsPerMinute = 60
+	// SecondsPerHour is the number of seconds in an hour
+	SecondsPerHour = 3600
+	// SecondsPerDay is the number of seconds in a day
+	SecondsPerDay = 86400
+	// DefaultBanDuration is the default fallback duration for bans when parsing fails
+	DefaultBanDuration = 24 * time.Hour
+)
+
+// Context key types for structured logging
+type contextKey string
+
+const (
+	// ContextKeyRequestID is the context key for request IDs
+	ContextKeyRequestID contextKey = "request_id"
+	// ContextKeyOperation is the context key for operation names
+	ContextKeyOperation contextKey = "operation"
+	// ContextKeyJail is the context key for jail names
+	ContextKeyJail contextKey = "jail"
+	// ContextKeyIP is the context key for IP addresses
+	ContextKeyIP contextKey = "ip"
 )
 
 // Validation helpers
@@ -21,7 +63,7 @@ func ValidateIP(ip string) error {
 	parsed := net.ParseIP(ip)
 	if parsed == nil {
 		// Don't include potentially malicious input in error message
-		if containsCommandInjectionPatterns(ip) || len(ip) > 45 {
+		if containsCommandInjectionPatterns(ip) || len(ip) > MaxIPAddressLength {
 			return fmt.Errorf("invalid IP address format")
 		}
 		return NewInvalidIPError(ip)
@@ -35,7 +77,7 @@ func ValidateJail(jail string) error {
 		return ErrJailRequiredError
 	}
 	// Jail names should be reasonable length
-	if len(jail) > 64 {
+	if len(jail) > MaxJailNameLength {
 		// Don't include potentially malicious input in error message
 		if containsCommandInjectionPatterns(jail) {
 			return fmt.Errorf("invalid jail name format")
@@ -73,7 +115,7 @@ func ValidateFilter(filter string) error {
 	}
 
 	// Check length limits to prevent buffer overflow attacks
-	if len(filter) > 255 {
+	if len(filter) > MaxFilterNameLength {
 		return NewInvalidFilterError(filter + " (too long)")
 	}
 
@@ -196,10 +238,10 @@ func CompareVersions(v1, v2 string) int {
 
 // FormatDuration formats seconds into a human-readable duration string
 func FormatDuration(sec int64) string {
-	days := sec / 86400
-	h := (sec % 86400) / 3600
-	m := (sec % 3600) / 60
-	s := sec % 60
+	days := sec / SecondsPerDay
+	h := (sec % SecondsPerDay) / SecondsPerHour
+	m := (sec % SecondsPerHour) / SecondsPerMinute
+	s := sec % SecondsPerMinute
 	return fmt.Sprintf("%02d:%02d:%02d:%02d", days, h, m, s)
 }
 
@@ -308,7 +350,7 @@ func validateSingleArgument(arg string, _ int) error {
 	}
 
 	// Check length to prevent buffer overflow
-	if len(arg) > 1024 {
+	if len(arg) > MaxArgumentLength {
 		return NewInvalidArgumentError(fmt.Sprintf("%s (too long: %d chars)", arg, len(arg)))
 	}
 
@@ -374,4 +416,245 @@ func isValidFilterChar(r rune) bool {
 		r == '@' || // Allow @ for email-like patterns
 		r == '+' || // Allow + for variations
 		r == '~' // Allow ~ for common naming
+}
+
+// Context helpers for structured logging
+
+// WithRequestID adds a request ID to the context
+func WithRequestID(ctx context.Context, requestID string) context.Context {
+	return context.WithValue(ctx, ContextKeyRequestID, requestID)
+}
+
+// WithOperation adds an operation name to the context
+func WithOperation(ctx context.Context, operation string) context.Context {
+	return context.WithValue(ctx, ContextKeyOperation, operation)
+}
+
+// WithJail adds a jail name to the context
+func WithJail(ctx context.Context, jail string) context.Context {
+	return context.WithValue(ctx, ContextKeyJail, jail)
+}
+
+// WithIP adds an IP address to the context
+func WithIP(ctx context.Context, ip string) context.Context {
+	return context.WithValue(ctx, ContextKeyIP, ip)
+}
+
+// LoggerFromContext creates a logrus Entry with fields from context
+func LoggerFromContext(ctx context.Context) *logrus.Entry {
+	fields := logrus.Fields{}
+
+	if requestID, ok := ctx.Value(ContextKeyRequestID).(string); ok && requestID != "" {
+		fields["request_id"] = requestID
+	}
+
+	if operation, ok := ctx.Value(ContextKeyOperation).(string); ok && operation != "" {
+		fields["operation"] = operation
+	}
+
+	if jail, ok := ctx.Value(ContextKeyJail).(string); ok && jail != "" {
+		fields["jail"] = jail
+	}
+
+	if ip, ok := ctx.Value(ContextKeyIP).(string); ok && ip != "" {
+		fields["ip"] = ip
+	}
+
+	return logrus.WithFields(fields)
+}
+
+// GenerateRequestID generates a simple request ID for tracing
+func GenerateRequestID() string {
+	return fmt.Sprintf("req_%d", time.Now().UnixNano())
+}
+
+// Timing infrastructure for performance monitoring
+
+// TimedOperation represents a timed operation with metadata
+type TimedOperation struct {
+	Name      string
+	Command   string
+	Args      []string
+	StartTime time.Time
+}
+
+// NewTimedOperation creates a new timed operation and starts timing
+func NewTimedOperation(name, command string, args ...string) *TimedOperation {
+	return &TimedOperation{
+		Name:      name,
+		Command:   command,
+		Args:      args,
+		StartTime: time.Now(),
+	}
+}
+
+// Finish completes the timed operation and logs the duration with context
+func (t *TimedOperation) Finish(err error) {
+	duration := time.Since(t.StartTime)
+
+	fields := logrus.Fields{
+		"operation": t.Name,
+		"command":   t.Command,
+		"duration":  duration,
+		"args":      strings.Join(t.Args, " "),
+	}
+
+	if err != nil {
+		logrus.WithFields(fields).WithField("error", err.Error()).Warnf("Operation failed after %v", duration)
+	} else {
+		if duration > time.Second {
+			// Log slow operations as warnings for visibility
+			logrus.WithFields(fields).Warnf("Slow operation completed in %v", duration)
+		} else {
+			// Log fast operations at debug level to reduce noise
+			logrus.WithFields(fields).Debugf("Operation completed in %v", duration)
+		}
+	}
+}
+
+// FinishWithContext completes the timed operation and logs the duration with context
+func (t *TimedOperation) FinishWithContext(ctx context.Context, err error) {
+	duration := time.Since(t.StartTime)
+
+	// Get logger with context fields
+	logger := LoggerFromContext(ctx)
+
+	// Add timing-specific fields
+	fields := logrus.Fields{
+		"operation": t.Name,
+		"command":   t.Command,
+		"duration":  duration,
+		"args":      strings.Join(t.Args, " "),
+	}
+	logger = logger.WithFields(fields)
+
+	if err != nil {
+		logger.WithField("error", err.Error()).Warnf("Operation failed after %v", duration)
+	} else {
+		if duration > time.Second {
+			// Log slow operations as warnings for visibility
+			logger.Warnf("Slow operation completed in %v", duration)
+		} else {
+			// Log fast operations at debug level to reduce noise
+			logger.Debugf("Operation completed in %v", duration)
+		}
+	}
+}
+
+// Validation caching for performance optimization
+
+// ValidationCache provides thread-safe caching for validation results
+type ValidationCache struct {
+	mu    sync.RWMutex
+	cache map[string]error
+}
+
+// NewValidationCache creates a new validation cache
+func NewValidationCache() *ValidationCache {
+	return &ValidationCache{
+		cache: make(map[string]error),
+	}
+}
+
+// Get retrieves a cached validation result
+func (vc *ValidationCache) Get(key string) (bool, error) {
+	vc.mu.RLock()
+	defer vc.mu.RUnlock()
+	result, exists := vc.cache[key]
+	return exists, result
+}
+
+// Set stores a validation result in the cache
+func (vc *ValidationCache) Set(key string, err error) {
+	vc.mu.Lock()
+	defer vc.mu.Unlock()
+	vc.cache[key] = err
+}
+
+// Clear removes all cached entries
+func (vc *ValidationCache) Clear() {
+	vc.mu.Lock()
+	defer vc.mu.Unlock()
+	vc.cache = make(map[string]error)
+}
+
+// Size returns the number of cached entries
+func (vc *ValidationCache) Size() int {
+	vc.mu.RLock()
+	defer vc.mu.RUnlock()
+	return len(vc.cache)
+}
+
+// Global validation caches for frequently used validators
+var (
+	ipValidationCache      = NewValidationCache()
+	jailValidationCache    = NewValidationCache()
+	filterValidationCache  = NewValidationCache()
+	commandValidationCache = NewValidationCache()
+)
+
+// CachedValidateIP validates an IP address with caching
+func CachedValidateIP(ip string) error {
+	cacheKey := "ip:" + ip
+	if exists, result := ipValidationCache.Get(cacheKey); exists {
+		return result
+	}
+
+	err := ValidateIP(ip)
+	ipValidationCache.Set(cacheKey, err)
+	return err
+}
+
+// CachedValidateJail validates a jail name with caching
+func CachedValidateJail(jail string) error {
+	cacheKey := "jail:" + jail
+	if exists, result := jailValidationCache.Get(cacheKey); exists {
+		return result
+	}
+
+	err := ValidateJail(jail)
+	jailValidationCache.Set(cacheKey, err)
+	return err
+}
+
+// CachedValidateFilter validates a filter name with caching
+func CachedValidateFilter(filter string) error {
+	cacheKey := "filter:" + filter
+	if exists, result := filterValidationCache.Get(cacheKey); exists {
+		return result
+	}
+
+	err := ValidateFilter(filter)
+	filterValidationCache.Set(cacheKey, err)
+	return err
+}
+
+// CachedValidateCommand validates a command with caching
+func CachedValidateCommand(command string) error {
+	cacheKey := "command:" + command
+	if exists, result := commandValidationCache.Get(cacheKey); exists {
+		return result
+	}
+
+	err := ValidateCommand(command)
+	commandValidationCache.Set(cacheKey, err)
+	return err
+}
+
+// ClearValidationCaches clears all validation caches
+func ClearValidationCaches() {
+	ipValidationCache.Clear()
+	jailValidationCache.Clear()
+	filterValidationCache.Clear()
+	commandValidationCache.Clear()
+}
+
+// GetValidationCacheStats returns cache statistics
+func GetValidationCacheStats() map[string]int {
+	return map[string]int{
+		"ip_cache_size":      ipValidationCache.Size(),
+		"jail_cache_size":    jailValidationCache.Size(),
+		"filter_cache_size":  filterValidationCache.Size(),
+		"command_cache_size": commandValidationCache.Size(),
+	}
 }

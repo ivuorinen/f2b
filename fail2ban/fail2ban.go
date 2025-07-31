@@ -191,37 +191,61 @@ func GetRunner() Runner {
 // RunnerCombinedOutput invokes the runner for a command.
 // RunnerCombinedOutput executes a command using the global runner and returns combined stdout/stderr output.
 func RunnerCombinedOutput(name string, args ...string) ([]byte, error) {
+	timer := NewTimedOperation("RunnerCombinedOutput", name, args...)
+
 	globalRunnerManager.mu.RLock()
 	runner := globalRunnerManager.runner
 	globalRunnerManager.mu.RUnlock()
-	return runner.CombinedOutput(name, args...)
+
+	output, err := runner.CombinedOutput(name, args...)
+	timer.Finish(err)
+
+	return output, err
 }
 
 // RunnerCombinedOutputWithSudo invokes the runner for a command with sudo if needed.
 // RunnerCombinedOutputWithSudo executes a command with sudo privileges using the global runner.
 func RunnerCombinedOutputWithSudo(name string, args ...string) ([]byte, error) {
+	timer := NewTimedOperation("RunnerCombinedOutputWithSudo", name, args...)
+
 	globalRunnerManager.mu.RLock()
 	runner := globalRunnerManager.runner
 	globalRunnerManager.mu.RUnlock()
-	return runner.CombinedOutputWithSudo(name, args...)
+
+	output, err := runner.CombinedOutputWithSudo(name, args...)
+	timer.Finish(err)
+
+	return output, err
 }
 
 // RunnerCombinedOutputWithContext invokes the runner for a command with context support.
 // RunnerCombinedOutputWithContext executes a command with context using the global runner.
 func RunnerCombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error) {
+	timer := NewTimedOperation("RunnerCombinedOutputWithContext", name, args...)
+
 	globalRunnerManager.mu.RLock()
 	runner := globalRunnerManager.runner
 	globalRunnerManager.mu.RUnlock()
-	return runner.CombinedOutputWithContext(ctx, name, args...)
+
+	output, err := runner.CombinedOutputWithContext(ctx, name, args...)
+	timer.FinishWithContext(ctx, err)
+
+	return output, err
 }
 
 // RunnerCombinedOutputWithSudoContext invokes the runner for a command with sudo and context support.
 // RunnerCombinedOutputWithSudoContext executes a command with sudo privileges and context using the global runner.
 func RunnerCombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error) {
+	timer := NewTimedOperation("RunnerCombinedOutputWithSudoContext", name, args...)
+
 	globalRunnerManager.mu.RLock()
 	runner := globalRunnerManager.runner
 	globalRunnerManager.mu.RUnlock()
-	return runner.CombinedOutputWithSudoContext(ctx, name, args...)
+
+	output, err := runner.CombinedOutputWithSudoContext(ctx, name, args...)
+	timer.FinishWithContext(ctx, err)
+
+	return output, err
 }
 
 // Client defines Fail2Ban operations
@@ -784,33 +808,33 @@ func (c *RealClient) ListFiltersWithContext(ctx context.Context) ([]string, erro
 	return wrapWithContext0(c.ListFilters)(ctx)
 }
 
-// validateFilterPath validates filter name and returns secure path, log path and patterns
-func (c *RealClient) validateFilterPath(filter string) (string, string, []string, error) {
+// validateFilterPath validates filter name and returns secure path and log path
+func (c *RealClient) validateFilterPath(filter string) (string, string, error) {
 	if err := ValidateFilter(filter); err != nil {
-		return "", "", nil, err
+		return "", "", err
 	}
 	path := filepath.Join(c.FilterDir, filter+".conf")
 
 	// Additional security check: ensure path doesn't escape filter directory
 	cleanPath, err := filepath.Abs(filepath.Clean(path))
 	if err != nil {
-		return "", "", nil, fmt.Errorf("invalid filter path: %w", err)
+		return "", "", fmt.Errorf("invalid filter path: %w", err)
 	}
 
 	cleanFilterDir, err := filepath.Abs(filepath.Clean(c.FilterDir))
 	if err != nil {
-		return "", "", nil, fmt.Errorf("invalid filter directory: %w", err)
+		return "", "", fmt.Errorf("invalid filter directory: %w", err)
 	}
 
 	// Ensure the resolved path is within the filter directory
 	if !strings.HasPrefix(cleanPath, cleanFilterDir+string(filepath.Separator)) {
-		return "", "", nil, fmt.Errorf("filter path outside allowed directory")
+		return "", "", fmt.Errorf("filter path outside allowed directory")
 	}
 
 	// #nosec G304 - Path is validated, sanitized, and restricted to filter directory above
 	data, err := os.ReadFile(cleanPath)
 	if err != nil {
-		return "", "", nil, fmt.Errorf("filter not found: %w", err)
+		return "", "", fmt.Errorf("filter not found: %w", err)
 	}
 	content := string(data)
 
@@ -827,15 +851,15 @@ func (c *RealClient) validateFilterPath(filter string) (string, string, []string
 		}
 	}
 	if logPath == "" || len(patterns) == 0 {
-		return "", "", nil, errors.New("invalid filter file")
+		return "", "", errors.New("invalid filter file")
 	}
 
-	return cleanPath, logPath, patterns, nil
+	return cleanPath, logPath, nil
 }
 
 // TestFilterWithContext tests a fail2ban filter against its configured log files with context support.
 func (c *RealClient) TestFilterWithContext(ctx context.Context, filter string) (string, error) {
-	cleanPath, logPath, _, err := c.validateFilterPath(filter)
+	cleanPath, logPath, err := c.validateFilterPath(filter)
 	if err != nil {
 		return "", err
 	}
@@ -850,7 +874,7 @@ func (c *RealClient) TestFilterWithContext(ctx context.Context, filter string) (
 
 // TestFilter tests a fail2ban filter against its configured log files and returns the test output.
 func (c *RealClient) TestFilter(filter string) (string, error) {
-	cleanPath, logPath, _, err := c.validateFilterPath(filter)
+	cleanPath, logPath, err := c.validateFilterPath(filter)
 	if err != nil {
 		return "", err
 	}

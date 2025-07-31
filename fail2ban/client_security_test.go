@@ -9,13 +9,12 @@ func TestNewClientPathTraversalProtection(t *testing.T) {
 	// Enable test mode
 	t.Setenv("F2B_TEST_SUDO", "true")
 
-	// Mock sudo privileges
-	mockChecker := NewMockSudoCheckerWithPrivileges(true)
-	SetSudoChecker(mockChecker)
+	// Set up mock environment
+	_, cleanup := SetupMockEnvironment(t)
+	defer cleanup()
 
-	// Mock runner for version check
-	mock := NewMockRunner()
-	SetRunner(mock)
+	// Get the mock runner and configure additional responses
+	mock := GetRunner().(*MockRunner)
 	mock.SetResponse("fail2ban-client -V", []byte("Fail2Ban v0.11.2"))
 	mock.SetResponse("sudo fail2ban-client -V", []byte("Fail2Ban v0.11.2"))
 	mock.SetResponse("fail2ban-client ping", []byte("pong"))
@@ -116,13 +115,12 @@ func TestNewClientDefaultPathValidation(t *testing.T) {
 	// Enable test mode
 	t.Setenv("F2B_TEST_SUDO", "true")
 
-	// Mock sudo privileges
-	mockChecker := NewMockSudoCheckerWithPrivileges(true)
-	SetSudoChecker(mockChecker)
+	// Set up mock environment
+	_, cleanup := SetupMockEnvironment(t)
+	defer cleanup()
 
-	// Mock runner for version check
-	mock := NewMockRunner()
-	SetRunner(mock)
+	// Get the mock runner and configure additional responses
+	mock := GetRunner().(*MockRunner)
 	mock.SetResponse("fail2ban-client -V", []byte("Fail2Ban v0.11.2"))
 	mock.SetResponse("sudo fail2ban-client -V", []byte("Fail2Ban v0.11.2"))
 	mock.SetResponse("fail2ban-client ping", []byte("pong"))

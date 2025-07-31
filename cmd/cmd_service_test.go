@@ -49,12 +49,12 @@ func TestServiceCmd(t *testing.T) {
 		{
 			name:      "no action provided",
 			args:      []string{},
-			wantError: false, // The command will show error but returns nil error (PrintError is called)
+			wantError: true, // Command should return error for missing action
 		},
 		{
 			name:      "invalid action",
 			args:      []string{"invalid"},
-			wantError: false, // PrintError is called but returns nil error
+			wantError: true, // Command should return error for invalid action
 		},
 	}
 
@@ -186,7 +186,7 @@ func TestServiceCmdSecurityValidation(t *testing.T) {
 				WithServiceSetup(func(_ *fail2ban.MockRunner) {
 					// No responses needed - command should be rejected before execution
 				}).
-				ExpectSuccess(). // Command returns nil but prints error
+				ExpectError(). // Command should return error for malicious actions
 				Run()
 
 			// Verify error message is present in output
@@ -230,7 +230,7 @@ func TestServiceCmdValidActionsOnly(t *testing.T) {
 				WithServiceSetup(func(_ *fail2ban.MockRunner) {
 					// No responses needed for invalid actions
 				}).
-				ExpectSuccess(). // Command returns nil but prints error
+				ExpectError(). // Command should return error for invalid actions
 				Run()
 
 			// Verify error message is present
@@ -244,17 +244,12 @@ func TestServiceCmdValidActionsOnly(t *testing.T) {
 // BenchmarkServiceCmd benchmarks the service command execution
 func BenchmarkServiceCmd(b *testing.B) {
 	// Set up mock environment once
-	originalChecker := fail2ban.GetSudoChecker()
-	defer fail2ban.SetSudoChecker(originalChecker)
-	mockChecker := fail2ban.NewMockSudoCheckerWithPrivileges(true)
-	fail2ban.SetSudoChecker(mockChecker)
+	_, cleanup := fail2ban.SetupMockEnvironment(b)
+	defer cleanup()
 
-	mock := &fail2ban.MockRunner{
-		Responses: make(map[string][]byte),
-		Errors:    make(map[string]error),
-	}
+	// Get the mock runner and configure it
+	mock := fail2ban.GetRunner().(*fail2ban.MockRunner)
 	mock.SetResponse("sudo service fail2ban status", []byte("fail2ban is running"))
-	fail2ban.SetRunner(mock)
 
 	// Framework could be used here but benchmark needs manual approach for performance:
 	config := &Config{Format: "plain"}

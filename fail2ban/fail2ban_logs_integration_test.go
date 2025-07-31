@@ -20,98 +20,112 @@ func TestIntegrationFullLogProcessing(t *testing.T) {
 	cleanup := setupTestLogEnvironment(t, testLogFile)
 	defer cleanup()
 
-	// Test 1: Process entire log file
-	t.Run("process_full_log", func(t *testing.T) {
-		start := time.Now()
-		lines, err := GetLogLines("", "")
-		duration := time.Since(start)
+	t.Run("process_full_log", testProcessFullLog)
+	t.Run("extract_ban_events", testExtractBanEvents)
+	t.Run("track_persistent_attacker", testTrackPersistentAttacker)
+}
 
-		if err != nil {
-			t.Fatalf("Failed to process full log: %v", err)
+// testProcessFullLog tests processing of the entire log file
+func testProcessFullLog(t *testing.T) {
+	start := time.Now()
+	lines, err := GetLogLines("", "")
+	duration := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("Failed to process full log: %v", err)
+	}
+
+	// Should process 481 lines
+	if len(lines) < 480 {
+		t.Errorf("Expected ~481 lines, got %d", len(lines))
+	}
+
+	// Performance check - should be fast
+	if duration > 100*time.Millisecond {
+		t.Logf("Warning: Processing took %v, might need optimization", duration)
+	}
+
+	t.Logf("Processed %d lines in %v", len(lines), duration)
+}
+
+// testExtractBanEvents tests extraction of ban/unban events
+func testExtractBanEvents(t *testing.T) {
+	lines, err := GetLogLines("sshd", "")
+	if err != nil {
+		t.Fatalf("Failed to get log lines: %v", err)
+	}
+
+	banCount, unbanCount, foundCount := countEventTypes(lines)
+
+	t.Logf("Statistics: %d found events, %d bans, %d unbans", foundCount, banCount, unbanCount)
+
+	// Verify we found real events
+	if banCount == 0 {
+		t.Error("No ban events found in full log")
+	}
+	if unbanCount == 0 {
+		t.Error("No unban events found in full log")
+	}
+	if foundCount == 0 {
+		t.Error("No found events in full log")
+	}
+}
+
+// testTrackPersistentAttacker tests tracking a specific attacker across the log
+func testTrackPersistentAttacker(t *testing.T) {
+	// Track 192.168.1.100 (most frequent attacker)
+	lines, err := GetLogLines("", "192.168.1.100")
+	if err != nil {
+		t.Fatalf("Failed to filter by IP: %v", err)
+	}
+
+	// Should have multiple entries
+	if len(lines) < 10 {
+		t.Errorf("Expected multiple entries for persistent attacker, got %d", len(lines))
+	}
+
+	// Verify chronological order
+	if err := verifyChronologicalOrder(lines); err != nil {
+		t.Error(err)
+	}
+}
+
+// countEventTypes counts ban, unban, and found events in log lines
+func countEventTypes(lines []string) (banCount, unbanCount, foundCount int) {
+	for _, line := range lines {
+		if strings.Contains(line, "Ban ") {
+			banCount++
+		} else if strings.Contains(line, "Unban ") {
+			unbanCount++
+		} else if strings.Contains(line, "Found ") {
+			foundCount++
 		}
+	}
+	return
+}
 
-		// Should process 481 lines
-		if len(lines) < 480 {
-			t.Errorf("Expected ~481 lines, got %d", len(lines))
-		}
+// verifyChronologicalOrder verifies that log lines are in chronological order
+func verifyChronologicalOrder(lines []string) error {
+	var lastTime time.Time
+	for _, line := range lines {
+		// Parse timestamp from line
+		parts := strings.Fields(line)
+		if len(parts) >= 2 {
+			dateStr := parts[0]
+			timeStr := strings.TrimSuffix(parts[1], ",")
+			timeStr = strings.Replace(timeStr, ",", ".", 1)
+			fullTime := dateStr + " " + timeStr
 
-		// Performance check - should be fast
-		if duration > 100*time.Millisecond {
-			t.Logf("Warning: Processing took %v, might need optimization", duration)
-		}
-
-		t.Logf("Processed %d lines in %v", len(lines), duration)
-	})
-
-	// Test 2: Extract ban/unban events
-	t.Run("extract_ban_events", func(t *testing.T) {
-		lines, err := GetLogLines("sshd", "")
-		if err != nil {
-			t.Fatalf("Failed to get log lines: %v", err)
-		}
-
-		banCount := 0
-		unbanCount := 0
-		foundCount := 0
-
-		for _, line := range lines {
-			if strings.Contains(line, "Ban ") {
-				banCount++
-			} else if strings.Contains(line, "Unban ") {
-				unbanCount++
-			} else if strings.Contains(line, "Found ") {
-				foundCount++
-			}
-		}
-
-		t.Logf("Statistics: %d found events, %d bans, %d unbans", foundCount, banCount, unbanCount)
-
-		// Verify we found real events
-		if banCount == 0 {
-			t.Error("No ban events found in full log")
-		}
-		if unbanCount == 0 {
-			t.Error("No unban events found in full log")
-		}
-		if foundCount == 0 {
-			t.Error("No found events in full log")
-		}
-	})
-
-	// Test 3: Track specific attacker across log
-	t.Run("track_persistent_attacker", func(t *testing.T) {
-		// Track 192.168.1.100 (most frequent attacker)
-		lines, err := GetLogLines("", "192.168.1.100")
-		if err != nil {
-			t.Fatalf("Failed to filter by IP: %v", err)
-		}
-
-		// Should have multiple entries
-		if len(lines) < 10 {
-			t.Errorf("Expected multiple entries for persistent attacker, got %d", len(lines))
-		}
-
-		// Verify chronological order
-		var lastTime time.Time
-		for _, line := range lines {
-			// Parse timestamp from line
-			parts := strings.Fields(line)
-			if len(parts) >= 2 {
-				dateStr := parts[0]
-				timeStr := strings.TrimSuffix(parts[1], ",")
-				timeStr = strings.Replace(timeStr, ",", ".", 1)
-				fullTime := dateStr + " " + timeStr
-
-				parsedTime, err := time.Parse("2006-01-02 15:04:05.000", fullTime)
-				if err == nil {
-					if !lastTime.IsZero() && parsedTime.Before(lastTime) {
-						t.Error("Log entries not in chronological order")
-					}
-					lastTime = parsedTime
+			parsedTime, err := time.Parse("2006-01-02 15:04:05.000", fullTime)
+			if err == nil {
+				if !lastTime.IsZero() && parsedTime.Before(lastTime) {
+					return fmt.Errorf("log entries not in chronological order")
 				}
+				lastTime = parsedTime
 			}
 		}
-	})
+	}
+	return nil
 }
 
 func TestIntegrationConcurrentLogReading(t *testing.T) {

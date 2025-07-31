@@ -318,11 +318,11 @@ func TestCheckSudoRequirements(t *testing.T) {
 }
 
 func TestSetAndGetSudoChecker(t *testing.T) {
-	// Save original checker
-	originalChecker := GetSudoChecker()
-	defer SetSudoChecker(originalChecker)
+	// Set up mock environment
+	_, cleanup := SetupMockEnvironment(t)
+	defer cleanup()
 
-	// Create a mock checker
+	// Create a custom mock checker for this specific test
 	mock := NewMockSudoChecker(true, false, false)
 
 	// Set and verify
@@ -374,11 +374,11 @@ func TestGetCurrentUserInfo(t *testing.T) {
 }
 
 func TestGetCurrentUserInfoWithMockChecker(t *testing.T) {
-	// Save original checker
-	originalChecker := GetSudoChecker()
-	defer SetSudoChecker(originalChecker)
+	// Set up mock environment
+	_, cleanup := SetupMockEnvironment(t)
+	defer cleanup()
 
-	// Set mock checker with known values
+	// Set custom mock checker with known values for this test
 	mock := NewMockSudoChecker(true, true, true)
 	SetSudoChecker(mock)
 
@@ -446,11 +446,11 @@ func TestSudoCheckingIntegration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original checker
-			originalChecker := GetSudoChecker()
-			defer SetSudoChecker(originalChecker)
+			// Set up mock environment
+			_, cleanup := SetupMockEnvironment(t)
+			defer cleanup()
 
-			// Set mock checker
+			// Set custom mock checker for this test
 			mock := NewMockSudoChecker(tt.mockIsRoot, tt.mockInSudoGroup, tt.mockCanUseSudo)
 			SetSudoChecker(mock)
 

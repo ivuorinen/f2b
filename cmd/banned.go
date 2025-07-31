@@ -13,6 +13,9 @@ import (
 func BannedCmd(client interface {
 	GetBanRecordsWithContext(context.Context, []string) ([]fail2ban.BanRecord, error)
 }, config *Config) *cobra.Command {
+	if client == nil {
+		panic("client cannot be nil")
+	}
 	return NewCommand(
 		"banned [all|<jail>]",
 		"List banned IPs with remaining time",
