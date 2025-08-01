@@ -55,6 +55,10 @@ func executeCommand(client fail2ban.Client, args ...string) (string, error) {
 
 	rootCmd := &cobra.Command{Use: "f2b"}
 	config := Config{Format: "plain"}
+
+	// Set up persistent flags like in the real root command
+	rootCmd.PersistentFlags().StringVar(&config.Format, "format", config.Format, "Output format: plain or json")
+
 	rootCmd.AddCommand(ListJailsCmd(client, &config))
 	rootCmd.AddCommand(StatusCmd(client, &config))
 	rootCmd.AddCommand(BanCmd(client, &config))
@@ -64,6 +68,7 @@ func executeCommand(client fail2ban.Client, args ...string) (string, error) {
 	rootCmd.AddCommand(BannedCmd(client, &config))
 	rootCmd.AddCommand(VersionCmd(&config))
 	rootCmd.AddCommand(TestFilterCmd(client, &config))
+	rootCmd.AddCommand(MetricsCmd(client, &config))
 
 	var buf bytes.Buffer
 	rootCmd.SetOut(&buf)

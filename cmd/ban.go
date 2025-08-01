@@ -14,52 +14,64 @@ import (
 func BanCmd(client fail2ban.Client, config *Config) *cobra.Command {
 	return NewCommand("ban <ip> [jail]", "Ban an IP address", []string{"banip", "b"},
 		func(cmd *cobra.Command, args []string) error {
+			// Get the contextual logger
+			logger := GetContextualLogger()
+
 			// Create timeout context for the entire ban operation
 			ctx, cancel := context.WithTimeout(context.Background(), config.CommandTimeout)
 			defer cancel()
 
-			// Validate IP argument
-			ip, err := ValidateIPArgument(args)
-			if err != nil {
-				return PrintErrorAndReturn(err)
-			}
+			// Add command context
+			ctx = WithCommand(ctx, "ban")
 
-			// Get jails from arguments or client (with timeout context)
-			jails, err := GetJailsFromArgsWithContext(ctx, client, args, 1)
-			if err != nil {
-				return HandleClientError(err)
-			}
+			// Log operation with timing
+			return logger.LogOperation(ctx, "ban_command", func() error {
+				// Validate IP argument
+				ip, err := ValidateIPArgument(args)
+				if err != nil {
+					return PrintErrorAndReturn(err)
+				}
 
-			// Process ban operation with timeout context (use parallel processing for multiple jails)
-			var results []OperationResult
-			if len(jails) > 1 {
-				// Use parallel timeout for multi-jail operations
-				parallelCtx, parallelCancel := context.WithTimeout(ctx, config.ParallelTimeout)
-				defer parallelCancel()
-				results, err = ProcessBanOperationParallelWithContext(parallelCtx, client, ip, jails)
-			} else {
-				results, err = ProcessBanOperationWithContext(ctx, client, ip, jails)
-			}
-			if err != nil {
-				return HandleClientError(err)
-			}
+				// Add IP to context
+				ctx = WithIP(ctx, ip)
 
-			// Read the format flag and override config.Format if set
-			format, _ := cmd.Flags().GetString("format")
-			if format != "" {
-				config.Format = format
-			}
+				// Get jails from arguments or client (with timeout context)
+				jails, err := GetJailsFromArgsWithContext(ctx, client, args, 1)
+				if err != nil {
+					return HandleClientError(err)
+				}
 
-			// Output results
-			if config != nil && config.Format == JSONFormat {
-				PrintOutputTo(GetCmdOutput(cmd), results, JSONFormat)
-			} else {
-				for _, r := range results {
-					if _, err := fmt.Fprintf(GetCmdOutput(cmd), "%s %s in %s\n", r.Status, r.IP, r.Jail); err != nil {
-						return err
+				// Process ban operation with timeout context (use parallel processing for multiple jails)
+				var results []OperationResult
+				if len(jails) > 1 {
+					// Use parallel timeout for multi-jail operations
+					parallelCtx, parallelCancel := context.WithTimeout(ctx, config.ParallelTimeout)
+					defer parallelCancel()
+					results, err = ProcessBanOperationParallelWithContext(parallelCtx, client, ip, jails)
+				} else {
+					results, err = ProcessBanOperationWithContext(ctx, client, ip, jails)
+				}
+				if err != nil {
+					return HandleClientError(err)
+				}
+
+				// Read the format flag and override config.Format if set
+				format, _ := cmd.Flags().GetString("format")
+				if format != "" {
+					config.Format = format
+				}
+
+				// Output results
+				if config != nil && config.Format == JSONFormat {
+					PrintOutputTo(GetCmdOutput(cmd), results, JSONFormat)
+				} else {
+					for _, r := range results {
+						if _, err := fmt.Fprintf(GetCmdOutput(cmd), "%s %s in %s\n", r.Status, r.IP, r.Jail); err != nil {
+							return err
+						}
 					}
 				}
-			}
-			return nil
+				return nil
+			})
 		})
 }

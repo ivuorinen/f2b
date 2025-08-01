@@ -130,10 +130,13 @@ func WithRequestID(ctx context.Context, requestID string) context.Context {
 	return context.WithValue(ctx, RequestIDKey, requestID)
 }
 
-// LogOperation logs the start and end of an operation with timing
+// LogOperation logs the start and end of an operation with timing and metrics
 func (cl *ContextualLogger) LogOperation(ctx context.Context, operation string, fn func() error) error {
 	start := time.Now()
 	ctx = WithOperation(ctx, operation)
+
+	// Get metrics instance
+	metrics := GetGlobalMetrics()
 
 	cl.WithContext(ctx).WithField("duration", "start").Info("Operation started")
 
@@ -141,6 +144,12 @@ func (cl *ContextualLogger) LogOperation(ctx context.Context, operation string, 
 	duration := time.Since(start)
 
 	entry := cl.WithContext(ctx).WithField("duration_ms", duration.Milliseconds())
+
+	// Record metrics based on operation type
+	success := err == nil
+	if command := ctx.Value(CommandKey); command != nil {
+		metrics.RecordCommandExecution(command.(string), duration, success)
+	}
 
 	if err != nil {
 		entry.WithError(err).Error("Operation failed")
@@ -151,7 +160,7 @@ func (cl *ContextualLogger) LogOperation(ctx context.Context, operation string, 
 	return err
 }
 
-// LogBanOperation logs ban/unban operations with structured context
+// LogBanOperation logs ban/unban operations with structured context and metrics
 func (cl *ContextualLogger) LogBanOperation(
 	ctx context.Context,
 	operation, ip, jail string,
@@ -161,6 +170,10 @@ func (cl *ContextualLogger) LogBanOperation(
 	ctx = WithOperation(ctx, operation)
 	ctx = WithIP(ctx, ip)
 	ctx = WithJail(ctx, jail)
+
+	// Record metrics
+	metrics := GetGlobalMetrics()
+	metrics.RecordBanOperation(operation, duration, success)
 
 	entry := cl.WithContext(ctx).WithFields(logrus.Fields{
 		"success":     success,

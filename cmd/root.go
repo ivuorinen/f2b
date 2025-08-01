@@ -58,6 +58,7 @@ func Execute(client fail2ban.Client, config Config) error {
 	rootCmd.AddCommand(ServiceCmd(&cfg))
 	rootCmd.AddCommand(VersionCmd(&cfg))
 	rootCmd.AddCommand(TestFilterCmd(client, &cfg))
+	rootCmd.AddCommand(MetricsCmd(client, &cfg))
 	rootCmd.AddCommand(completionCmd())
 	return rootCmd.Execute()
 }

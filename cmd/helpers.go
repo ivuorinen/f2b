@@ -222,15 +222,29 @@ func ProcessBanOperationWithContext(
 	ip string,
 	jails []string,
 ) ([]OperationResult, error) {
+	logger := GetContextualLogger()
 	results := make([]OperationResult, 0, len(jails))
 
 	for _, jail := range jails {
-		code, err := client.BanIPWithContext(ctx, ip, jail)
+		// Add jail to context for this operation
+		jailCtx := WithJail(ctx, jail)
+
+		// Time the ban operation
+		start := time.Now()
+		code, err := client.BanIPWithContext(jailCtx, ip, jail)
+		duration := time.Since(start)
+
 		if err != nil {
+			// Log the failed operation with timing
+			logger.LogBanOperation(jailCtx, "ban", ip, jail, false, duration)
 			return nil, err
 		}
 
 		status := InterpretBanStatus(code, "ban")
+
+		// Log the successful operation with timing
+		logger.LogBanOperation(jailCtx, "ban", ip, jail, true, duration)
+
 		Logger.WithFields(map[string]interface{}{
 			"ip":     ip,
 			"jail":   jail,
@@ -281,15 +295,29 @@ func ProcessUnbanOperationWithContext(
 	ip string,
 	jails []string,
 ) ([]OperationResult, error) {
+	logger := GetContextualLogger()
 	results := make([]OperationResult, 0, len(jails))
 
 	for _, jail := range jails {
-		code, err := client.UnbanIPWithContext(ctx, ip, jail)
+		// Add jail to context for this operation
+		jailCtx := WithJail(ctx, jail)
+
+		// Time the unban operation
+		start := time.Now()
+		code, err := client.UnbanIPWithContext(jailCtx, ip, jail)
+		duration := time.Since(start)
+
 		if err != nil {
+			// Log the failed operation with timing
+			logger.LogBanOperation(jailCtx, "unban", ip, jail, false, duration)
 			return nil, err
 		}
 
 		status := InterpretBanStatus(code, "unban")
+
+		// Log the successful operation with timing
+		logger.LogBanOperation(jailCtx, "unban", ip, jail, true, duration)
+
 		Logger.WithFields(map[string]interface{}{
 			"ip":     ip,
 			"jail":   jail,
