@@ -274,6 +274,20 @@ func TestFilterValidation(t *testing.T) {
 		"filter|with|pipes",       // dangerous characters
 		"filter<script>",          // HTML-like injection
 		"filter;command",          // command injection attempt
+		// Enhanced command injection patterns
+		"filter`DANGEROUS_COMMAND`",         // backtick execution
+		"filter$(DANGEROUS_PWD_COMMAND)",    // command substitution
+		"filter${HOME}",                     // variable expansion (safe)
+		"filter&& DANGEROUS_LIST_COMMAND",   // logical AND command
+		"filter|| DANGEROUS_READ_COMMAND",   // logical OR command
+		"filter>>DANGEROUS_OUTPUT_FILE",     // append redirection
+		"filter<<DANGEROUS_INPUT_FILE",      // input redirection
+		"filter\nDANGEROUS_EXEC_COMMAND",    // newline injection
+		"filter\rDANGEROUS_WGET_COMMAND",    // carriage return injection
+		"filter\tDANGEROUS_CURL_COMMAND",    // tab injection
+		"DANGEROUS_EXEC_FUNCTION(filter)",   // function call pattern
+		"DANGEROUS_SYSTEM_FUNCTION(filter)", // system call pattern
+		"DANGEROUS_EVAL_FUNCTION(filter)",   // eval pattern
 	}
 
 	for _, filter := range invalidFilters {

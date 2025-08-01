@@ -1,4 +1,5 @@
-// Package fail2ban provides functionality for managing fail2ban jails and filters.
+// Package fail2ban provides comprehensive functionality for managing fail2ban jails and filters
+// with secure command execution, input validation, caching, and performance optimization.
 package fail2ban
 
 import (
@@ -12,8 +13,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -516,7 +515,7 @@ func (c *RealClient) getBanRecordsInternal(ctx context.Context, jails []string) 
 			)
 			if err != nil {
 				// Log error but continue processing (backward compatibility)
-				logrus.WithError(err).WithField("jail", jail).
+				getLogger().WithError(err).WithField("jail", jail).
 					Warn("Failed to get ban records for jail")
 				return []BanRecord{}, nil // Return empty slice instead of error (original behavior)
 			}
@@ -525,7 +524,7 @@ func (c *RealClient) getBanRecordsInternal(ctx context.Context, jails []string) 
 			jailRecords, parseErr := ParseBanRecordsUltraOptimized(string(out), jail)
 			if parseErr != nil {
 				// Log parse errors to help with debugging
-				logrus.WithError(parseErr).WithField("jail", jail).
+				getLogger().WithError(parseErr).WithField("jail", jail).
 					Warn("Failed to parse ban records for jail")
 				return []BanRecord{}, nil // Return empty slice on parse error
 			}
@@ -591,7 +590,7 @@ func (c *RealClient) GetLogLinesWithLimit(jail, ip string, maxLines int) ([]stri
 
 		lines, err := streamLogFile(fpath, fileConfig)
 		if err != nil {
-			logrus.WithError(err).WithField("file", fpath).Error("Failed to read log file")
+			getLogger().WithError(err).WithField("file", fpath).Error("Failed to read log file")
 			continue
 		}
 
@@ -790,7 +789,7 @@ func (c *RealClient) GetLogLinesWithLimitAndContext(
 			if errors.Is(err, ctx.Err()) {
 				return nil, err // Return context error immediately
 			}
-			logrus.WithError(err).WithField("file", fpath).Error("Failed to read log file")
+			getLogger().WithError(err).WithField("file", fpath).Error("Failed to read log file")
 			continue
 		}
 

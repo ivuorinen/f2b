@@ -497,6 +497,9 @@ func TestGetLogLines(t *testing.T) {
 }
 
 func TestListFilters(t *testing.T) {
+	// Set ALLOW_DEV_PATHS for test to use temp directory
+	t.Setenv("ALLOW_DEV_PATHS", "true")
+
 	// Create a temporary test filter directory
 	tempDir := t.TempDir()
 	filterDir := filepath.Join(tempDir, "filter.d")

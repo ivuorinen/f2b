@@ -182,7 +182,7 @@ func (obp *OptimizedBanRecordParser) parseFullFormat(fields []string, record *Ba
 	// Parse ban time
 	tBan, err := obp.timeCache.ParseTimeOptimized(bannedStr)
 	if err != nil {
-		logrus.WithFields(logrus.Fields{
+		getLogger().WithFields(logrus.Fields{
 			"jail":      record.Jail,
 			"ip":        record.IP,
 			"bannedStr": bannedStr,
@@ -193,7 +193,7 @@ func (obp *OptimizedBanRecordParser) parseFullFormat(fields []string, record *Ba
 	// Parse unban time with fallback
 	tUnban, err := obp.timeCache.ParseTimeOptimized(unbanStr)
 	if err != nil {
-		logrus.WithFields(logrus.Fields{
+		getLogger().WithFields(logrus.Fields{
 			"jail":     record.Jail,
 			"ip":       record.IP,
 			"unbanStr": unbanStr,

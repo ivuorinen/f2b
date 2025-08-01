@@ -92,8 +92,9 @@ func NewClient(logDir, filterDir string) (*RealClient, error) {
 	}
 
 	// Validate log directory
+	logAllowedPaths := GetLogAllowedPaths()
 	logConfig := PathSecurityConfig{
-		AllowedBasePaths: []string{"/var/log", "/tmp", "/opt", "/usr/local", "/home"},
+		AllowedBasePaths: logAllowedPaths,
 		MaxPathLength:    4096,
 		AllowSymlinks:    false,
 		ResolveSymlinks:  true,
@@ -104,8 +105,9 @@ func NewClient(logDir, filterDir string) (*RealClient, error) {
 	}
 
 	// Validate filter directory
+	filterAllowedPaths := GetFilterAllowedPaths()
 	filterConfig := PathSecurityConfig{
-		AllowedBasePaths: []string{"/etc/fail2ban", "/usr/local/etc/fail2ban", "/opt/fail2ban", "/home"},
+		AllowedBasePaths: filterAllowedPaths,
 		MaxPathLength:    4096,
 		AllowSymlinks:    false,
 		ResolveSymlinks:  true,

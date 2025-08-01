@@ -5,6 +5,81 @@ import (
 	"testing"
 )
 
+// setupMockRunnerForPrivilegedTest configures mock responses for privileged tests
+func setupMockRunnerForPrivilegedTest(mockRunner *MockRunner) {
+	// Set up responses for successful client creation
+	mockRunner.SetResponse("fail2ban-client -V", []byte("0.11.2"))
+	mockRunner.SetResponse("sudo fail2ban-client -V", []byte("0.11.2"))
+	mockRunner.SetResponse("fail2ban-client ping", []byte("pong"))
+	mockRunner.SetResponse("sudo fail2ban-client ping", []byte("pong"))
+	mockRunner.SetResponse(
+		"fail2ban-client status",
+		[]byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"),
+	)
+	mockRunner.SetResponse(
+		"sudo fail2ban-client status",
+		[]byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"),
+	)
+
+	// Set up responses for operations
+	mockRunner.SetResponse("sudo fail2ban-client set sshd banip 192.168.1.100", []byte("0"))
+	mockRunner.SetResponse("sudo fail2ban-client set sshd unbanip 192.168.1.100", []byte("0"))
+	mockRunner.SetResponse("sudo fail2ban-client banned 192.168.1.100", []byte(`["sshd"]`))
+	mockRunner.SetResponse("fail2ban-client banned 192.168.1.100", []byte(`["sshd"]`))
+}
+
+// setupMockRunnerForUnprivilegedTest configures mock responses for unprivileged tests
+func setupMockRunnerForUnprivilegedTest(mockRunner *MockRunner) {
+	// For unprivileged tests, set up basic responses for non-sudo commands
+	mockRunner.SetResponse("fail2ban-client -V", []byte("0.11.2"))
+	mockRunner.SetResponse("fail2ban-client ping", []byte("pong"))
+	mockRunner.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
+	mockRunner.SetResponse("fail2ban-client banned 192.168.1.100", []byte(`[]`))
+}
+
+// testClientOperations tests various client operations
+func testClientOperations(t *testing.T, client Client, expectOperationErr bool) {
+	t.Helper()
+	testOperations := []struct {
+		name string
+		op   func() error
+	}{
+		{
+			name: "ban IP",
+			op: func() error {
+				_, err := client.BanIP("192.168.1.100", "sshd")
+				return err
+			},
+		},
+		{
+			name: "unban IP",
+			op: func() error {
+				_, err := client.UnbanIP("192.168.1.100", "sshd")
+				return err
+			},
+		},
+		{
+			name: "check banned",
+			op: func() error {
+				_, err := client.BannedIn("192.168.1.100")
+				return err
+			},
+		},
+	}
+
+	for _, testOp := range testOperations {
+		t.Run(testOp.name, func(t *testing.T) {
+			err := testOp.op()
+			if expectOperationErr && err == nil {
+				t.Errorf("expected operation %s to fail", testOp.name)
+			}
+			if !expectOperationErr && err != nil {
+				t.Errorf("unexpected error in operation %s: %v", testOp.name, err)
+			}
+		})
+	}
+}
+
 // TestSudoIntegrationWithClient tests the full integration of sudo checking with client operations
 func TestSudoIntegrationWithClient(t *testing.T) {
 	tests := []struct {
@@ -49,31 +124,9 @@ func TestSudoIntegrationWithClient(t *testing.T) {
 			// Get the mock runner and configure additional responses
 			mockRunner := GetRunner().(*MockRunner)
 			if tt.hasPrivileges {
-				// Set up responses for successful client creation
-				mockRunner.SetResponse("fail2ban-client -V", []byte("0.11.2"))
-				mockRunner.SetResponse("sudo fail2ban-client -V", []byte("0.11.2"))
-				mockRunner.SetResponse("fail2ban-client ping", []byte("pong"))
-				mockRunner.SetResponse("sudo fail2ban-client ping", []byte("pong"))
-				mockRunner.SetResponse(
-					"fail2ban-client status",
-					[]byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"),
-				)
-				mockRunner.SetResponse(
-					"sudo fail2ban-client status",
-					[]byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"),
-				)
-
-				// Set up responses for operations
-				mockRunner.SetResponse("sudo fail2ban-client set sshd banip 192.168.1.100", []byte("0"))
-				mockRunner.SetResponse("sudo fail2ban-client set sshd unbanip 192.168.1.100", []byte("0"))
-				mockRunner.SetResponse("sudo fail2ban-client banned 192.168.1.100", []byte(`["sshd"]`))
-				mockRunner.SetResponse("fail2ban-client banned 192.168.1.100", []byte(`["sshd"]`))
+				setupMockRunnerForPrivilegedTest(mockRunner)
 			} else {
-				// For unprivileged tests, set up basic responses for non-sudo commands
-				mockRunner.SetResponse("fail2ban-client -V", []byte("0.11.2"))
-				mockRunner.SetResponse("fail2ban-client ping", []byte("pong"))
-				mockRunner.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-				mockRunner.SetResponse("fail2ban-client banned 192.168.1.100", []byte(`[]`))
+				setupMockRunnerForUnprivilegedTest(mockRunner)
 			}
 
 			// Test client creation
@@ -97,45 +150,7 @@ func TestSudoIntegrationWithClient(t *testing.T) {
 				t.Fatal("expected non-nil client")
 			}
 
-			// Test operations
-			testOperations := []struct {
-				name string
-				op   func() error
-			}{
-				{
-					name: "ban IP",
-					op: func() error {
-						_, err := client.BanIP("192.168.1.100", "sshd")
-						return err
-					},
-				},
-				{
-					name: "unban IP",
-					op: func() error {
-						_, err := client.UnbanIP("192.168.1.100", "sshd")
-						return err
-					},
-				},
-				{
-					name: "check banned",
-					op: func() error {
-						_, err := client.BannedIn("192.168.1.100")
-						return err
-					},
-				},
-			}
-
-			for _, testOp := range testOperations {
-				t.Run(testOp.name, func(t *testing.T) {
-					err := testOp.op()
-					if tt.expectOperationErr && err == nil {
-						t.Errorf("expected operation %s to fail", testOp.name)
-					}
-					if !tt.expectOperationErr && err != nil {
-						t.Errorf("unexpected error in operation %s: %v", testOp.name, err)
-					}
-				})
-			}
+			testClientOperations(t, client, tt.expectOperationErr)
 		})
 	}
 }

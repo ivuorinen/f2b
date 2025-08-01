@@ -3,9 +3,11 @@ package cmd
 import (
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -27,6 +29,44 @@ func init() {
 	Logger.SetFormatter(&logrus.TextFormatter{
 		FullTimestamp: true,
 	})
+
+	// Configure both cmd.Logger and global logrus for CI environments
+	configureCIFriendlyLogging()
+}
+
+// configureCIFriendlyLogging sets appropriate log levels for CI/test environments
+func configureCIFriendlyLogging() {
+	// Detect CI environments by checking common CI environment variables
+	ciEnvVars := []string{
+		"CI",             // Generic CI indicator
+		"GITHUB_ACTIONS", // GitHub Actions
+		"TRAVIS",         // Travis CI
+		"CIRCLECI",       // Circle CI
+		"JENKINS_URL",    // Jenkins
+		"BUILDKITE",      // Buildkite
+		"TF_BUILD",       // Azure DevOps
+		"GITLAB_CI",      // GitLab CI
+	}
+
+	isCI := false
+	for _, envVar := range ciEnvVars {
+		if os.Getenv(envVar) != "" {
+			isCI = true
+			break
+		}
+	}
+
+	// Also check if we're in test mode
+	isTest := strings.Contains(os.Args[0], ".test") ||
+		os.Getenv("GO_TEST") == "true" ||
+		flag.Lookup("test.v") != nil
+
+	// If in CI or test environment, reduce logging noise unless explicitly overridden
+	if (isCI || isTest) && os.Getenv("F2B_LOG_LEVEL") == "" && os.Getenv("F2B_VERBOSE_TESTS") == "" {
+		// Set both the cmd.Logger and global logrus to error level
+		Logger.SetLevel(logrus.ErrorLevel)
+		logrus.SetLevel(logrus.ErrorLevel)
+	}
 }
 
 // PrintOutput prints data to stdout in the specified format ("plain" or "json").

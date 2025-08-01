@@ -1,4 +1,5 @@
-// f2b main package
+// Package main provides the f2b command-line interface for managing Fail2Ban
+// jails and bans with secure sudo handling, input validation, and comprehensive testing.
 package main
 
 import (
@@ -14,6 +15,9 @@ func main() {
 	args := os.Args
 	var client fail2ban.Client
 	var err error
+
+	// Set up centralized logging - fail2ban package will use cmd.Logger
+	fail2ban.SetLogger(cmd.Logger)
 
 	// Build config from env/flags
 	config := cmd.NewConfigFromEnv()

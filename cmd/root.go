@@ -1,3 +1,6 @@
+// Package cmd implements all CLI commands for the f2b tool, providing secure
+// Fail2Ban management operations including jail monitoring, IP banning/unbanning,
+// log analysis, and service management with comprehensive input validation.
 package cmd
 
 import (

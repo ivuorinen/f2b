@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"os"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -32,11 +31,13 @@ type ContextualLogger struct {
 	defaultFields logrus.Fields
 }
 
-// NewContextualLogger creates a new contextual logger with default configuration
+// NewContextualLogger creates a new contextual logger using the centralized cmd.Logger
 func NewContextualLogger() *ContextualLogger {
-	logger := logrus.New()
-	logger.SetOutput(os.Stderr)
-	logger.SetFormatter(&logrus.JSONFormatter{
+	// Use cmd.Logger as the backend, but with JSON formatter for structured logging
+	contextLogger := logrus.New()
+	contextLogger.SetOutput(Logger.Out)
+	contextLogger.SetLevel(Logger.GetLevel())
+	contextLogger.SetFormatter(&logrus.JSONFormatter{
 		TimestampFormat: time.RFC3339Nano,
 		FieldMap: logrus.FieldMap{
 			logrus.FieldKeyTime:  "timestamp",
@@ -45,17 +46,8 @@ func NewContextualLogger() *ContextualLogger {
 		},
 	})
 
-	// Set log level from environment
-	if level := os.Getenv("F2B_LOG_LEVEL"); level != "" {
-		if parsedLevel, err := logrus.ParseLevel(level); err == nil {
-			logger.SetLevel(parsedLevel)
-		}
-	} else {
-		logger.SetLevel(logrus.InfoLevel)
-	}
-
 	return &ContextualLogger{
-		Logger: logger,
+		Logger: contextLogger,
 		defaultFields: logrus.Fields{
 			"service": "f2b",
 			"version": getVersion(),

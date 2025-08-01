@@ -7,8 +7,6 @@ import (
 	"io"
 	"os"
 	"strings"
-
-	"github.com/sirupsen/logrus"
 )
 
 // GzipDetector provides utilities for detecting and handling gzip-compressed files
@@ -40,7 +38,9 @@ func (gd *GzipDetector) hasGzipMagicBytes(path string) (bool, error) {
 	}
 	defer func() {
 		if closeErr := f.Close(); closeErr != nil {
-			logrus.WithError(closeErr).WithField("path", path).Warn("Failed to close file in gzip magic byte check")
+			getLogger().WithError(closeErr).
+				WithField("path", path).
+				Warn("Failed to close file in gzip magic byte check")
 		}
 	}()
 
@@ -65,7 +65,7 @@ func (gd *GzipDetector) OpenGzipAwareReader(path string) (io.ReadCloser, error) 
 	isGzip, err := gd.IsGzipFile(path)
 	if err != nil {
 		if closeErr := f.Close(); closeErr != nil {
-			logrus.WithError(closeErr).WithField("file", path).Warn("Failed to close file during error handling")
+			getLogger().WithError(closeErr).WithField("file", path).Warn("Failed to close file during error handling")
 		}
 		return nil, err
 	}
@@ -75,7 +75,7 @@ func (gd *GzipDetector) OpenGzipAwareReader(path string) (io.ReadCloser, error) 
 		_, err = f.Seek(0, io.SeekStart)
 		if err != nil {
 			if closeErr := f.Close(); closeErr != nil {
-				logrus.WithError(closeErr).
+				getLogger().WithError(closeErr).
 					WithField("file", path).
 					Warn("Failed to close file during seek error handling")
 			}
@@ -85,7 +85,7 @@ func (gd *GzipDetector) OpenGzipAwareReader(path string) (io.ReadCloser, error) 
 		gz, err := gzip.NewReader(f)
 		if err != nil {
 			if closeErr := f.Close(); closeErr != nil {
-				logrus.WithError(closeErr).
+				getLogger().WithError(closeErr).
 					WithField("file", path).
 					Warn("Failed to close file during gzip reader error handling")
 			}
@@ -121,7 +121,7 @@ func (gd *GzipDetector) CreateGzipAwareScannerWithBuffer(path string, maxLineSiz
 
 	cleanup := func() {
 		if err := reader.Close(); err != nil {
-			logrus.WithError(err).WithField("file", path).Warn("Failed to close reader during cleanup")
+			getLogger().WithError(err).WithField("file", path).Warn("Failed to close reader during cleanup")
 		}
 	}
 

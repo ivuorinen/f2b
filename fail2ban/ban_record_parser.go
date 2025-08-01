@@ -68,7 +68,7 @@ func (brp *BanRecordParser) ParseBanRecordLine(line, jail string) (*BanRecord, e
 
 		tBan, err := brp.timeCache.ParseTime(bannedStr)
 		if err != nil {
-			logrus.WithFields(logrus.Fields{
+			getLogger().WithFields(logrus.Fields{
 				"jail":      jail,
 				"ip":        ip,
 				"bannedStr": bannedStr,
@@ -79,7 +79,7 @@ func (brp *BanRecordParser) ParseBanRecordLine(line, jail string) (*BanRecord, e
 
 		tUnban, err := brp.timeCache.ParseTime(unbanStr)
 		if err != nil {
-			logrus.WithFields(logrus.Fields{
+			getLogger().WithFields(logrus.Fields{
 				"jail":     jail,
 				"ip":       ip,
 				"unbanStr": unbanStr,

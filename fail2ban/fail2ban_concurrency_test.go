@@ -119,7 +119,7 @@ func TestRunnerCombinedOutputWithSudoConcurrency(t *testing.T) {
 
 // TestMixedConcurrentOperations tests mixed concurrent operations including
 // setting runners and executing commands.
-func TestMixedConcurrentOperations(_ *testing.T) {
+func TestMixedConcurrentOperations(t *testing.T) {
 	original := GetRunner()
 	defer SetRunner(original)
 
@@ -137,8 +137,9 @@ func TestMixedConcurrentOperations(_ *testing.T) {
 				mockRunner.SetResponse("test", []byte("response"))
 				mockRunner.SetResponse("echo test", []byte("response"))
 				mockRunner.SetResponse("fail2ban-client status", []byte("response"))
+				mockRunner.SetResponse("sudo test arg", []byte("test response"))
 				SetRunner(mockRunner)
-				time.Sleep(time.Microsecond)
+				time.Sleep(time.Millisecond) // Changed from Microsecond to Millisecond
 			}
 		}(i)
 	}
@@ -150,8 +151,14 @@ func TestMixedConcurrentOperations(_ *testing.T) {
 			defer wg.Done()
 
 			for j := 0; j < 20; j++ {
-				_, _ = RunnerCombinedOutput("echo", "test")
-				time.Sleep(time.Microsecond)
+				output, err := RunnerCombinedOutput("echo", "test")
+				if err != nil {
+					t.Errorf("RunnerCombinedOutput failed: %v", err)
+				}
+				if len(output) == 0 {
+					t.Error("RunnerCombinedOutput returned empty output")
+				}
+				time.Sleep(time.Millisecond) // Changed from Microsecond to Millisecond
 			}
 		}()
 	}
@@ -163,8 +170,14 @@ func TestMixedConcurrentOperations(_ *testing.T) {
 			defer wg.Done()
 
 			for j := 0; j < 20; j++ {
-				_, _ = RunnerCombinedOutputWithSudo("test", "arg")
-				time.Sleep(time.Microsecond)
+				output, err := RunnerCombinedOutputWithSudo("test", "arg")
+				if err != nil {
+					t.Errorf("RunnerCombinedOutputWithSudo failed: %v", err)
+				}
+				if len(output) == 0 {
+					t.Error("RunnerCombinedOutputWithSudo returned empty output")
+				}
+				time.Sleep(time.Millisecond) // Changed from Microsecond to Millisecond
 			}
 		}()
 	}

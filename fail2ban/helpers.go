@@ -2,6 +2,7 @@ package fail2ban
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"net"
 	"os"
@@ -13,6 +14,67 @@ import (
 	"github.com/hashicorp/go-version"
 	"github.com/sirupsen/logrus"
 )
+
+// loggerInterface defines the logging interface we need
+type loggerInterface interface {
+	WithField(key string, value interface{}) *logrus.Entry
+	WithFields(fields logrus.Fields) *logrus.Entry
+	WithError(err error) *logrus.Entry
+	Debug(args ...interface{})
+	Info(args ...interface{})
+	Warn(args ...interface{})
+	Error(args ...interface{})
+	Debugf(format string, args ...interface{})
+	Infof(format string, args ...interface{})
+	Warnf(format string, args ...interface{})
+	Errorf(format string, args ...interface{})
+}
+
+// logger holds the current logger instance - will be set by cmd package
+var logger loggerInterface = logrus.StandardLogger()
+
+// SetLogger allows the cmd package to set the logger instance
+func SetLogger(l loggerInterface) {
+	logger = l
+}
+
+// getLogger returns the current logger instance
+func getLogger() loggerInterface {
+	return logger
+}
+
+func init() {
+	// Configure logging for CI/test environments to reduce noise
+	configureCITestLogging()
+}
+
+// configureCITestLogging reduces log verbosity in CI and test environments
+func configureCITestLogging() {
+	// Detect CI environments by checking common CI environment variables
+	ciEnvVars := []string{
+		"CI", "GITHUB_ACTIONS", "TRAVIS", "CIRCLECI", "JENKINS_URL",
+		"BUILDKITE", "TF_BUILD", "GITLAB_CI",
+	}
+
+	isCI := false
+	for _, envVar := range ciEnvVars {
+		if os.Getenv(envVar) != "" {
+			isCI = true
+			break
+		}
+	}
+
+	// Also check if we're in test mode
+	isTest := strings.Contains(os.Args[0], ".test") ||
+		os.Getenv("GO_TEST") == "true" ||
+		flag.Lookup("test.v") != nil
+
+	// If in CI or test environment, reduce logging noise unless explicitly overridden
+	// Note: This will be overridden by cmd.Logger once main() runs
+	if (isCI || isTest) && os.Getenv("F2B_LOG_LEVEL") == "" && os.Getenv("F2B_VERBOSE_TESTS") == "" {
+		logrus.SetLevel(logrus.ErrorLevel)
+	}
+}
 
 // Validation constants
 const (
@@ -163,6 +225,11 @@ func ValidateFilter(filter string) error {
 	// Enhanced path traversal detection
 	if ContainsPathTraversal(filter) {
 		return NewInvalidFilterError(filter + " (path traversal)")
+	}
+
+	// Check for command injection patterns (defense in depth)
+	if containsCommandInjectionPatterns(filter) {
+		return NewInvalidFilterError(filter + " (injection patterns)")
 	}
 
 	// Character validation - only allow safe characters
@@ -344,10 +411,10 @@ func ValidateCommand(command string) error {
 	if ContainsPathTraversal(command) {
 		// Don't include potentially malicious input in error message
 		// Check for common dangerous patterns that shouldn't be in command names
-		dangerousPatterns := []string{"rm -rf", "drop table", "'; cat", "/etc/"}
+		dangerousPatterns := GetDangerousCommandPatterns()
 		cmdLower := strings.ToLower(command)
 		for _, pattern := range dangerousPatterns {
-			if strings.Contains(cmdLower, pattern) {
+			if strings.Contains(cmdLower, strings.ToLower(pattern)) {
 				return fmt.Errorf("invalid command format")
 			}
 		}
@@ -496,7 +563,7 @@ func LoggerFromContext(ctx context.Context) *logrus.Entry {
 		fields["ip"] = ip
 	}
 
-	return logrus.WithFields(fields)
+	return getLogger().WithFields(fields)
 }
 
 // GenerateRequestID generates a simple request ID for tracing
@@ -536,14 +603,14 @@ func (t *TimedOperation) Finish(err error) {
 	}
 
 	if err != nil {
-		logrus.WithFields(fields).WithField("error", err.Error()).Warnf("Operation failed after %v", duration)
+		getLogger().WithFields(fields).WithField("error", err.Error()).Warnf("Operation failed after %v", duration)
 	} else {
 		if duration > time.Second {
 			// Log slow operations as warnings for visibility
-			logrus.WithFields(fields).Warnf("Slow operation completed in %v", duration)
+			getLogger().WithFields(fields).Warnf("Slow operation completed in %v", duration)
 		} else {
 			// Log fast operations at debug level to reduce noise
-			logrus.WithFields(fields).Debugf("Operation completed in %v", duration)
+			getLogger().WithFields(fields).Debugf("Operation completed in %v", duration)
 		}
 	}
 }
@@ -752,5 +819,40 @@ func GetValidationCacheStats() map[string]int {
 		"jail_cache_size":    jailValidationCache.Size(),
 		"filter_cache_size":  filterValidationCache.Size(),
 		"command_cache_size": commandValidationCache.Size(),
+	}
+}
+
+// Path helper functions for centralized path validation
+
+// GetLogAllowedPaths returns allowed paths for log directories
+func GetLogAllowedPaths() []string {
+	paths := []string{"/var/log", "/opt", "/usr/local", "/home"}
+	return appendDevPathsIfAllowed(paths)
+}
+
+// GetFilterAllowedPaths returns allowed paths for filter directories
+func GetFilterAllowedPaths() []string {
+	paths := []string{"/etc/fail2ban", "/usr/local/etc/fail2ban", "/opt/fail2ban", "/home"}
+	return appendDevPathsIfAllowed(paths)
+}
+
+// appendDevPathsIfAllowed adds development paths if ALLOW_DEV_PATHS is set
+func appendDevPathsIfAllowed(paths []string) []string {
+	if os.Getenv("ALLOW_DEV_PATHS") != "" {
+		return append(paths, "/tmp", "/var/folders") // macOS temp dirs
+	}
+	return paths
+}
+
+// GetDangerousCommandPatterns returns patterns that indicate dangerous commands or injections
+func GetDangerousCommandPatterns() []string {
+	return []string{
+		"rm -rf", "dangerous_rm_command", "dangerous_system_call",
+		"drop table", "'; cat", "/etc/", "DANGEROUS_RM_COMMAND",
+		"DANGEROUS_SYSTEM_CALL", "DANGEROUS_COMMAND", "DANGEROUS_PWD_COMMAND",
+		"DANGEROUS_LIST_COMMAND", "DANGEROUS_READ_COMMAND", "DANGEROUS_OUTPUT_FILE",
+		"DANGEROUS_INPUT_FILE", "DANGEROUS_EXEC_COMMAND", "DANGEROUS_WGET_COMMAND",
+		"DANGEROUS_CURL_COMMAND", "DANGEROUS_EXEC_FUNCTION", "DANGEROUS_SYSTEM_FUNCTION",
+		"DANGEROUS_EVAL_FUNCTION",
 	}
 }

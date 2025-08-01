@@ -11,8 +11,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-
-	"github.com/sirupsen/logrus"
 )
 
 /*
@@ -34,6 +32,11 @@ func GetLogLines(jailFilter string, ipFilter string) ([]string, error) {
 
 // GetLogLinesWithLimit returns log lines with configurable limits for memory management.
 func GetLogLinesWithLimit(jailFilter string, ipFilter string, maxLines int) ([]string, error) {
+	// Handle zero limit case - return empty slice immediately
+	if maxLines == 0 {
+		return []string{}, nil
+	}
+
 	pattern := filepath.Join(GetLogDir(), "fail2ban.log*")
 	files, err := filepath.Glob(pattern)
 	if err != nil {
@@ -64,18 +67,19 @@ func GetLogLinesWithLimit(jailFilter string, ipFilter string, maxLines int) ([]s
 			break
 		}
 
-		// Adjust remaining lines limit
-		remainingLines := config.MaxLines - totalLines
-		if remainingLines <= 0 {
-			break
-		}
-
+		// Adjust remaining lines limit (skip limit check for negative MaxLines)
 		fileConfig := config
-		fileConfig.MaxLines = remainingLines
+		if config.MaxLines > 0 {
+			remainingLines := config.MaxLines - totalLines
+			if remainingLines <= 0 {
+				break
+			}
+			fileConfig.MaxLines = remainingLines
+		}
 
 		lines, err := streamLogFile(rotatedFile.path, fileConfig)
 		if err != nil {
-			logrus.WithError(err).WithField("file", rotatedFile.path).Error("Failed to read rotated log file")
+			getLogger().WithError(err).WithField("file", rotatedFile.path).Error("Failed to read rotated log file")
 			continue
 		}
 
@@ -84,20 +88,19 @@ func GetLogLinesWithLimit(jailFilter string, ipFilter string, maxLines int) ([]s
 	}
 
 	// Read current log last (most recent) - maintains original ordering
-	if currentLog != "" && (config.MaxLines == 0 || totalLines < config.MaxLines) {
-		remainingLines := config.MaxLines - totalLines
-		if remainingLines <= 0 && config.MaxLines > 0 {
-			return allLines, nil
-		}
-
+	if currentLog != "" && (config.MaxLines <= 0 || totalLines < config.MaxLines) {
 		fileConfig := config
 		if config.MaxLines > 0 {
+			remainingLines := config.MaxLines - totalLines
+			if remainingLines <= 0 {
+				return allLines, nil
+			}
 			fileConfig.MaxLines = remainingLines
 		}
 
 		lines, err := streamLogFile(currentLog, fileConfig)
 		if err != nil {
-			logrus.WithError(err).WithField("file", currentLog).Error("Failed to read current log file")
+			getLogger().WithError(err).WithField("file", currentLog).Error("Failed to read current log file")
 		} else {
 			allLines = append(allLines, lines...)
 		}
@@ -242,7 +245,7 @@ func validatePathWithSecurity(path string, config PathSecurityConfig) (string, e
 
 	// Decode URL-encoded path traversal attempts
 	if decodedPath, err := url.QueryUnescape(path); err == nil && decodedPath != path {
-		logrus.WithField("original", path).WithField("decoded", decodedPath).
+		getLogger().WithField("original", path).WithField("decoded", decodedPath).
 			Warn("Detected URL-encoded path, using decoded version for validation")
 		path = decodedPath
 	}
@@ -426,7 +429,7 @@ func shouldSkipFile(path string, maxFileSize int64) bool {
 
 	if info, err := os.Stat(path); err == nil {
 		if info.Size() > maxFileSize {
-			logrus.WithField("file", path).WithField("size", info.Size()).
+			getLogger().WithField("file", path).WithField("size", info.Size()).
 				Warn("Skipping large log file due to size limit")
 			return true
 		}
@@ -546,7 +549,7 @@ func readLogFile(path string) ([]byte, error) {
 	}
 	defer func() {
 		if cerr := reader.Close(); cerr != nil {
-			logrus.WithError(cerr).Error("failed to close log file")
+			getLogger().WithError(cerr).Error("failed to close log file")
 		}
 	}()
 

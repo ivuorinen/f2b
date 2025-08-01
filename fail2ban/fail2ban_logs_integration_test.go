@@ -184,14 +184,31 @@ func TestIntegrationBanRecordParsing(t *testing.T) {
 	// Test parsing ban records with real patterns
 	parser := NewBanRecordParser()
 
+	// Use dynamic dates relative to current time
+	now := time.Now()
+	future10min := now.Add(10 * time.Minute)
+	past1hour := now.Add(-1 * time.Hour)
+	past50min := now.Add(-50 * time.Minute)
+
+	// Date format used by fail2ban
+	dateFmt := "2006-01-02 15:04:05"
+
 	// Simulate output from fail2ban-client
 	realPatterns := []string{
 		// Current bans with different time formats
-		`192.168.1.100 2025-07-20 14:30:39 + 2025-07-20 14:40:39 remaining`,
-		`10.0.0.50 2025-07-20 14:36:59 + 2025-07-20 14:46:59 remaining`,
-		`172.16.0.100 2025-07-20 14:52:09 + 2025-07-20 15:02:09 remaining`,
+		fmt.Sprintf("192.168.1.100 %s + %s remaining", now.Format(dateFmt), future10min.Format(dateFmt)),
+		fmt.Sprintf(
+			"10.0.0.50 %s + %s remaining",
+			now.Add(6*time.Minute).Format(dateFmt),
+			now.Add(16*time.Minute).Format(dateFmt),
+		),
+		fmt.Sprintf(
+			"172.16.0.100 %s + %s remaining",
+			now.Add(22*time.Minute).Format(dateFmt),
+			now.Add(32*time.Minute).Format(dateFmt),
+		),
 		// Already expired
-		`192.168.2.100 2025-07-19 14:30:39 + 2025-07-19 14:40:39 remaining`,
+		fmt.Sprintf("192.168.2.100 %s + %s remaining", past1hour.Format(dateFmt), past50min.Format(dateFmt)),
 	}
 
 	output := strings.Join(realPatterns, "\n")
@@ -351,8 +368,14 @@ func TestIntegrationMemoryUsage(t *testing.T) {
 	var finalStats runtime.MemStats
 	runtime.ReadMemStats(&finalStats)
 
-	// Calculate memory growth
-	memoryGrowth := finalStats.Alloc - initialStats.Alloc
+	// Calculate memory growth (handle potential negative values from GC)
+	var memoryGrowth uint64
+	if finalStats.Alloc >= initialStats.Alloc {
+		memoryGrowth = finalStats.Alloc - initialStats.Alloc
+	} else {
+		// Memory decreased due to GC - this is good, no leak detected
+		memoryGrowth = 0
+	}
 	const memoryThreshold = 10 * 1024 * 1024 // 10MB threshold
 
 	if memoryGrowth > memoryThreshold {
@@ -412,11 +435,16 @@ func BenchmarkLogParsing(b *testing.B) {
 func BenchmarkBanRecordParsing(b *testing.B) {
 	parser := NewBanRecordParser()
 
+	// Use dynamic dates for benchmark
+	now := time.Now()
+	future := now.Add(10 * time.Minute)
+	dateFmt := "2006-01-02 15:04:05"
+
 	// Realistic output with 20 ban records
 	var records []string
 	for i := 0; i < 20; i++ {
 		records = append(records,
-			fmt.Sprintf("192.168.1.%d 2025-07-20 14:30:39 + 2025-07-20 14:40:39 remaining", i+100))
+			fmt.Sprintf("192.168.1.%d %s + %s remaining", i+100, now.Format(dateFmt), future.Format(dateFmt)))
 	}
 	output := strings.Join(records, "\n")
 

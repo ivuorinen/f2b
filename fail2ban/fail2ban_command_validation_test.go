@@ -112,16 +112,16 @@ func TestValidateCommand(t *testing.T) {
 func TestValidateCommandSecurityPatterns(t *testing.T) {
 	// Test various injection attempts
 	maliciousCommands := []string{
-		"fail2ban-client; rm -rf /",
-		"fail2ban-client && rm -rf /",
-		"fail2ban-client | rm -rf /",
-		"fail2ban-client $(rm -rf /)",
-		"fail2ban-client `rm -rf /`",
+		"fail2ban-client; DANGEROUS_RM_COMMAND",
+		"fail2ban-client && DANGEROUS_RM_COMMAND",
+		"fail2ban-client | DANGEROUS_RM_COMMAND",
+		"fail2ban-client $(DANGEROUS_RM_COMMAND)",
+		"fail2ban-client `DANGEROUS_RM_COMMAND`",
 		"/bin/bash",
 		"/usr/bin/env bash",
-		"python3 -c 'import os; os.system(\"rm -rf /\")'",
-		"perl -e 'system(\"rm -rf /\")'",
-		"ruby -e 'system(\"rm -rf /\")'",
+		"python3 -c 'DANGEROUS_SYSTEM_CALL'",
+		"perl -e 'DANGEROUS_SYSTEM_CALL'",
+		"ruby -e 'DANGEROUS_SYSTEM_CALL'",
 	}
 
 	for _, cmd := range maliciousCommands {

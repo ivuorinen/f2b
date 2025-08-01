@@ -1,3 +1,5 @@
+// Package fail2ban_test provides external tests for the fail2ban package,
+// ensuring proper isolation and testing of exported interfaces.
 package fail2ban_test
 
 import (
@@ -90,6 +92,55 @@ func TestOSRunnerWithSudo(t *testing.T) {
 	}
 }
 
+// cleanupLogFiles removes existing log files from temp directory
+func cleanupLogFiles(t *testing.T, tempDir string) {
+	t.Helper()
+	files, _ := filepath.Glob(filepath.Join(tempDir, "fail2ban.log*"))
+	for _, f := range files {
+		if err := os.Remove(f); err != nil {
+			t.Fatalf("failed to remove file: %v", err)
+		}
+	}
+}
+
+// createCompressedTestFile creates a gzip compressed test file
+func createCompressedTestFile(t *testing.T, filePath, content string) {
+	t.Helper()
+	// #nosec G304 - filePath is safely constructed from tempDir and test data
+	file, err := os.Create(filePath)
+	fail2ban.AssertError(t, err, false, "create compressed file")
+	defer func() {
+		if err := file.Close(); err != nil {
+			t.Fatalf("failed to close file: %v", err)
+		}
+	}()
+
+	gzWriter := gzip.NewWriter(file)
+	_, err = gzWriter.Write([]byte(content))
+	if err != nil {
+		t.Fatalf("failed to write compressed content: %v", err)
+	}
+	if err := gzWriter.Close(); err != nil {
+		t.Fatalf("failed to close gzip writer: %v", err)
+	}
+}
+
+// validateLogLines validates that the read lines match expected lines
+func validateLogLines(t *testing.T, lines []string, expected []string, _ string) {
+	t.Helper()
+	if len(lines) != len(expected) {
+		t.Errorf("expected %d lines, got %d", len(expected), len(lines))
+	}
+
+	for i, expectedLine := range expected {
+		if i >= len(lines) {
+			t.Errorf("expected line %d to be %q, but only got %d lines", i, expectedLine, len(lines))
+		} else if lines[i] != expectedLine {
+			t.Errorf("expected line %d to be %q, got %q", i, expectedLine, lines[i])
+		}
+	}
+}
+
 // TestLogFileReading tests reading different types of log files
 func TestLogFileReading(t *testing.T) {
 	tempDir := t.TempDir()
@@ -131,35 +182,12 @@ func TestLogFileReading(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Clean up previous files
-			files, _ := filepath.Glob(filepath.Join(tempDir, "fail2ban.log*"))
-			for _, f := range files {
-				if err := os.Remove(f); err != nil {
-					t.Fatalf("failed to remove file: %v", err)
-				}
-			}
+			cleanupLogFiles(t, tempDir)
 
 			// Create test file
 			filePath := filepath.Join(tempDir, tt.filename)
 			if tt.compressed {
-				// Create compressed file
-				// #nosec G304 - filePath is safely constructed from tempDir and test data
-				file, err := os.Create(filePath)
-				fail2ban.AssertError(t, err, false, "create compressed file")
-				defer func() {
-					if err := file.Close(); err != nil {
-						t.Fatalf("failed to close file: %v", err)
-					}
-				}()
-
-				gzWriter := gzip.NewWriter(file)
-				_, err = gzWriter.Write([]byte(tt.content))
-				if err != nil {
-					t.Fatalf("failed to write compressed content: %v", err)
-				}
-				if err := gzWriter.Close(); err != nil {
-					t.Fatalf("failed to close gzip writer: %v", err)
-				}
+				createCompressedTestFile(t, filePath, tt.content)
 			} else {
 				err := os.WriteFile(filePath, []byte(tt.content), 0600)
 				fail2ban.AssertError(t, err, false, "write regular file")
@@ -169,17 +197,7 @@ func TestLogFileReading(t *testing.T) {
 			lines, err := fail2ban.GetLogLines("", "")
 			fail2ban.AssertError(t, err, false, tt.name)
 
-			if len(lines) != len(tt.expected) {
-				t.Errorf("expected %d lines, got %d", len(tt.expected), len(lines))
-			}
-
-			for i, expected := range tt.expected {
-				if i >= len(lines) {
-					t.Errorf("expected line %d to be %q, but only got %d lines", i, expected, len(lines))
-				} else if lines[i] != expected {
-					t.Errorf("expected line %d to be %q, got %q", i, expected, lines[i])
-				}
-			}
+			validateLogLines(t, lines, tt.expected, tt.name)
 		})
 	}
 }

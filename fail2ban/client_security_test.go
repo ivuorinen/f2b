@@ -171,7 +171,7 @@ func TestArgumentValidation(t *testing.T) {
 		},
 		{
 			name:        "CommandInjectionSemicolon",
-			args:        []string{"status", "jail; rm -rf /"},
+			args:        []string{"status", "jail; DANGEROUS_RM_COMMAND"},
 			expectError: true,
 			description: "Command injection with semicolon should be rejected",
 		},
@@ -231,7 +231,7 @@ func TestCommandValidationEnhanced(t *testing.T) {
 		},
 		{
 			name:        "CommandWithInjection",
-			command:     "fail2ban-client; rm -rf /",
+			command:     "fail2ban-client; DANGEROUS_RM_COMMAND",
 			expectError: true,
 			description: "Command with injection should be rejected",
 		},

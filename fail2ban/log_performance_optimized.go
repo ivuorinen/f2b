@@ -10,8 +10,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-
-	"github.com/sirupsen/logrus"
 )
 
 // OptimizedLogProcessor provides high-performance log processing with caching and optimizations
@@ -129,7 +127,7 @@ func (olp *OptimizedLogProcessor) GetLogLinesOptimized(jailFilter, ipFilter stri
 
 		fileLines, err := olp.streamLogFileOptimized(rotatedLog.Path, fileConfig)
 		if err != nil {
-			logrus.WithError(err).WithField("file", rotatedLog.Path).Error("Failed to read log file")
+			getLogger().WithError(err).WithField("file", rotatedLog.Path).Error("Failed to read log file")
 			continue
 		}
 
@@ -148,7 +146,7 @@ func (olp *OptimizedLogProcessor) GetLogLinesOptimized(jailFilter, ipFilter stri
 
 			fileLines, err := olp.streamLogFileOptimized(currentLog, fileConfig)
 			if err != nil {
-				logrus.WithError(err).WithField("file", currentLog).Error("Failed to read current log file")
+				getLogger().WithError(err).WithField("file", currentLog).Error("Failed to read current log file")
 			} else {
 				lines = append(lines, fileLines...)
 			}
@@ -343,7 +341,7 @@ func (olp *OptimizedLogProcessor) createOptimizedScanner(path string, isGzip boo
 
 	cleanup := func() {
 		if err := file.Close(); err != nil {
-			logrus.WithError(err).WithField("file", path).Warn("Failed to close file during cleanup")
+			getLogger().WithError(err).WithField("file", path).Warn("Failed to close file during cleanup")
 		}
 		*bufPtr = (*bufPtr)[:0] // Reset buffer
 		olp.scannerPool.Put(bufPtr)

@@ -51,6 +51,15 @@ For detailed architecture documentation, see [docs/architecture.md](docs/archite
 | `F2B_LOG_LEVEL` | Log level | `info` |
 | `F2B_LOG_FILE` | Log file path | - |
 | `F2B_TEST_SUDO` | Enable test sudo | `false` |
+| `F2B_VERBOSE_TESTS` | Force verbose logging in CI/tests | - |
+| `ALLOW_DEV_PATHS` | Allow /tmp paths (dev only) | - |
+
+**Logging Behavior:**
+
+- In CI environments (GitHub Actions, Travis, etc.) or test mode, logging is automatically set to `error` level to
+  reduce noise
+- Set `F2B_VERBOSE_TESTS=true` to enable full logging in CI environments
+- Set `F2B_LOG_LEVEL=debug` to override automatic CI detection
 
 ## Testing
 
@@ -82,3 +91,7 @@ For detailed security guidelines, see [docs/security.md](docs/security.md) and [
 
 - `--format=plain|json`: Output formats
 - "lint" = "Lint all files and fix all errors"
+
+## Development Principles
+
+- Always consider all linting errors as blocking errors

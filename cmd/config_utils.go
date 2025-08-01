@@ -11,8 +11,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/ivuorinen/f2b/fail2ban"
 )
 
@@ -172,31 +170,19 @@ func validateConfigPath(path, pathType string) (string, error) {
 // isReasonableSystemPath checks if a path is in a reasonable system location
 func isReasonableSystemPath(path, pathType string) bool {
 	// Allow common system directories based on path type
+	var allowedPrefixes []string
 	switch pathType {
 	case "log":
-		allowedPrefixes := []string{
-			"/var/log",
-			"/tmp",
-			"/opt",
-			"/usr/local",
-			"/home",
-		}
-		for _, prefix := range allowedPrefixes {
-			if strings.HasPrefix(path, prefix) {
-				return true
-			}
-		}
+		allowedPrefixes = fail2ban.GetLogAllowedPaths()
 	case "filter":
-		allowedPrefixes := []string{
-			"/etc/fail2ban",
-			"/usr/local/etc/fail2ban",
-			"/opt/fail2ban",
-			"/home",
-		}
-		for _, prefix := range allowedPrefixes {
-			if strings.HasPrefix(path, prefix) {
-				return true
-			}
+		allowedPrefixes = fail2ban.GetFilterAllowedPaths()
+	default:
+		return false
+	}
+
+	for _, prefix := range allowedPrefixes {
+		if strings.HasPrefix(path, prefix) {
+			return true
 		}
 	}
 
@@ -215,7 +201,7 @@ func NewConfigFromEnv() Config {
 
 	validatedLogDir, err := validateConfigPath(logDir, "log")
 	if err != nil {
-		logrus.WithError(err).WithField("path", logDir).Error("Invalid log directory from environment")
+		Logger.WithError(err).WithField("path", logDir).Error("Invalid log directory from environment")
 		validatedLogDir = "/var/log" // Fallback to safe default
 	}
 	cfg.LogDir = validatedLogDir
@@ -228,7 +214,7 @@ func NewConfigFromEnv() Config {
 
 	validatedFilterDir, err := validateConfigPath(filterDir, "filter")
 	if err != nil {
-		logrus.WithError(err).WithField("path", filterDir).Error("Invalid filter directory from environment")
+		Logger.WithError(err).WithField("path", filterDir).Error("Invalid filter directory from environment")
 		validatedFilterDir = "/etc/fail2ban/filter.d" // Fallback to safe default
 	}
 	cfg.FilterDir = validatedFilterDir
@@ -252,7 +238,7 @@ func parseTimeoutFromEnv(envVar string, defaultTimeout time.Duration) time.Durat
 	// Try parsing as duration first (e.g., "30s", "1m30s")
 	if duration, err := time.ParseDuration(envValue); err == nil {
 		if duration <= 0 {
-			logrus.WithField("env_var", envVar).WithField("value", envValue).
+			Logger.WithField("env_var", envVar).WithField("value", envValue).
 				Warn("Invalid timeout value, using default")
 			return defaultTimeout
 		}
@@ -262,14 +248,14 @@ func parseTimeoutFromEnv(envVar string, defaultTimeout time.Duration) time.Durat
 	// Try parsing as seconds (for backward compatibility)
 	if seconds, err := strconv.Atoi(envValue); err == nil {
 		if seconds <= 0 {
-			logrus.WithField("env_var", envVar).WithField("value", envValue).
+			Logger.WithField("env_var", envVar).WithField("value", envValue).
 				Warn("Invalid timeout value, using default")
 			return defaultTimeout
 		}
 		return time.Duration(seconds) * time.Second
 	}
 
-	logrus.WithField("env_var", envVar).WithField("value", envValue).
+	Logger.WithField("env_var", envVar).WithField("value", envValue).
 		Warn("Failed to parse timeout value, using default")
 	return defaultTimeout
 }

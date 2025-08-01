@@ -42,6 +42,7 @@ linters:
     - usestdlibvars # Use standard library variables
     - whitespace # Whitespace checking
     - godox # TODO/FIXME/etc comments
+    - gocognit # Cognitive complexity checking
 
   disable:
     # Disable overly strict linters for this project
@@ -55,7 +56,6 @@ linters:
     - nlreturn # New line return checking
     - cyclop # Cyclomatic complexity (covered by gocyclo)
     - funlen # Function length checking
-    - gocognit # Cognitive complexity checking
     - maintidx # Maintainability index
     - nestif # Nested if checking
     - wsl # Whitespace linter (too strict)
@@ -94,6 +94,9 @@ linters:
 
     lll:
       line-length: 120 # Set maximum line length to 120 characters
+
+    revive:
+      config: revive.toml # Point to the revive configuration file
 
 formatters:
   enable:

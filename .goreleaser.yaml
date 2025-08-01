@@ -16,28 +16,139 @@ before:
 
 # Build configuration
 builds:
-  - id: f2b
+  # Linux builds with static linking for better portability
+  - id: f2b-linux
     main: .
     binary: f2b
 
-    # Custom ldflags for optimized builds
+    # Custom ldflags for optimized builds with static linking
     ldflags:
       - -s -w # Strip debug info and symbol table
       - -X github.com/ivuorinen/f2b/cmd.version={{.Version}}
       - -X github.com/ivuorinen/f2b/cmd.commit={{.Commit}}
       - -X github.com/ivuorinen/f2b/cmd.date={{.Date}}
       - -X github.com/ivuorinen/f2b/cmd.builtBy=goreleaser
-      - -extldflags=-static # Static linking for better portability
+      - -extldflags=-static # Static linking for Linux
 
-    # Build for multiple platforms (expanded for better coverage)
+    # Linux platforms
     goos:
       - linux
+
+    goarch:
+      - amd64
+      - arm64
+      - arm
+      - "386"
+      - ppc64le # Added PowerPC 64-bit LE support
+      - s390x # Added IBM Z support
+      - mips64 # Added MIPS 64-bit support
+      - mips64le # Added MIPS 64-bit LE support
+
+    goarm:
+      - "6"
+      - "7"
+
+    # Set environment variables
+    env:
+      - CGO_ENABLED=0
+
+    # Custom build tags for optimized static builds
+    tags:
+      - netgo # Pure Go network stack
+      - osusergo # Pure Go user/group lookups
+
+    # Build flags for optimization
+    flags:
+      - -trimpath # Remove file system paths from binaries
+
+  # Darwin/macOS builds without static linking
+  - id: f2b-darwin
+    main: .
+    binary: f2b
+
+    # Custom ldflags for optimized builds without static linking
+    ldflags:
+      - -s -w # Strip debug info and symbol table
+      - -X github.com/ivuorinen/f2b/cmd.version={{.Version}}
+      - -X github.com/ivuorinen/f2b/cmd.commit={{.Commit}}
+      - -X github.com/ivuorinen/f2b/cmd.date={{.Date}}
+      - -X github.com/ivuorinen/f2b/cmd.builtBy=goreleaser
+
+    # Darwin platforms
+    goos:
       - darwin
+
+    goarch:
+      - amd64
+      - arm64
+
+    # Set environment variables
+    env:
+      - CGO_ENABLED=0
+
+    # Custom build tags for optimized builds
+    tags:
+      - netgo # Pure Go network stack
+      - osusergo # Pure Go user/group lookups
+
+    # Build flags for optimization
+    flags:
+      - -trimpath # Remove file system paths from binaries
+
+  # Windows builds without static linking
+  - id: f2b-windows
+    main: .
+    binary: f2b
+
+    # Custom ldflags for optimized builds without static linking
+    ldflags:
+      - -s -w # Strip debug info and symbol table
+      - -X github.com/ivuorinen/f2b/cmd.version={{.Version}}
+      - -X github.com/ivuorinen/f2b/cmd.commit={{.Commit}}
+      - -X github.com/ivuorinen/f2b/cmd.date={{.Date}}
+      - -X github.com/ivuorinen/f2b/cmd.builtBy=goreleaser
+
+    # Windows platforms
+    goos:
+      - windows
+
+    goarch:
+      - amd64
+      - arm64
+      - "386"
+
+    # Set environment variables
+    env:
+      - CGO_ENABLED=0
+
+    # Custom build tags for optimized builds
+    tags:
+      - netgo # Pure Go network stack
+      - osusergo # Pure Go user/group lookups
+
+    # Build flags for optimization
+    flags:
+      - -trimpath # Remove file system paths from binaries
+
+  # BSD builds without static linking
+  - id: f2b-bsd
+    main: .
+    binary: f2b
+
+    # Custom ldflags for optimized builds without static linking
+    ldflags:
+      - -s -w # Strip debug info and symbol table
+      - -X github.com/ivuorinen/f2b/cmd.version={{.Version}}
+      - -X github.com/ivuorinen/f2b/cmd.commit={{.Commit}}
+      - -X github.com/ivuorinen/f2b/cmd.date={{.Date}}
+      - -X github.com/ivuorinen/f2b/cmd.builtBy=goreleaser
+
+    # BSD platforms
+    goos:
       - freebsd
       - openbsd
       - netbsd
       - dragonfly # Added DragonFly BSD support
-      - windows # Added Windows support
 
     goarch:
       - amd64
@@ -55,12 +166,6 @@ builds:
 
     # Skip certain combinations for compatibility and practicality
     ignore:
-      - goos: darwin
-        goarch: "386" # macOS dropped 32-bit support
-      - goos: darwin
-        goarch: arm # macOS ARM is only 64-bit
-      - goos: windows
-        goarch: arm # Windows ARM is typically 64-bit
       - goos: freebsd
         goarch: arm # FreeBSD ARM support limited
       - goos: openbsd
@@ -73,21 +178,12 @@ builds:
         goarch: arm # DragonFly doesn't support ARM
       - goos: dragonfly
         goarch: arm64 # DragonFly doesn't support ARM64
-      # Skip exotic architectures on Windows
-      - goos: windows
-        goarch: ppc64le
-      - goos: windows
-        goarch: s390x
-      - goos: windows
-        goarch: mips64
-      - goos: windows
-        goarch: mips64le
 
     # Set environment variables
     env:
       - CGO_ENABLED=0
 
-    # Custom build tags for optimized static builds
+    # Custom build tags for optimized builds
     tags:
       - netgo # Pure Go network stack
       - osusergo # Pure Go user/group lookups
@@ -95,9 +191,6 @@ builds:
     # Build flags for optimization
     flags:
       - -trimpath # Remove file system paths from binaries
-
-    # Go version requirement
-    gobinary: go
 
 # Archive configuration
 archives:
@@ -114,7 +207,6 @@ archives:
 
     # Optimize compression
     wrap_in_directory: true
-    strip_parent_binary_folder: true
 
     # Files to include in archive
     files:
@@ -166,7 +258,6 @@ release:
     See the [README](https://github.com/ivuorinen/f2b#readme) for usage instructions.
 
   # Automatically generate release notes
-  use_package_registry: true
   make_latest: true
 
 # Changelog configuration
@@ -273,7 +364,6 @@ dockers:
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
       - "--label=org.opencontainers.image.version={{.Version}}"
       - "--label=org.opencontainers.image.source={{.GitURL}}"
-      - "--platform=linux/amd64"
 
 # Announce releases
 announce:

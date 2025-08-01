@@ -1,4 +1,3 @@
-// Package cmd contains the command packages for the f2b tool.
 package cmd
 
 import (
