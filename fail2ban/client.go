@@ -68,6 +68,14 @@ type BanRecord struct {
 // and loads available jails. Returns an error if fail2ban is not available, not running, or
 // user lacks sudo privileges.
 func NewClient(logDir, filterDir string) (*RealClient, error) {
+	return NewClientWithContext(context.Background(), logDir, filterDir)
+}
+
+// NewClientWithContext initializes a RealClient with context support for timeout and cancellation.
+// It checks for fail2ban-client in PATH, ensures the service is running, checks sudo privileges,
+// and loads available jails. Returns an error if fail2ban is not available, not running, or
+// user lacks sudo privileges.
+func NewClientWithContext(ctx context.Context, logDir, filterDir string) (*RealClient, error) {
 	// Check sudo privileges first (skip in test environment unless forced)
 	if !IsTestEnvironment() || os.Getenv("F2B_TEST_SUDO") == "true" {
 		if err := CheckSudoRequirements(); err != nil {
@@ -119,19 +127,19 @@ func NewClient(logDir, filterDir string) (*RealClient, error) {
 
 	rc := &RealClient{Path: path, LogDir: validatedLogDir, FilterDir: validatedFilterDir}
 
-	// Version check - use sudo if needed
-	out, err := RunnerCombinedOutputWithSudo(path, "-V")
+	// Version check - use sudo if needed with context
+	out, err := RunnerCombinedOutputWithSudoContext(ctx, path, "-V")
 	if err != nil {
 		return nil, fmt.Errorf("version check failed: %w", err)
 	}
 	if CompareVersions(strings.TrimSpace(string(out)), "0.11.0") < 0 {
 		return nil, fmt.Errorf("fail2ban >=0.11.0 required, got %s", out)
 	}
-	// Ping - use sudo if needed
-	if err := runnerCombinedRunWithSudo(path, "ping"); err != nil {
+	// Ping - use sudo if needed with context
+	if err := runnerCombinedRunWithSudoContext(ctx, path, "ping"); err != nil {
 		return nil, errors.New("fail2ban service not running")
 	}
-	jails, err := rc.fetchJails()
+	jails, err := rc.fetchJailsWithContext(ctx)
 	if err != nil {
 		return nil, err
 	}

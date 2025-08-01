@@ -21,9 +21,11 @@ func setupMockRunnerForPrivilegedTest(mockRunner *MockRunner) {
 		[]byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"),
 	)
 
-	// Set up responses for operations
+	// Set up responses for operations (both sudo and non-sudo for root users)
 	mockRunner.SetResponse("sudo fail2ban-client set sshd banip 192.168.1.100", []byte("0"))
+	mockRunner.SetResponse("fail2ban-client set sshd banip 192.168.1.100", []byte("0"))
 	mockRunner.SetResponse("sudo fail2ban-client set sshd unbanip 192.168.1.100", []byte("0"))
+	mockRunner.SetResponse("fail2ban-client set sshd unbanip 192.168.1.100", []byte("0"))
 	mockRunner.SetResponse("sudo fail2ban-client banned 192.168.1.100", []byte(`["sshd"]`))
 	mockRunner.SetResponse("fail2ban-client banned 192.168.1.100", []byte(`["sshd"]`))
 }
@@ -85,6 +87,7 @@ func TestSudoIntegrationWithClient(t *testing.T) {
 	tests := []struct {
 		name               string
 		hasPrivileges      bool
+		isRoot             bool
 		expectClientError  bool
 		expectOperationErr bool
 		description        string
@@ -92,6 +95,7 @@ func TestSudoIntegrationWithClient(t *testing.T) {
 		{
 			name:               "root user can perform all operations",
 			hasPrivileges:      true,
+			isRoot:             true,
 			expectClientError:  false,
 			expectOperationErr: false,
 			description:        "root user should be able to create client and perform operations",
@@ -99,6 +103,7 @@ func TestSudoIntegrationWithClient(t *testing.T) {
 		{
 			name:               "user with sudo privileges can perform operations",
 			hasPrivileges:      true,
+			isRoot:             false,
 			expectClientError:  false,
 			expectOperationErr: false,
 			description:        "user in sudo group should be able to create client and perform operations",
@@ -106,6 +111,7 @@ func TestSudoIntegrationWithClient(t *testing.T) {
 		{
 			name:               "regular user cannot create client",
 			hasPrivileges:      false,
+			isRoot:             false,
 			expectClientError:  true,
 			expectOperationErr: true,
 			description:        "regular user should fail at client creation",
@@ -120,6 +126,14 @@ func TestSudoIntegrationWithClient(t *testing.T) {
 			// Modern standardized setup with automatic cleanup
 			_, cleanup := SetupMockEnvironmentWithSudo(t, tt.hasPrivileges)
 			defer cleanup()
+
+			// Get the mock sudo checker and configure based on test case
+			mockChecker := GetSudoChecker().(*MockSudoChecker)
+			mockChecker.MockIsRoot = tt.isRoot
+			if tt.isRoot {
+				// Root user always has privileges
+				mockChecker.MockHasPrivileges = true
+			}
 
 			// Get the mock runner and configure additional responses
 			mockRunner := GetRunner().(*MockRunner)

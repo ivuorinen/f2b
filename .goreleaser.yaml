@@ -199,21 +199,15 @@ archives:
     formats: ["tar.gz", "tar.xz", "zip"]
 
     # Use appropriate formats per platform
-    format_overrides:
-      - goos: windows
-        format: zip
-      - goos: darwin
-        format: zip
-
-    # Optimize compression
-    wrap_in_directory: true
-
-    # Files to include in archive
     files:
       - LICENSE.md
       - README.md
       - CHANGELOG.md
       - docs/*
+
+    # Optimize compression
+    wrap_in_directory: true
+
 
 # Checksum configuration
 checksum:
@@ -222,7 +216,7 @@ checksum:
 
 # Snapshot configuration
 snapshot:
-  name_template: "{{ incpatch .Version }}-next"
+  version_template: "{{ incpatch .Version }}-next"
 
 # Release configuration
 release:
@@ -343,13 +337,13 @@ nfpms:
         #!/bin/sh
         echo "f2b has been installed. Run 'f2b --help' to get started."
 
-# Docker configuration
+# Docker configuration with multi-architecture support
 dockers:
   - image_templates:
-      - "ghcr.io/ivuorinen/f2b:{{ .Tag }}"
-      - "ghcr.io/ivuorinen/f2b:v{{ .Major }}"
-      - "ghcr.io/ivuorinen/f2b:v{{ .Major }}.{{ .Minor }}"
-      - "ghcr.io/ivuorinen/f2b:latest"
+      - "ghcr.io/ivuorinen/f2b:{{ .Tag }}-amd64"
+      - "ghcr.io/ivuorinen/f2b:v{{ .Major }}-amd64"
+      - "ghcr.io/ivuorinen/f2b:v{{ .Major }}.{{ .Minor }}-amd64"
+      - "ghcr.io/ivuorinen/f2b:latest-amd64"
 
     dockerfile: |
       FROM alpine:latest
@@ -357,13 +351,95 @@ dockers:
       COPY f2b /usr/local/bin/
       ENTRYPOINT ["f2b"]
 
+    use: buildx
+    goos: linux
+    goarch: amd64
+
     build_flag_templates:
       - "--pull"
+      - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.created={{.Date}}"
       - "--label=org.opencontainers.image.title={{.ProjectName}}"
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
       - "--label=org.opencontainers.image.version={{.Version}}"
       - "--label=org.opencontainers.image.source={{.GitURL}}"
+
+  - image_templates:
+      - "ghcr.io/ivuorinen/f2b:{{ .Tag }}-arm64"
+      - "ghcr.io/ivuorinen/f2b:v{{ .Major }}-arm64"
+      - "ghcr.io/ivuorinen/f2b:v{{ .Major }}.{{ .Minor }}-arm64"
+      - "ghcr.io/ivuorinen/f2b:latest-arm64"
+
+    dockerfile: |
+      FROM alpine:latest
+      RUN apk --no-cache add ca-certificates
+      COPY f2b /usr/local/bin/
+      ENTRYPOINT ["f2b"]
+
+    use: buildx
+    goos: linux
+    goarch: arm64
+
+    build_flag_templates:
+      - "--pull"
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
+
+  - image_templates:
+      - "ghcr.io/ivuorinen/f2b:{{ .Tag }}-armv7"
+      - "ghcr.io/ivuorinen/f2b:v{{ .Major }}-armv7"
+      - "ghcr.io/ivuorinen/f2b:v{{ .Major }}.{{ .Minor }}-armv7"
+      - "ghcr.io/ivuorinen/f2b:latest-armv7"
+
+    dockerfile: |
+      FROM alpine:latest
+      RUN apk --no-cache add ca-certificates
+      COPY f2b /usr/local/bin/
+      ENTRYPOINT ["f2b"]
+
+    use: buildx
+    goos: linux
+    goarch: arm
+    goarm: 7
+
+    build_flag_templates:
+      - "--pull"
+      - "--platform=linux/arm/v7"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+      - "--label=org.opencontainers.image.source={{.GitURL}}"
+
+# Docker manifest configuration for multi-architecture support
+docker_manifests:
+  - name_template: "ghcr.io/ivuorinen/f2b:{{ .Tag }}"
+    image_templates:
+      - "ghcr.io/ivuorinen/f2b:{{ .Tag }}-amd64"
+      - "ghcr.io/ivuorinen/f2b:{{ .Tag }}-arm64"
+      - "ghcr.io/ivuorinen/f2b:{{ .Tag }}-armv7"
+
+  - name_template: "ghcr.io/ivuorinen/f2b:v{{ .Major }}"
+    image_templates:
+      - "ghcr.io/ivuorinen/f2b:v{{ .Major }}-amd64"
+      - "ghcr.io/ivuorinen/f2b:v{{ .Major }}-arm64"
+      - "ghcr.io/ivuorinen/f2b:v{{ .Major }}-armv7"
+
+  - name_template: "ghcr.io/ivuorinen/f2b:v{{ .Major }}.{{ .Minor }}"
+    image_templates:
+      - "ghcr.io/ivuorinen/f2b:v{{ .Major }}.{{ .Minor }}-amd64"
+      - "ghcr.io/ivuorinen/f2b:v{{ .Major }}.{{ .Minor }}-arm64"
+      - "ghcr.io/ivuorinen/f2b:v{{ .Major }}.{{ .Minor }}-armv7"
+
+  - name_template: "ghcr.io/ivuorinen/f2b:latest"
+    image_templates:
+      - "ghcr.io/ivuorinen/f2b:latest-amd64"
+      - "ghcr.io/ivuorinen/f2b:latest-arm64"
+      - "ghcr.io/ivuorinen/f2b:latest-armv7"
 
 # Announce releases
 announce:
