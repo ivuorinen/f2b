@@ -123,61 +123,76 @@ func TestMixedConcurrentOperations(t *testing.T) {
 	original := GetRunner()
 	defer SetRunner(original)
 
+	// Set up a single shared MockRunner with all required responses
+	// This avoids race conditions from multiple goroutines setting different runners
+	sharedMockRunner := NewMockRunner()
+
+	// Set up responses for valid fail2ban commands to avoid validation errors
+	sharedMockRunner.SetResponse("fail2ban-client status", []byte("Status: OK"))
+	sharedMockRunner.SetResponse("fail2ban-client -V", []byte("Version: 1.0.0"))
+
+	// Set up both sudo and non-sudo versions to handle different execution paths
+	sharedMockRunner.SetResponse("sudo fail2ban-client status", []byte("Status: OK"))
+	sharedMockRunner.SetResponse("sudo fail2ban-client -V", []byte("Version: 1.0.0"))
+
+	SetRunner(sharedMockRunner)
+
 	const numGoroutines = 30
 	var wg sync.WaitGroup
 
-	// Group 1: Set runners
+	// Group 1: Set runners (now just validates that setting runners works concurrently)
 	for i := 0; i < numGoroutines/3; i++ {
 		wg.Add(1)
 		go func(_ int) {
 			defer wg.Done()
 
 			for j := 0; j < 20; j++ {
+				// Create a new runner with the same responses to test concurrent setting
 				mockRunner := NewMockRunner()
-				mockRunner.SetResponse("test", []byte("response"))
-				mockRunner.SetResponse("echo test", []byte("response"))
-				mockRunner.SetResponse("fail2ban-client status", []byte("response"))
-				mockRunner.SetResponse("sudo test arg", []byte("test response"))
+				mockRunner.SetResponse("fail2ban-client status", []byte("Status: OK"))
+				mockRunner.SetResponse("fail2ban-client -V", []byte("Version: 1.0.0"))
+				mockRunner.SetResponse("sudo fail2ban-client status", []byte("Status: OK"))
+				mockRunner.SetResponse("sudo fail2ban-client -V", []byte("Version: 1.0.0"))
 				SetRunner(mockRunner)
-				time.Sleep(time.Millisecond) // Changed from Microsecond to Millisecond
+				time.Sleep(time.Millisecond)
 			}
 		}(i)
 	}
 
-	// Group 2: Execute commands
+	// Group 2: Execute regular commands (using valid fail2ban commands)
 	for i := 0; i < numGoroutines/3; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 
 			for j := 0; j < 20; j++ {
-				output, err := RunnerCombinedOutput("echo", "test")
+				output, err := RunnerCombinedOutput("fail2ban-client", "status")
 				if err != nil {
 					t.Errorf("RunnerCombinedOutput failed: %v", err)
 				}
 				if len(output) == 0 {
 					t.Error("RunnerCombinedOutput returned empty output")
 				}
-				time.Sleep(time.Millisecond) // Changed from Microsecond to Millisecond
+				time.Sleep(time.Millisecond)
 			}
 		}()
 	}
 
-	// Group 3: Execute sudo commands
+	// Group 3: Execute sudo commands (using valid fail2ban commands)
 	for i := 0; i < numGoroutines/3; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 
 			for j := 0; j < 20; j++ {
-				output, err := RunnerCombinedOutputWithSudo("test", "arg")
+				output, err := RunnerCombinedOutputWithSudo("fail2ban-client", "-V")
 				if err != nil {
 					t.Errorf("RunnerCombinedOutputWithSudo failed: %v", err)
 				}
 				if len(output) == 0 {
 					t.Error("RunnerCombinedOutputWithSudo returned empty output")
 				}
-				time.Sleep(time.Millisecond) // Changed from Microsecond to Millisecond
+				time.Sleep(time.Millisecond)
 			}
 		}()
 	}
