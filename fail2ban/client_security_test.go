@@ -90,6 +90,62 @@ func TestNewClientPathTraversalProtection(t *testing.T) {
 			filterDir:   "/opt/fail2ban/filters",
 			expectError: false,
 		},
+		{
+			name:          "mixed case traversal in logDir",
+			logDir:        "/var/LOG/../../../etc/passwd",
+			filterDir:     "/etc/fail2ban/filter.d",
+			expectError:   true,
+			errorContains: "invalid log directory",
+		},
+		{
+			name:          "multiple slashes traversal in logDir",
+			logDir:        "/var/log////../../etc/passwd",
+			filterDir:     "/etc/fail2ban/filter.d",
+			expectError:   true,
+			errorContains: "invalid log directory",
+		},
+		{
+			name:          "unicode normalization attack in logDir",
+			logDir:        "/var/log/\u002e\u002e/\u002e\u002e/etc/passwd",
+			filterDir:     "/etc/fail2ban/filter.d",
+			expectError:   true,
+			errorContains: "invalid log directory",
+		},
+		{
+			name:          "windows-style paths on unix in logDir",
+			logDir:        "/var/log\\..\\..\\..\\etc\\passwd",
+			filterDir:     "/etc/fail2ban/filter.d",
+			expectError:   true,
+			errorContains: "invalid log directory",
+		},
+		{
+			name:          "mixed case traversal in filterDir",
+			logDir:        "/var/log",
+			filterDir:     "/etc/fail2ban/FILTER.D/../../../etc/passwd",
+			expectError:   true,
+			errorContains: "invalid filter directory",
+		},
+		{
+			name:          "multiple slashes traversal in filterDir",
+			logDir:        "/var/log",
+			filterDir:     "/etc/fail2ban/filter.d////../../etc/passwd",
+			expectError:   true,
+			errorContains: "invalid filter directory",
+		},
+		{
+			name:          "unicode normalization attack in filterDir",
+			logDir:        "/var/log",
+			filterDir:     "/etc/fail2ban/filter.d/\u002e\u002e/\u002e\u002e/etc/passwd",
+			expectError:   true,
+			errorContains: "invalid filter directory",
+		},
+		{
+			name:          "windows-style paths on unix in filterDir",
+			logDir:        "/var/log",
+			filterDir:     "/etc/fail2ban/filter.d\\..\\..\\..\\etc\\passwd",
+			expectError:   true,
+			errorContains: "invalid filter directory",
+		},
 	}
 
 	for _, tt := range tests {
