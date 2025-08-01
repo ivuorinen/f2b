@@ -38,6 +38,42 @@ const (
 	DefaultBanDuration = 24 * time.Hour
 )
 
+// Fail2Ban status codes
+const (
+	// Fail2BanStatusSuccess indicates successful operation (ban/unban succeeded)
+	Fail2BanStatusSuccess = "0"
+	// Fail2BanStatusAlreadyProcessed indicates IP was already banned/unbanned
+	Fail2BanStatusAlreadyProcessed = "1"
+)
+
+// Fail2Ban command names
+const (
+	// Fail2BanClientCommand is the standard fail2ban client command
+	Fail2BanClientCommand = "fail2ban-client"
+	// Fail2BanRegexCommand is the fail2ban regex testing command
+	Fail2BanRegexCommand = "fail2ban-regex"
+	// Fail2BanServerCommand is the fail2ban server command
+	Fail2BanServerCommand = "fail2ban-server"
+)
+
+// File permission constants
+const (
+	// DefaultFilePermissions for log files and temporary files
+	DefaultFilePermissions = 0600
+	// DefaultDirectoryPermissions for created directories
+	DefaultDirectoryPermissions = 0750
+)
+
+// Timeout limit constants
+const (
+	// MaxCommandTimeout is the maximum allowed timeout for commands
+	MaxCommandTimeout = 10 * time.Minute
+	// MaxFileTimeout is the maximum allowed timeout for file operations
+	MaxFileTimeout = 5 * time.Minute
+	// MaxParallelTimeout is the maximum allowed timeout for parallel operations
+	MaxParallelTimeout = 30 * time.Minute
+)
+
 // Context key types for structured logging
 type contextKey string
 
@@ -286,12 +322,12 @@ func ContainsPathTraversal(input string) bool {
 func ValidateCommand(command string) error {
 	// Allowlist of commands that f2b is permitted to execute
 	allowedCommands := map[string]bool{
-		"fail2ban-client": true,
-		"fail2ban-regex":  true,
-		"fail2ban-server": true,
-		"service":         true,
-		"systemctl":       true,
-		"sudo":            true, // Only when used internally
+		Fail2BanClientCommand: true,
+		Fail2BanRegexCommand:  true,
+		Fail2BanServerCommand: true,
+		"service":             true,
+		"systemctl":           true,
+		"sudo":                true, // Only when used internally
 	}
 
 	if command == "" {
@@ -361,7 +397,7 @@ func validateSingleArgument(arg string, _ int) error {
 
 	// For IP arguments, validate IP format
 	if isLikelyIPArgument(arg) {
-		if err := ValidateIP(arg); err != nil {
+		if err := CachedValidateIP(arg); err != nil {
 			return fmt.Errorf("invalid IP format: %w", err)
 		}
 	}
@@ -585,19 +621,52 @@ func (vc *ValidationCache) Size() int {
 	return len(vc.cache)
 }
 
+// MetricsRecorder interface for recording validation metrics
+type MetricsRecorder interface {
+	RecordValidationCacheHit()
+	RecordValidationCacheMiss()
+}
+
 // Global validation caches for frequently used validators
 var (
 	ipValidationCache      = NewValidationCache()
 	jailValidationCache    = NewValidationCache()
 	filterValidationCache  = NewValidationCache()
 	commandValidationCache = NewValidationCache()
+
+	// metricsRecorder is set by the cmd package to avoid circular dependencies
+	metricsRecorder   MetricsRecorder
+	metricsRecorderMu sync.RWMutex
 )
+
+// SetMetricsRecorder sets the metrics recorder for validation cache tracking
+func SetMetricsRecorder(recorder MetricsRecorder) {
+	metricsRecorderMu.Lock()
+	defer metricsRecorderMu.Unlock()
+	metricsRecorder = recorder
+}
+
+// getMetricsRecorder returns the current metrics recorder
+func getMetricsRecorder() MetricsRecorder {
+	metricsRecorderMu.RLock()
+	defer metricsRecorderMu.RUnlock()
+	return metricsRecorder
+}
 
 // CachedValidateIP validates an IP address with caching
 func CachedValidateIP(ip string) error {
 	cacheKey := "ip:" + ip
 	if exists, result := ipValidationCache.Get(cacheKey); exists {
+		// Record cache hit in metrics
+		if recorder := getMetricsRecorder(); recorder != nil {
+			recorder.RecordValidationCacheHit()
+		}
 		return result
+	}
+
+	// Record cache miss in metrics
+	if recorder := getMetricsRecorder(); recorder != nil {
+		recorder.RecordValidationCacheMiss()
 	}
 
 	err := ValidateIP(ip)
@@ -609,7 +678,16 @@ func CachedValidateIP(ip string) error {
 func CachedValidateJail(jail string) error {
 	cacheKey := "jail:" + jail
 	if exists, result := jailValidationCache.Get(cacheKey); exists {
+		// Record cache hit in metrics
+		if recorder := getMetricsRecorder(); recorder != nil {
+			recorder.RecordValidationCacheHit()
+		}
 		return result
+	}
+
+	// Record cache miss in metrics
+	if recorder := getMetricsRecorder(); recorder != nil {
+		recorder.RecordValidationCacheMiss()
 	}
 
 	err := ValidateJail(jail)
@@ -621,7 +699,16 @@ func CachedValidateJail(jail string) error {
 func CachedValidateFilter(filter string) error {
 	cacheKey := "filter:" + filter
 	if exists, result := filterValidationCache.Get(cacheKey); exists {
+		// Record cache hit in metrics
+		if recorder := getMetricsRecorder(); recorder != nil {
+			recorder.RecordValidationCacheHit()
+		}
 		return result
+	}
+
+	// Record cache miss in metrics
+	if recorder := getMetricsRecorder(); recorder != nil {
+		recorder.RecordValidationCacheMiss()
 	}
 
 	err := ValidateFilter(filter)
@@ -633,7 +720,16 @@ func CachedValidateFilter(filter string) error {
 func CachedValidateCommand(command string) error {
 	cacheKey := "command:" + command
 	if exists, result := commandValidationCache.Get(cacheKey); exists {
+		// Record cache hit in metrics
+		if recorder := getMetricsRecorder(); recorder != nil {
+			recorder.RecordValidationCacheHit()
+		}
 		return result
+	}
+
+	// Record cache miss in metrics
+	if recorder := getMetricsRecorder(); recorder != nil {
+		recorder.RecordValidationCacheMiss()
 	}
 
 	err := ValidateCommand(command)

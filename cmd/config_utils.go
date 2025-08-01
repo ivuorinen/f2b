@@ -12,6 +12,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/sirupsen/logrus"
+
+	"github.com/ivuorinen/f2b/fail2ban"
 )
 
 const (
@@ -299,19 +301,19 @@ func (c *Config) ValidateConfig() error {
 	// Validate Timeouts
 	if c.CommandTimeout <= 0 {
 		errors = append(errors, "command timeout must be positive")
-	} else if c.CommandTimeout > 10*time.Minute {
+	} else if c.CommandTimeout > fail2ban.MaxCommandTimeout {
 		errors = append(errors, "command timeout too large (max 10 minutes)")
 	}
 
 	if c.FileTimeout <= 0 {
 		errors = append(errors, "file timeout must be positive")
-	} else if c.FileTimeout > 5*time.Minute {
+	} else if c.FileTimeout > fail2ban.MaxFileTimeout {
 		errors = append(errors, "file timeout too large (max 5 minutes)")
 	}
 
 	if c.ParallelTimeout <= 0 {
 		errors = append(errors, "parallel timeout must be positive")
-	} else if c.ParallelTimeout > 30*time.Minute {
+	} else if c.ParallelTimeout > fail2ban.MaxParallelTimeout {
 		errors = append(errors, "parallel timeout too large (max 30 minutes)")
 	}
 

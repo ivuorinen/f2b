@@ -78,7 +78,7 @@ type OSRunner struct{}
 // CombinedOutput executes a command without sudo.
 func (r *OSRunner) CombinedOutput(name string, args ...string) ([]byte, error) {
 	// Validate command for security
-	if err := ValidateCommand(name); err != nil {
+	if err := CachedValidateCommand(name); err != nil {
 		return nil, fmt.Errorf("command validation failed: %w", err)
 	}
 	// Validate arguments for security
@@ -91,7 +91,7 @@ func (r *OSRunner) CombinedOutput(name string, args ...string) ([]byte, error) {
 // CombinedOutputWithContext executes a command without sudo with context support.
 func (r *OSRunner) CombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error) {
 	// Validate command for security
-	if err := ValidateCommand(name); err != nil {
+	if err := CachedValidateCommand(name); err != nil {
 		return nil, fmt.Errorf("command validation failed: %w", err)
 	}
 	// Validate arguments for security
@@ -104,7 +104,7 @@ func (r *OSRunner) CombinedOutputWithContext(ctx context.Context, name string, a
 // CombinedOutputWithSudo executes a command with sudo if needed.
 func (r *OSRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte, error) {
 	// Validate command for security
-	if err := ValidateCommand(name); err != nil {
+	if err := CachedValidateCommand(name); err != nil {
 		return nil, fmt.Errorf("command validation failed: %w", err)
 	}
 	// Validate arguments for security
@@ -134,7 +134,7 @@ func (r *OSRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte, 
 // CombinedOutputWithSudoContext executes a command with sudo if needed, with context support.
 func (r *OSRunner) CombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error) {
 	// Validate command for security
-	if err := ValidateCommand(name); err != nil {
+	if err := CachedValidateCommand(name); err != nil {
 		return nil, fmt.Errorf("command validation failed: %w", err)
 	}
 	// Validate arguments for security
@@ -415,10 +415,10 @@ func (c *RealClient) StatusJail(j string) (string, error) {
 
 // BanIP bans an IP address in the specified jail and returns the ban status code.
 func (c *RealClient) BanIP(ip, jail string) (int, error) {
-	if err := ValidateIP(ip); err != nil {
+	if err := CachedValidateIP(ip); err != nil {
 		return 0, err
 	}
-	if err := ValidateJail(jail); err != nil {
+	if err := CachedValidateJail(jail); err != nil {
 		return 0, err
 	}
 
@@ -433,10 +433,10 @@ func (c *RealClient) BanIP(ip, jail string) (int, error) {
 		return 0, fmt.Errorf("failed to ban IP %s in jail %s: %w", ip, jail, err)
 	}
 	code := strings.TrimSpace(string(out))
-	if code == "0" {
+	if code == Fail2BanStatusSuccess {
 		return 0, nil
 	}
-	if code == "1" {
+	if code == Fail2BanStatusAlreadyProcessed {
 		return 1, nil
 	}
 	return 0, fmt.Errorf("unexpected output from fail2ban-client: %s", code)
@@ -444,10 +444,10 @@ func (c *RealClient) BanIP(ip, jail string) (int, error) {
 
 // UnbanIP unbans an IP address from the specified jail and returns the unban status code.
 func (c *RealClient) UnbanIP(ip, jail string) (int, error) {
-	if err := ValidateIP(ip); err != nil {
+	if err := CachedValidateIP(ip); err != nil {
 		return 0, err
 	}
-	if err := ValidateJail(jail); err != nil {
+	if err := CachedValidateJail(jail); err != nil {
 		return 0, err
 	}
 
@@ -462,10 +462,10 @@ func (c *RealClient) UnbanIP(ip, jail string) (int, error) {
 		return 0, fmt.Errorf("failed to unban IP %s in jail %s: %w", ip, jail, err)
 	}
 	code := strings.TrimSpace(string(out))
-	if code == "0" {
+	if code == Fail2BanStatusSuccess {
 		return 0, nil
 	}
-	if code == "1" {
+	if code == Fail2BanStatusAlreadyProcessed {
 		return 1, nil
 	}
 	return 0, fmt.Errorf("unexpected output from fail2ban-client: %s", code)
@@ -473,7 +473,7 @@ func (c *RealClient) UnbanIP(ip, jail string) (int, error) {
 
 // BannedIn returns a list of jails where the specified IP address is currently banned.
 func (c *RealClient) BannedIn(ip string) ([]string, error) {
-	if err := ValidateIP(ip); err != nil {
+	if err := CachedValidateIP(ip); err != nil {
 		return nil, err
 	}
 
@@ -649,10 +649,10 @@ func (c *RealClient) StatusJailWithContext(ctx context.Context, jail string) (st
 
 // BanIPWithContext bans an IP address in the specified jail with context support.
 func (c *RealClient) BanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
-	if err := ValidateIP(ip); err != nil {
+	if err := CachedValidateIP(ip); err != nil {
 		return 0, err
 	}
-	if err := ValidateJail(jail); err != nil {
+	if err := CachedValidateJail(jail); err != nil {
 		return 0, err
 	}
 
@@ -665,10 +665,10 @@ func (c *RealClient) BanIPWithContext(ctx context.Context, ip, jail string) (int
 		return 0, fmt.Errorf("failed to ban IP %s in jail %s: %w", ip, jail, err)
 	}
 	code := strings.TrimSpace(string(out))
-	if code == "0" {
+	if code == Fail2BanStatusSuccess {
 		return 0, nil
 	}
-	if code == "1" {
+	if code == Fail2BanStatusAlreadyProcessed {
 		return 1, nil
 	}
 	return 0, fmt.Errorf("unexpected output from fail2ban-client: %s", code)
@@ -676,10 +676,10 @@ func (c *RealClient) BanIPWithContext(ctx context.Context, ip, jail string) (int
 
 // UnbanIPWithContext unbans an IP address from the specified jail with context support.
 func (c *RealClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
-	if err := ValidateIP(ip); err != nil {
+	if err := CachedValidateIP(ip); err != nil {
 		return 0, err
 	}
-	if err := ValidateJail(jail); err != nil {
+	if err := CachedValidateJail(jail); err != nil {
 		return 0, err
 	}
 
@@ -692,10 +692,10 @@ func (c *RealClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (i
 		return 0, fmt.Errorf("failed to unban IP %s in jail %s: %w", ip, jail, err)
 	}
 	code := strings.TrimSpace(string(out))
-	if code == "0" {
+	if code == Fail2BanStatusSuccess {
 		return 0, nil
 	}
-	if code == "1" {
+	if code == Fail2BanStatusAlreadyProcessed {
 		return 1, nil
 	}
 	return 0, fmt.Errorf("unexpected output from fail2ban-client: %s", code)
@@ -703,7 +703,7 @@ func (c *RealClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (i
 
 // BannedInWithContext returns a list of jails where the specified IP address is currently banned with context support.
 func (c *RealClient) BannedInWithContext(ctx context.Context, ip string) ([]string, error) {
-	if err := ValidateIP(ip); err != nil {
+	if err := CachedValidateIP(ip); err != nil {
 		return nil, err
 	}
 
@@ -810,7 +810,7 @@ func (c *RealClient) ListFiltersWithContext(ctx context.Context) ([]string, erro
 
 // validateFilterPath validates filter name and returns secure path and log path
 func (c *RealClient) validateFilterPath(filter string) (string, string, error) {
-	if err := ValidateFilter(filter); err != nil {
+	if err := CachedValidateFilter(filter); err != nil {
 		return "", "", err
 	}
 	path := filepath.Join(c.FilterDir, filter+".conf")
@@ -868,7 +868,7 @@ func (c *RealClient) TestFilterWithContext(ctx context.Context, filter string) (
 	currentRunner := globalRunnerManager.runner
 	globalRunnerManager.mu.RUnlock()
 
-	output, err := currentRunner.CombinedOutputWithSudoContext(ctx, "fail2ban-regex", logPath, cleanPath)
+	output, err := currentRunner.CombinedOutputWithSudoContext(ctx, Fail2BanRegexCommand, logPath, cleanPath)
 	return string(output), err
 }
 
@@ -883,6 +883,6 @@ func (c *RealClient) TestFilter(filter string) (string, error) {
 	currentRunner := globalRunnerManager.runner
 	globalRunnerManager.mu.RUnlock()
 
-	output, err := currentRunner.CombinedOutputWithSudo("fail2ban-regex", logPath, cleanPath)
+	output, err := currentRunner.CombinedOutputWithSudo(Fail2BanRegexCommand, logPath, cleanPath)
 	return string(output), err
 }

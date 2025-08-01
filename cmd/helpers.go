@@ -66,7 +66,7 @@ func ValidateIPArgument(args []string) (string, error) {
 	}
 	ip := args[0]
 	// Validate the IP address
-	if err := fail2ban.ValidateIP(ip); err != nil {
+	if err := fail2ban.CachedValidateIP(ip); err != nil {
 		return "", err
 	}
 	return ip, nil

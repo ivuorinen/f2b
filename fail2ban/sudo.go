@@ -148,7 +148,7 @@ func (m *MockSudoChecker) HasSudoPrivileges() bool {
 // RequiresSudo returns true if the given command typically requires sudo privileges
 func RequiresSudo(command string, args ...string) bool {
 	// Commands that typically require sudo for fail2ban operations
-	if command == "fail2ban-client" {
+	if command == Fail2BanClientCommand {
 		if len(args) > 0 {
 			switch args[0] {
 			case "set", "reload", "restart", "start", "stop":

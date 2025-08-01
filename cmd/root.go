@@ -46,6 +46,10 @@ func Execute(client fail2ban.Client, config Config) error {
 	cfg = config
 	// Ensure cleanup happens even if the program exits unexpectedly
 	defer cleanupResources()
+
+	// Set up metrics recorder for validation caching
+	fail2ban.SetMetricsRecorder(GetGlobalMetrics())
+
 	ctx := context.Background()
 	rootCmd.AddCommand(ListJailsCmd(client, &cfg))
 	rootCmd.AddCommand(StatusCmd(client, &cfg))
@@ -105,7 +109,7 @@ func init() {
 			}
 
 			// #nosec G304 - Path is validated and sanitized above
-			f, err := os.OpenFile(cleanPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
+			f, err := os.OpenFile(cleanPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, fail2ban.DefaultFilePermissions)
 			if err == nil {
 				Logger.SetOutput(f)
 				// Register cleanup for graceful shutdown
