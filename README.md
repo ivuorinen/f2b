@@ -52,6 +52,21 @@ go install github.com/ivuorinen/f2b@latest
 go install github.com/ivuorinen/f2b@v1.2.3
 ```
 
+#### Using Docker (Multi-Architecture)
+
+```bash
+# Pull latest multi-architecture image
+docker pull ghcr.io/ivuorinen/f2b:latest
+
+# Run with mounted fail2ban directory
+docker run --rm -v /etc/fail2ban:/etc/fail2ban:ro ghcr.io/ivuorinen/f2b:latest status all
+
+# Architecture-specific images available:
+# ghcr.io/ivuorinen/f2b:latest-amd64
+# ghcr.io/ivuorinen/f2b:latest-arm64
+# ghcr.io/ivuorinen/f2b:latest-armv7
+```
+
 #### Build from Source
 
 ```bash
@@ -90,11 +105,13 @@ go build -ldflags "-X github.com/ivuorinen/f2b/cmd.version=1.2.3" -o f2b .
 
 ### 📊 **Comprehensive Functionality**
 
-- List jails and view status
-- Ban/unban IPs with automatic sudo
-- Monitor logs with filtering and tailing
-- Test filters and control services
-- Watch logs in real-time
+- List jails and view status with context-aware operations
+- Ban/unban IPs with automatic sudo and timeout handling
+- Monitor logs with filtering, tailing, and real-time watching
+- Test filters and control services with enhanced validation
+- Performance metrics collection and monitoring (`f2b metrics`)
+- Advanced parallel processing for multi-jail operations
+- Validation caching for improved performance
 
 ---
 
@@ -125,16 +142,23 @@ f2b test 192.168.1.100
 # JSON output for scripting
 f2b banned all --format=json
 
-# Log monitoring with filtering
+# Performance metrics and monitoring
+f2b metrics
+f2b metrics --format=json
+
+# Log monitoring with filtering and limits
 f2b logs sshd --limit 20
 f2b logs-watch all 192.168.1.100
 
-# Service management (automatic sudo)
+# Service management (automatic sudo with timeout handling)
 f2b service status
 f2b service restart
 
-# Filter testing
+# Filter testing with enhanced validation
 f2b test-filter sshd
+
+# Parallel operations for multiple jails
+f2b banned all  # Uses parallel processing automatically
 ```
 
 ### Shell Completion
@@ -166,6 +190,9 @@ F2B_LOG_DIR=/var/log                    # Fail2Ban log directory
 F2B_FILTER_DIR=/etc/fail2ban/filter.d   # Filter directory
 F2B_LOG_LEVEL=info                      # Log level (debug,info,warn,error)
 F2B_LOG_FILE=/path/to/f2b.log          # f2b's own log file
+F2B_TEST_SUDO=false                     # Enable sudo checking in tests
+F2B_VERBOSE_TESTS=false                 # Force verbose logging in CI/tests
+ALLOW_DEV_PATHS=false                   # Allow /tmp paths (development only)
 ```
 
 ### Global Flags
@@ -244,6 +271,10 @@ f2b service start|stop|restart         # Control Fail2Ban service
 # Filter Testing
 f2b test-filter <jail>                 # Test Fail2Ban filter configuration
 
+# Performance & Monitoring
+f2b metrics                            # Show performance metrics
+f2b metrics --format=json              # Metrics in JSON format
+
 # Utility Commands
 f2b version                            # Show version information
 f2b completion <shell>                 # Generate shell completion
@@ -265,12 +296,16 @@ For convenience, most commands have short aliases:
 
 f2b is built with modern Go architecture principles, focusing on security, testability, and extensibility:
 
-- **Security-First Design**: Automatic privilege management with comprehensive input validation
+- **Security-First Design**: Automatic privilege management with comprehensive input validation and path
+  traversal protection
+- **Context-Aware Operations**: Timeout handling and cancellation support throughout the application
+- **Performance Monitoring**: Built-in metrics collection with validation caching for improved performance
 - **Dependency Injection**: All components use interfaces for easy testing and extension
-- **Comprehensive Testing**: 85%+ test coverage with extensive mocking
+- **Comprehensive Testing**: 76.8% test coverage (cmd/), 59.3% (fail2ban/) with modern fluent testing framework
 - **Modern CLI**: Built with Cobra framework, supporting JSON output and shell completion
+- **Parallel Processing**: Advanced concurrent operations for multi-jail scenarios
 
-**Technology Stack**: Go 1.20+, Cobra CLI framework, Logrus structured logging
+**Technology Stack**: Go 1.20+, Cobra CLI framework, Logrus structured logging, Docker multi-architecture support
 
 For detailed architecture information, see [docs/architecture.md](docs/architecture.md).
 
@@ -287,8 +322,14 @@ go test ./...
 # Run with coverage
 go test -coverprofile=coverage.out ./...
 
-# Security-focused testing
+# Security-focused testing with enhanced validation
 F2B_TEST_SUDO=true go test ./fail2ban -run TestSudo
+
+# Test modern fluent framework
+go test ./cmd -run TestCommand
+
+# Run parallel processing tests
+go test ./fail2ban -run TestParallel
 ```
 
 For comprehensive testing guidelines, mock patterns, and security testing practices, see
@@ -374,11 +415,12 @@ make release
 
 Each release includes:
 
-- Pre-built binaries for multiple platforms and architectures
+- Pre-built binaries for multiple platforms and architectures (Linux, macOS, Windows, BSD)
+- Multi-architecture Docker images (amd64, arm64, armv7) with manifests
 - SHA256 checksums file
 - Source code archives
-- Docker images at `ghcr.io/ivuorinen/f2b`
-- Linux packages (.deb, .rpm, .apk)
+- Docker images at `ghcr.io/ivuorinen/f2b` with architecture-specific tags
+- Linux packages (.deb, .rpm, .apk) for multiple architectures
 
 ---
 

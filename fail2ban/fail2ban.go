@@ -375,18 +375,6 @@ func (m *MockRunner) CombinedOutputWithSudoContext(ctx context.Context, name str
 	return m.CombinedOutputWithSudo(name, args...)
 }
 
-func runnerCombinedRunWithSudo(name string, args ...string) error {
-	globalRunnerManager.mu.RLock()
-	currentRunner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
-
-	out, err := currentRunner.CombinedOutputWithSudo(name, args...)
-	if err != nil {
-		return fmt.Errorf("%s", bytes.TrimSpace(out))
-	}
-	return nil
-}
-
 func runnerCombinedRunWithSudoContext(ctx context.Context, name string, args ...string) error {
 	globalRunnerManager.mu.RLock()
 	currentRunner := globalRunnerManager.runner
@@ -397,15 +385,6 @@ func runnerCombinedRunWithSudoContext(ctx context.Context, name string, args ...
 		return fmt.Errorf("%s", bytes.TrimSpace(out))
 	}
 	return nil
-}
-
-func (c *RealClient) fetchJails() ([]string, error) {
-	currentRunner := GetRunner()
-	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "status")
-	if err != nil {
-		return nil, err
-	}
-	return ParseJailList(string(out))
 }
 
 func (c *RealClient) fetchJailsWithContext(ctx context.Context) ([]string, error) {

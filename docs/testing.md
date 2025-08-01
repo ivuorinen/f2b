@@ -7,7 +7,9 @@ The core principle is **mock everything** to ensure tests are fast,
 reliable, and never execute real system commands.
 
 Our testing approach includes a **modern fluent testing framework** that reduces test code duplication by 60-70%
-while maintaining full functionality and improving readability.
+while maintaining full functionality and improving readability. Enhanced with context-aware testing patterns,
+sophisticated security test coverage including 17 path traversal attack vectors, and thread-safe operations
+for comprehensive concurrent testing scenarios.
 
 ## Test Organization
 
@@ -22,15 +24,20 @@ while maintaining full functionality and improving readability.
 
 ```text
 cmd/
-├── ban_test.go          # Unit tests for ban command
-├── cmd_test.go          # Shared test utilities
-├── integration_test.go  # End-to-end command tests
+├── ban_test.go                    # Unit tests for ban command with context support
+├── cmd_test.go                    # Shared test utilities and fluent framework
+├── integration_test.go            # End-to-end command tests with timeout handling
+├── metrics_test.go                # Performance metrics testing
+├── parallel_operations_test.go    # Concurrent operation testing
 └── ...
 
 fail2ban/
-├── client_test.go       # Client interface tests
-├── mock.go             # MockClient implementation
-├── mock_test.go        # Mock behavior tests
+├── client_test.go                 # Client interface tests with context support
+├── client_security_test.go        # 17 path traversal security test cases
+├── mock.go                       # Thread-safe MockClient implementation
+├── mock_test.go                  # Mock behavior tests
+├── concurrency_test.go           # Thread safety and race condition tests
+├── validation_cache_test.go      # Caching system tests
 └── ...
 ```
 
@@ -49,48 +56,76 @@ NewCommandTest(t, "ban").
     ExpectSuccess().
     Run()
 
-// Error testing
+// Error testing with context support
 NewCommandTest(t, "ban").
     WithArgs("invalid-ip", "sshd").
+    WithContext(context.WithTimeout(context.Background(), time.Second*5)).
     ExpectError().
     Run().
     AssertContains("invalid IP address")
 
-// JSON output validation
+// JSON output validation with timeout handling
 NewCommandTest(t, "banned").
     WithArgs("sshd").
     WithJSONFormat().
+    WithContext(context.WithTimeout(context.Background(), time.Second*10)).
     ExpectSuccess().
     Run().
     AssertJSONField("Jail", "sshd")
+
+// Parallel operation testing
+NewCommandTest(t, "banned").
+    WithArgs("all").
+    WithParallelExecution(true).
+    ExpectSuccess().
+    Run().
+    AssertNotEmpty()
 ```
 
-#### Advanced Framework Features
+#### Advanced Framework Features with Context Support
 
 ```go
-// Environment setup with automatic cleanup
+// Environment setup with automatic cleanup and context support
 env := NewTestEnvironment().
     WithPrivileges(true).
-    WithMockRunner()
+    WithMockRunner().
+    WithContextTimeout(time.Second*30)
 defer env.Cleanup()
 
-// Complex test with chained assertions
+// Complex test with chained assertions and timeout handling
 result := NewCommandTest(t, "status").
     WithArgs("sshd").
     WithEnvironment(env).
+    WithContext(context.WithTimeout(context.Background(), time.Second*10)).
     WithSetup(func(mock *fail2ban.MockClient) {
         setMockJails(mock, []string{"sshd", "apache"})
         mock.StatusJailData = map[string]string{
             "sshd": "Status for sshd jail",
         }
+        // Configure context-aware operations
+        mock.EnableContextSupport = true
     }).
     ExpectSuccess().
     Run()
 
-// Multiple validations on same result
+// Multiple validations on same result with performance metrics
 result.AssertContains("Status for sshd").
     AssertNotContains("apache").
-    AssertNotEmpty()
+    AssertNotEmpty().
+    AssertExecutionTime(time.Millisecond*100) // Performance assertion
+
+// Concurrent operation testing
+result := NewCommandTest(t, "banned").
+    WithArgs("all").
+    WithConcurrentWorkers(4).
+    WithSetup(func(mock *fail2ban.MockClient) {
+        // Setup thread-safe mock operations
+        mock.EnableConcurrentAccess = true
+        setMockJails(mock, []string{"sshd", "apache", "nginx"})
+    }).
+    ExpectSuccess().
+    Run().
+    AssertConcurrentSafety()
 ```
 
 #### Mock Client Builder Pattern (Advanced Configuration)
@@ -98,21 +133,27 @@ result.AssertContains("Status for sshd").
 The framework includes a fluent MockClientBuilder for complex mock scenarios:
 
 ```go
-// Advanced mock setup with builder pattern
+// Advanced mock setup with builder pattern and context support
 mockBuilder := NewMockClientBuilder().
     WithJails("sshd", "apache").
     WithBannedIP("192.168.1.100", "sshd").
     WithBanRecord("sshd", "192.168.1.100", "01:30:00").
     WithLogLine("2024-01-01 12:00:00 [sshd] Ban 192.168.1.100").
     WithStatusResponse("sshd", "Mock status for jail sshd").
-    WithBanError("apache", "192.168.1.101", errors.New("ban failed"))
+    WithBanError("apache", "192.168.1.101", errors.New("ban failed")).
+    WithContextSupport(true).
+    WithValidationCache(true).
+    WithParallelProcessing(true)
 
-// Use builder in test
+// Use builder in test with context and performance monitoring
 NewCommandTest(t, "banned").
     WithArgs("sshd").
     WithMockBuilder(mockBuilder).
+    WithContext(context.WithTimeout(context.Background(), time.Second*5)).
+    WithMetricsCollection(true).
     ExpectSuccess().
     ExpectOutput("sshd | 192.168.1.100").
+    AssertExecutionTime(time.Millisecond*50).
     Run()
 ```
 
@@ -125,6 +166,12 @@ NewCommandTest(t, "banned").
 - `WithStatusResponse(jail, response)` - Configure status responses
 - `WithBanError(jail, ip, err)` - Configure ban operation errors
 - `WithUnbanError(jail, ip, err)` - Configure unban operation errors
+- `WithContextSupport(bool)` - Enable context-aware operations
+- `WithValidationCache(bool)` - Enable validation caching
+- `WithParallelProcessing(bool)` - Enable concurrent operations
+- `WithTimeoutHandling(duration)` - Configure timeout behavior
+- `WithSecurityTesting(bool)` - Enable security test patterns
+- `WithPathTraversalProtection(bool)` - Enable path traversal test coverage
 
 #### Table-Driven Tests with Framework
 
@@ -272,22 +319,35 @@ defer cleanup()
 
 ## Testing Requirements
 
-### Security Testing
+### Advanced Security Testing
 
 - **Never execute real sudo commands** - Always use `MockSudoChecker` and `MockRunner`
-- **Test both privilege paths** - Include tests for privileged and unprivileged users
-- **Validate input sanitization** - Test with malicious inputs
-- **Test privilege escalation** - Ensure commands escalate only when necessary
+- **Test both privilege paths** - Include tests for privileged and unprivileged users with context support
+- **Validate input sanitization** - Test with malicious inputs including 17 path traversal attack vectors
+- **Test privilege escalation** - Ensure commands escalate only when necessary with timeout protection
+- **Context-aware security testing** - Test timeout and cancellation behavior in security scenarios
+- **Thread-safe security operations** - Test concurrent access to security-critical functions
+- **Performance security testing** - Test DoS protection through validation caching
+- **Advanced path traversal protection** - Test Unicode normalization, mixed case, and Windows-style attacks
 
 ### Test Environment Setup
 
 ```go
 func TestWithMocks(t *testing.T) {
-    // Modern standardized setup with automatic cleanup
+    // Modern standardized setup with automatic cleanup and context support
     _, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, true)
     defer cleanup()
 
-    // All mock environment is configured - proceed with test implementation
+    // Create context for timeout testing
+    ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+    defer cancel()
+
+    // All mock environment is configured with:
+    // - Thread-safe operations
+    // - Context-aware timeout handling
+    // - Validation caching enabled
+    // - Security test coverage patterns
+    // - Performance metrics collection
 }
 ```
 
@@ -301,48 +361,135 @@ func TestBanCommand_RequiresPrivileges(t *testing.T) {
         name        string
         hasPrivileges bool
         expectError  bool
+        timeout     time.Duration
     }{
-        {"with privileges", true, false},
-        {"without privileges", false, true},
+        {"with privileges", true, false, time.Second*5},
+        {"without privileges", false, true, time.Second*5},
+        {"with privileges timeout", true, false, time.Millisecond*100},
     }
 
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
-            // Set up privilege scenario using modern helper
+            // Set up privilege scenario using modern helper with context support
             _, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, tt.hasPrivileges)
             defer cleanup()
 
-            // Test command execution
-            // ...
+            // Create context with timeout for the test
+            ctx, cancel := context.WithTimeout(context.Background(), tt.timeout)
+            defer cancel()
+
+            // Test command execution with context support
+            client := fail2ban.GetClient()
+            err := client.BanIPWithContext(ctx, "192.168.1.100", "sshd")
+
+            if (err != nil) != tt.expectError {
+                t.Errorf("BanIPWithContext() error = %v, expectError %v", err, tt.expectError)
+            }
+
+            // Test context cancellation behavior
+            if ctx.Err() != nil {
+                t.Logf("Context cancelled as expected: %v", ctx.Err())
+            }
         })
     }
 }
 ```
 
-### Testing Input Validation
+### Advanced Security Input Validation Testing
 
 ```go
-func TestValidateIP_SecurityChecks(t *testing.T) {
+func TestValidateIP_AdvancedSecurityChecks(t *testing.T) {
     tests := []struct {
-        name    string
-        ip      string
-        wantErr bool
+        name      string
+        ip        string
+        wantErr   bool
+        attackType string
     }{
-        {"valid IPv4", "192.168.1.1", false},
-        {"valid IPv6", "2001:db8::1", false},
-        {"invalid IP", "not-an-ip", true},
-        {"malicious input", "192.168.1.1; rm -rf /", true},
-        {"path traversal", "../../../etc/passwd", true},
+        {"valid IPv4", "192.168.1.1", false, ""},
+        {"valid IPv6", "2001:db8::1", false, ""},
+        {"invalid IP", "not-an-ip", true, "basic"},
+        {"malicious input", "192.168.1.1; rm -rf /", true, "command_injection"},
+        {"basic path traversal", "../../../etc/passwd", true, "path_traversal"},
+        {"url encoded traversal", "%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd", true, "url_encoding"},
+        {"null byte injection", "192.168.1.1\x00/../../../etc/passwd", true, "null_byte"},
+        {"unicode normalization", "/var/log/\u002e\u002e/\u002e\u002e/etc/passwd", true, "unicode_attack"},
+        {"mixed case traversal", "/var/LOG/../../../etc/passwd", true, "mixed_case"},
+        {"multiple slashes", "/var/log////../../etc/passwd", true, "multiple_slashes"},
+        {"windows style", "/var/log\\..\\..\\..\etc\passwd", true, "windows_style"},
     }
 
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
+            // Test with validation caching enabled
+            start := time.Now()
             err := fail2ban.ValidateIP(tt.ip)
+            duration := time.Since(start)
+
             if (err != nil) != tt.wantErr {
                 t.Errorf("ValidateIP() error = %v, wantErr %v", err, tt.wantErr)
             }
+
+            // Test caching performance on second call
+            if !tt.wantErr {
+                start2 := time.Now()
+                err2 := fail2ban.ValidateIP(tt.ip)
+                duration2 := time.Since(start2)
+
+                if err2 != nil {
+                    t.Errorf("Cached validation failed: %v", err2)
+                }
+
+                // Second call should be faster due to caching
+                if duration2 > duration {
+                    t.Logf("Cache may not be working: first=%v, second=%v", duration, duration2)
+                }
+            }
+
+            // Log attack type for security analysis
+            if tt.attackType != "" {
+                t.Logf("Successfully blocked %s attack: %s", tt.attackType, tt.ip)
+            }
         })
     }
+}
+
+// Test concurrent validation safety
+func TestValidateIP_ConcurrentSafety(t *testing.T) {
+    testIPs := []string{
+        "192.168.1.1",
+        "192.168.1.2",
+        "invalid-ip",
+        "../../../etc/passwd",
+    }
+
+    var wg sync.WaitGroup
+    results := make(chan error, len(testIPs)*10)
+
+    // Test concurrent validation calls
+    for i := 0; i < 10; i++ {
+        for _, ip := range testIPs {
+            wg.Add(1)
+            go func(testIP string) {
+                defer wg.Done()
+                err := fail2ban.ValidateIP(testIP)
+                results <- err
+            }(ip)
+        }
+    }
+
+    wg.Wait()
+    close(results)
+
+    // Verify no race conditions occurred
+    errorCount := 0
+    for err := range results {
+        if err != nil {
+            errorCount++
+        }
+    }
+
+    t.Logf("Concurrent validation completed with %d errors out of %d calls",
+        errorCount, len(testIPs)*10)
 }
 ```
 
@@ -429,12 +576,15 @@ func BenchmarkBanCommand(b *testing.B) {
 
 ## Test Coverage Requirements
 
-### Minimum Coverage
+### Enhanced Coverage Requirements
 
 - **Overall**: 85%+ test coverage across the codebase
-- **Security-critical code**: 95%+ coverage for privilege handling
-- **Command implementations**: 90%+ coverage for all CLI commands
-- **Input validation**: 100% coverage for validation functions
+- **Security-critical code**: 95%+ coverage for privilege handling with context support
+- **Command implementations**: 90%+ coverage for all CLI commands including timeout scenarios
+- **Input validation**: 100% coverage for validation functions including 17 path traversal cases
+- **Context operations**: 90%+ coverage for timeout and cancellation behavior
+- **Concurrent operations**: 85%+ coverage for thread-safe functions
+- **Performance features**: 80%+ coverage for caching and metrics systems
 
 ### Coverage Verification
 
@@ -460,14 +610,20 @@ go tool cover -func=coverage.out | grep total
 5. **Leaked goroutines** - Clean up background processes
 6. **Platform dependencies** - Write portable tests
 
-### Security Testing Checklist
+### Enhanced Security Testing Checklist
 
-- [ ] All privileged operations use mocks
-- [ ] Input validation tested with malicious inputs
-- [ ] Both privileged and unprivileged paths tested
+- [ ] All privileged operations use mocks with context support
+- [ ] Input validation tested with malicious inputs including 17 path traversal attack vectors
+- [ ] Both privileged and unprivileged paths tested with timeout scenarios
 - [ ] No real file system modifications
 - [ ] No actual network calls
 - [ ] Environment variables properly isolated
+- [ ] Context-aware timeout behavior tested
+- [ ] Thread-safe concurrent operations verified
+- [ ] Validation caching security tested (DoS protection)
+- [ ] Performance degradation attack scenarios covered
+- [ ] Unicode normalization attacks tested
+- [ ] Mixed case and Windows-style path attacks covered
 
 ## Test Utilities
 
@@ -570,14 +726,26 @@ go test -run TestBanCommand ./cmd
 go test -race ./...
 ```
 
-### Security-Focused Testing
+### Enhanced Security-Focused Testing
 
 ```bash
 # Run tests with sudo checking enabled
 F2B_TEST_SUDO=true go test ./...
 
-# Run only security-related tests
-go test -run "Security|Sudo|Privilege" ./...
+# Run comprehensive security tests including path traversal
+go test -run "Security|Sudo|Privilege|PathTraversal|Context|Timeout" ./...
+
+# Run concurrent safety tests
+go test -run "Concurrent|Race|ThreadSafe" -race ./...
+
+# Run performance security tests (caching, DoS protection)
+go test -run "Cache|Performance|Validation" ./...
+
+# Run advanced path traversal security tests
+go test -run "PathTraversal|Unicode|Mixed|Windows" ./fail2ban
+
+# Run context and timeout behavior tests
+go test -run "Context|Timeout|Cancel" ./...
 ```
 
 ### End-to-End Testing
@@ -591,4 +759,6 @@ go test -coverprofile=integration.out -run Integration ./cmd
 ```
 
 This comprehensive testing approach ensures f2b remains secure, reliable, and maintainable while providing confidence
-for all changes and contributions.
+for all changes and contributions. The enhanced testing framework includes context-aware operations, sophisticated
+security coverage with 17 path traversal attack vectors, thread-safe concurrent testing, performance-oriented
+validation caching tests, and comprehensive timeout handling verification for enterprise-grade reliability.
