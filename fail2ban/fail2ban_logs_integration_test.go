@@ -325,6 +325,11 @@ func TestIntegrationMemoryUsage(t *testing.T) {
 	cleanup := setupTestLogEnvironment(t, testLogFile)
 	defer cleanup()
 
+	// Record initial memory stats
+	runtime.GC() // Force GC to get baseline
+	var initialStats runtime.MemStats
+	runtime.ReadMemStats(&initialStats)
+
 	// Process log multiple times to check for leaks
 	for i := 0; i < 10; i++ {
 		lines, err := GetLogLines("", "")
@@ -341,8 +346,22 @@ func TestIntegrationMemoryUsage(t *testing.T) {
 		runtime.GC()
 	}
 
-	// If we get here without OOM, memory usage is acceptable
-	t.Log("Memory usage test passed")
+	// Record final memory stats and check for leaks
+	runtime.GC() // Force final GC
+	var finalStats runtime.MemStats
+	runtime.ReadMemStats(&finalStats)
+
+	// Calculate memory growth
+	memoryGrowth := finalStats.Alloc - initialStats.Alloc
+	const memoryThreshold = 10 * 1024 * 1024 // 10MB threshold
+
+	if memoryGrowth > memoryThreshold {
+		t.Errorf("Memory leak detected: memory grew by %d bytes (threshold: %d bytes)",
+			memoryGrowth, memoryThreshold)
+	}
+
+	t.Logf("Memory usage test passed - memory growth: %d bytes (threshold: %d bytes)",
+		memoryGrowth, memoryThreshold)
 }
 
 func BenchmarkLogParsing(b *testing.B) {

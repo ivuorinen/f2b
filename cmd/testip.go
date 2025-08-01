@@ -18,7 +18,7 @@ func TestIPCmd(client interface {
 		// Validate IP argument
 		ip, err := ValidateIPArgument(args)
 		if err != nil {
-			return PrintErrorAndReturn(err)
+			return HandleClientError(err)
 		}
 
 		jails, err := client.BannedInWithContext(ctx, ip)

@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -239,13 +240,13 @@ func (obp *OptimizedBanRecordParser) ParseBanRecordsOptimized(output string, jai
 
 		record, err := obp.ParseBanRecordLineOptimized(line, jail)
 		if err != nil {
-			obp.errorCount++
+			atomic.AddInt64(&obp.errorCount, 1)
 			continue // Skip invalid lines
 		}
 
 		if record != nil {
 			records = append(records, *record)
-			obp.parseCount++
+			atomic.AddInt64(&obp.parseCount, 1)
 		}
 	}
 
@@ -363,7 +364,7 @@ func formatDurationOptimized(sec int64) string {
 
 // GetStats returns parsing statistics
 func (obp *OptimizedBanRecordParser) GetStats() (parseCount, errorCount int64) {
-	return obp.parseCount, obp.errorCount
+	return atomic.LoadInt64(&obp.parseCount), atomic.LoadInt64(&obp.errorCount)
 }
 
 // Global optimized parser instance

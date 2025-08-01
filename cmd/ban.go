@@ -29,7 +29,7 @@ func BanCmd(client fail2ban.Client, config *Config) *cobra.Command {
 				// Validate IP argument
 				ip, err := ValidateIPArgument(args)
 				if err != nil {
-					return PrintErrorAndReturn(err)
+					return HandleClientError(err)
 				}
 
 				// Add IP to context

@@ -77,7 +77,7 @@ dev-deps: ## Install development dependencies
 
 check-deps: ## Check if all development dependencies are installed
 	@echo "Checking development dependencies..."
-	@command -v go >/dev/null 2>&1 || {
+	@command -v go >/dev/null 2>&1 || { \
 		echo "go is not installed"; exit 1; }
 	@command -v goreleaser >/dev/null 2>&1 || {
 		echo "goreleaser is not installed (run: make dev-deps)"; exit 1; }

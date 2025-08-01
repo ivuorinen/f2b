@@ -248,8 +248,6 @@ func RunnerCombinedOutputWithSudoContext(ctx context.Context, name string, args 
 	return output, err
 }
 
-// Client defines Fail2Ban operations
-
 // MockRunner is a simple mock for Runner, used in unit tests.
 type MockRunner struct {
 	mu        sync.Mutex // protects concurrent access to fields

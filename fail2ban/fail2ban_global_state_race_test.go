@@ -16,6 +16,8 @@ func TestLogDir_ConcurrentAccess(t *testing.T) {
 	opsPerGoroutine := 100
 
 	var wg sync.WaitGroup
+	// Error channel for thread-safe error collection
+	errors := make(chan string, numGoroutines*opsPerGoroutine)
 
 	// Start multiple goroutines that set and get log directory
 	for i := 0; i < numGoroutines; i++ {
@@ -32,7 +34,7 @@ func TestLogDir_ConcurrentAccess(t *testing.T) {
 					// Get log directory
 					dir := GetLogDir()
 					if dir == "" {
-						t.Errorf("GetLogDir returned empty string")
+						errors <- "GetLogDir returned empty string"
 					}
 				}
 			}
@@ -40,6 +42,12 @@ func TestLogDir_ConcurrentAccess(t *testing.T) {
 	}
 
 	wg.Wait()
+
+	// Close error channel and process all errors
+	close(errors)
+	for errMsg := range errors {
+		t.Errorf("%s", errMsg)
+	}
 
 	// Verify final state is consistent
 	finalDir := GetLogDir()
@@ -75,6 +83,8 @@ func TestLogDir_ConcurrentSetAndRead(t *testing.T) {
 
 	var wg sync.WaitGroup
 	done := make(chan struct{})
+	// Error channel for thread-safe error collection
+	errors := make(chan string, numReaders*100)
 
 	// Start writer goroutines
 	for i := 0; i < numWriters; i++ {
@@ -108,7 +118,7 @@ func TestLogDir_ConcurrentSetAndRead(t *testing.T) {
 				default:
 					dir := GetLogDir()
 					if dir == "" {
-						t.Errorf("Reader %d got empty log directory", id)
+						errors <- fmt.Sprintf("Reader %d got empty log directory", id)
 					}
 					time.Sleep(time.Millisecond / 2)
 				}
@@ -120,6 +130,12 @@ func TestLogDir_ConcurrentSetAndRead(t *testing.T) {
 	time.Sleep(duration)
 	close(done)
 	wg.Wait()
+
+	// Close error channel and process all errors
+	close(errors)
+	for errMsg := range errors {
+		t.Errorf("%s", errMsg)
+	}
 }
 
 func BenchmarkLogDir_ConcurrentAccess(b *testing.B) {

@@ -26,12 +26,12 @@ func TestFilterCmd(client fail2ban.Client, config *Config) *cobra.Command {
 					return HandleClientError(err)
 				}
 				PrintOutputTo(GetCmdOutput(cmd), "Available filters: "+strings.Join(filters, ", "), config.Format)
-				return PrintErrorAndReturn(fail2ban.ErrFilterRequiredError)
+				return HandleClientError(fail2ban.ErrFilterRequiredError)
 			}
 
 			filterName := args[0]
 			if err := RequireNonEmptyArgument(filterName, "filter name"); err != nil {
-				return PrintErrorAndReturn(err)
+				return HandleClientError(err)
 			}
 
 			out, err := client.TestFilterWithContext(ctx, filterName)

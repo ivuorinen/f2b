@@ -319,18 +319,28 @@ func (ctb *CommandTestBuilder) executeCommand() (string, error) {
 func (ctb *CommandTestBuilder) executeServiceCommand(cmd *cobra.Command) (string, error) {
 	// Capture os.Stdout since service command uses PrintOutput
 	oldStdout := os.Stdout
-	stdoutR, stdoutW, _ := os.Pipe()
+	stdoutR, stdoutW, err := os.Pipe()
+	if err != nil {
+		return "", fmt.Errorf("failed to create stdout pipe: %w", err)
+	}
 	os.Stdout = stdoutW
 
 	// Also capture os.Stderr since PrintError uses it
 	oldStderr := os.Stderr
-	stderrR, stderrW, _ := os.Pipe()
+	stderrR, stderrW, err := os.Pipe()
+	if err != nil {
+		// Clean up stdout pipe before returning error
+		_ = stdoutR.Close()
+		_ = stdoutW.Close()
+		os.Stdout = oldStdout
+		return "", fmt.Errorf("failed to create stderr pipe: %w", err)
+	}
 	os.Stderr = stderrW
 
 	var cmdErrBuf bytes.Buffer
 	cmd.SetErr(&cmdErrBuf)
 	cmd.SetArgs(ctb.args)
-	err := cmd.Execute()
+	err = cmd.Execute()
 
 	// Close writers and restore
 	if closeErr := stdoutW.Close(); closeErr != nil {

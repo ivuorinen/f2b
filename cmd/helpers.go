@@ -144,12 +144,6 @@ func HandleClientError(err error) error {
 	return nil
 }
 
-// PrintErrorAndReturn prints an error and returns it
-func PrintErrorAndReturn(err error) error {
-	PrintError(err)
-	return err
-}
-
 // Output helpers
 
 // OutputResults outputs results in the specified format

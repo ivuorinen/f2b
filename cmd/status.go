@@ -66,7 +66,7 @@ func StatusCmd(client fail2ban.Client, config *Config) *cobra.Command {
 			}
 
 			if !jailExists {
-				return PrintErrorAndReturn(fail2ban.NewJailNotFoundError(target))
+				return HandleClientError(fail2ban.NewJailNotFoundError(target))
 			}
 
 			out, err := client.StatusJailWithContext(ctx, target)

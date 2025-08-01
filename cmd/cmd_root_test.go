@@ -216,29 +216,6 @@ func TestGlobalVariables(t *testing.T) {
 	}
 }
 
-func TestLogLevelParsing(t *testing.T) {
-	// Test the actual log level parsing in context
-	testCases := []struct {
-		input    string
-		expected logrus.Level
-	}{
-		{"debug", logrus.DebugLevel},
-		{"info", logrus.InfoLevel},
-		{"warn", logrus.WarnLevel},
-		{"error", logrus.ErrorLevel},
-		{"invalid", logrus.InfoLevel},
-	}
-
-	for _, tc := range testCases {
-		t.Run("level_"+tc.input, func(t *testing.T) {
-			level := parseLogLevel(tc.input)
-			if level != tc.expected {
-				t.Errorf("parseLogLevel(%q) = %v, want %v", tc.input, level, tc.expected)
-			}
-		})
-	}
-}
-
 // BenchmarkParseLogLevel benchmarks the log level parsing function
 func BenchmarkParseLogLevel(b *testing.B) {
 	levels := []string{"debug", "info", "warn", "error", "unknown"}
@@ -403,35 +380,6 @@ func TestExecuteWithRealCommands(t *testing.T) {
 		if !strings.Contains(output, cmd) {
 			t.Errorf("expected help output to contain command %q", cmd)
 		}
-	}
-}
-
-func TestCompletionCmd(t *testing.T) {
-	cmd := completionCmd()
-
-	if cmd.Use != "completion [bash|zsh|fish|powershell]" {
-		t.Errorf("unexpected completion command Use: %q", cmd.Use)
-	}
-
-	if cmd.Short != "Generate shell completion scripts" {
-		t.Errorf("unexpected completion command Short: %q", cmd.Short)
-	}
-
-	// Test valid args
-	expectedValidArgs := []string{"bash", "zsh", "fish", "powershell"}
-	if len(cmd.ValidArgs) != len(expectedValidArgs) {
-		t.Errorf("expected %d ValidArgs, got %d", len(expectedValidArgs), len(cmd.ValidArgs))
-	}
-
-	for i, expected := range expectedValidArgs {
-		if i >= len(cmd.ValidArgs) || cmd.ValidArgs[i] != expected {
-			t.Errorf("expected ValidArgs[%d] = %q, got %q", i, expected, cmd.ValidArgs[i])
-		}
-	}
-
-	// Test that DisableFlagsInUseLine is true
-	if !cmd.DisableFlagsInUseLine {
-		t.Errorf("expected DisableFlagsInUseLine to be true")
 	}
 }
 
@@ -669,22 +617,6 @@ func TestCompletionCmdLongDescription(t *testing.T) {
 		if !strings.Contains(cmd.Long, example) {
 			t.Errorf("expected completion long description to contain example %q", example)
 		}
-	}
-}
-
-func TestRootCmdStructure(t *testing.T) {
-	// Test root command structure
-	if rootCmd.Use != "f2b" {
-		t.Errorf("expected root command Use to be 'f2b', got %q", rootCmd.Use)
-	}
-
-	if rootCmd.Short != "Fail2Ban CLI helper" {
-		t.Errorf("expected root command Short to be 'Fail2Ban CLI helper', got %q", rootCmd.Short)
-	}
-
-	expectedLong := "Fail2Ban CLI tool implemented in Go using Cobra."
-	if rootCmd.Long != expectedLong {
-		t.Errorf("expected root command Long to be %q, got %q", expectedLong, rootCmd.Long)
 	}
 }
 

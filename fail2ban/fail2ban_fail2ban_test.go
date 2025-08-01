@@ -9,8 +9,6 @@ import (
 	"time"
 )
 
-// NewMockRunner creates a new MockRunner for testing
-
 func TestNewClient(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -523,17 +521,32 @@ func TestListFilters(t *testing.T) {
 	mock.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
 	SetRunner(mock)
 
-	client, err := NewClient(DefaultLogDir, DefaultFilterDir)
+	// Create client with the temporary filter directory
+	client, err := NewClient(DefaultLogDir, filterDir)
 	AssertError(t, err, false, "create client")
 
-	// We can't easily test ListFilters as it reads from /etc/fail2ban/filter.d
-	// This would require more complex mocking or dependency injection
-	// For now, we'll test the basic functionality
-	_, err = client.ListFilters()
-	// We expect this to fail in test environment since /etc/fail2ban/filter.d might not exist
-	// but we're testing that the method doesn't panic
-	if err != nil {
-		t.Logf("ListFilters failed as expected in test environment: %v", err)
+	// Test ListFilters with the temporary directory
+	filters, err := client.ListFilters()
+	AssertError(t, err, false, "list filters")
+
+	// Should find only .conf files (sshd, apache, nginx - not readme.txt)
+	expectedFilters := []string{"apache", "nginx", "sshd"}
+	if len(filters) != len(expectedFilters) {
+		t.Errorf("Expected %d filters, got %d: %v", len(expectedFilters), len(filters), filters)
+	}
+
+	// Check that all expected filters are present (order may vary)
+	for _, expected := range expectedFilters {
+		found := false
+		for _, actual := range filters {
+			if actual == expected {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("Expected filter %q not found in %v", expected, filters)
+		}
 	}
 }
 

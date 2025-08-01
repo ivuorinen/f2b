@@ -159,20 +159,13 @@ func TestFrameworkPerformance(t *testing.T) {
 func TestFrameworkEdgeCases(t *testing.T) {
 	// Test empty output validation
 	t.Run("empty_output", func(t *testing.T) {
-		// This test would normally fail, but demonstrates AssertEmpty
-		defer func() {
-			if r := recover(); r != nil {
-				// Expected to fail - just testing the assertion exists
-				t.Logf("Expected test failure caught: %v", r)
-			}
-		}()
-
+		// Test framework with empty jail list setup
 		NewCommandTest(t, "list-jails").
 			WithSetup(func(mock *fail2ban.MockClient) {
 				setMockJails(mock, []string{}) // No jails
 			}).
 			ExpectSuccess().
-			Run() // Don't call AssertEmpty as it would fail
+			Run()
 	})
 
 	// Test JSON parsing edge cases
