@@ -295,6 +295,8 @@ func (ctb *CommandTestBuilder) executeCommand() (string, error) {
 		cmd = LogsCmd(ctb.mockClient, ctb.config)
 	case "service":
 		cmd = ServiceCmd(ctb.config)
+	case "version":
+		cmd = VersionCmd(ctb.config)
 	default:
 		return "", fmt.Errorf("unknown command: %s", ctb.command)
 	}

@@ -554,9 +554,13 @@ func TestListFilters(t *testing.T) {
 }
 
 func TestTestFilter(t *testing.T) {
+	// Set ALLOW_DEV_PATHS for test to use temp directory
+	t.Setenv("ALLOW_DEV_PATHS", "true")
+
 	// Create a temporary test filter file
 	tempDir := t.TempDir()
-	filterPath := filepath.Join(tempDir, "test-filter.conf")
+	filterName := "test-filter"
+	filterPath := filepath.Join(tempDir, filterName+".conf")
 	filterContent := `[Definition]
 failregex = Failed password for .* from <HOST>
 logpath = /var/log/auth.log`
@@ -573,16 +577,25 @@ logpath = /var/log/auth.log`
 	// Configure specific responses for this test
 	mock := GetRunner().(*MockRunner)
 	expectedOutput := "Running tests on fail2ban-regex\nResults: 5 matches found"
+	mock.SetResponse("fail2ban-regex /var/log/auth.log "+filterPath, []byte(expectedOutput))
 	mock.SetResponse("sudo fail2ban-regex /var/log/auth.log "+filterPath, []byte(expectedOutput))
 
-	client, err := NewClient(DefaultLogDir, DefaultFilterDir)
+	// Create client with the temp directory as the filter directory
+	client, err := NewClient(DefaultLogDir, tempDir)
 	AssertError(t, err, false, "create client")
 
-	// This test will fail in normal circumstances as it tries to read from /etc/fail2ban/filter.d
-	// but we're testing the method structure
+	// Test the actual created filter
+	output, err := client.TestFilter(filterName)
+	AssertError(t, err, false, "test filter should succeed")
+
+	if output != expectedOutput {
+		t.Errorf("expected output %q, got %q", expectedOutput, output)
+	}
+
+	// Also test that a nonexistent filter fails appropriately
 	_, err = client.TestFilter("nonexistent")
-	if err != nil {
-		t.Logf("TestFilter failed as expected for nonexistent filter: %v", err)
+	if err == nil {
+		t.Error("TestFilter should fail for nonexistent filter")
 	}
 }
 

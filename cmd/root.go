@@ -175,6 +175,8 @@ func parseLogLevel(level string) logrus.Level {
 	case "panic":
 		return logrus.PanicLevel
 	default:
+		// Log warning about invalid log level before falling back to default
+		Logger.WithField("invalid_level", level).Warn("Invalid log level specified, falling back to 'info'")
 		return logrus.InfoLevel
 	}
 }

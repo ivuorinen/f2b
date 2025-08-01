@@ -440,17 +440,12 @@ func TestTestFilterCommand(t *testing.T) {
 }
 
 func TestVersionCommand(t *testing.T) {
-	// Version command testing - manual approach for version command
-	mock := NewMockClient()
-
-	output, err := executeCommand(mock, "version")
-
-	AssertError(t, err, false, "version command")
-
 	wantOutput := fmt.Sprintf("f2b version %s\n", Version)
-	if output != wantOutput {
-		t.Errorf("expected output %q, got %q", wantOutput, output)
-	}
+
+	NewCommandTest(t, "version").
+		ExpectSuccess().
+		ExpectExactOutput(wantOutput).
+		Run()
 }
 
 func TestCommandErrorHandling(t *testing.T) {

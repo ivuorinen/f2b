@@ -11,8 +11,6 @@ import (
 type ContextKey string
 
 const (
-	// LoggerContextKey is the key for logger in context
-	LoggerContextKey ContextKey = "logger"
 	// RequestIDKey is the key for request ID in context
 	RequestIDKey ContextKey = "request_id"
 	// OperationKey is the key for operation name in context
@@ -140,7 +138,9 @@ func (cl *ContextualLogger) LogOperation(ctx context.Context, operation string, 
 	// Record metrics based on operation type
 	success := err == nil
 	if command := ctx.Value(CommandKey); command != nil {
-		metrics.RecordCommandExecution(command.(string), duration, success)
+		if cmdStr, ok := command.(string); ok {
+			metrics.RecordCommandExecution(cmdStr, duration, success)
+		}
 	}
 
 	if err != nil {
