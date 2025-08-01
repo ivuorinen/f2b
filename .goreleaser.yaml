@@ -208,7 +208,6 @@ archives:
     # Optimize compression
     wrap_in_directory: true
 
-
 # Checksum configuration
 checksum:
   name_template: "checksums.txt"
