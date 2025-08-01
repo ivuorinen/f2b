@@ -1,5 +1,4 @@
 *.log
-!*/testdata/**/*.log
 /f2b*
 coverage.*
 .env               # real secrets
