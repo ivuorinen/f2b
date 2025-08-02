@@ -1,6 +1,6 @@
-# yaml-language-server: $schema=https://raw.githubusercontent.com/mgechev/revive/master/assets/config-schema.json
 # Revive configuration for f2b project
 # https://revive.run/
+# Configuration reference: https://github.com/mgechev/revive#configuration
 
 ignoreGeneratedHeader = false
 severity = "warning"

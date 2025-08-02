@@ -254,7 +254,7 @@ func validatePathWithSecurity(path string, config PathSecurityConfig) (string, e
 	path = normalizeUnicode(path)
 
 	// Basic path traversal detection (before cleaning)
-	if containsPathTraversal(path) {
+	if hasPathTraversal(path) {
 		return "", fmt.Errorf("path contains path traversal patterns")
 	}
 
@@ -265,7 +265,7 @@ func validatePathWithSecurity(path string, config PathSecurityConfig) (string, e
 	}
 
 	// Additional check after cleaning (double-check for sophisticated attacks)
-	if containsPathTraversal(cleanPath) {
+	if hasPathTraversal(cleanPath) {
 		return "", fmt.Errorf("path contains path traversal patterns after normalization")
 	}
 
@@ -288,8 +288,8 @@ func validatePathWithSecurity(path string, config PathSecurityConfig) (string, e
 	return finalPath, nil
 }
 
-// containsPathTraversal detects various path traversal patterns
-func containsPathTraversal(path string) bool {
+// hasPathTraversal detects various path traversal patterns
+func hasPathTraversal(path string) bool {
 	// Check for various path traversal patterns
 	dangerousPatterns := []string{
 		"..",

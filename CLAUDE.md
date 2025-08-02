@@ -17,7 +17,7 @@ go test ./... && go test -coverprofile=coverage.out ./...
 go install github.com/ivuorinen/f2b@latest
 
 # Lint & Format
-pre-commit run --all-files  # Run all checks
+pre-commit run --all-files  # Run all checks (includes link checking)
 pre-commit install          # One-time setup
 
 # Release (Multi-Architecture)
@@ -135,10 +135,19 @@ Key security principles:
 
 For detailed security guidelines, see [docs/security.md](docs/security.md) and [AGENTS.md](AGENTS.md).
 
+## Documentation Quality
+
+**Link Checking:**
+
+- All markdown files are automatically checked for broken links via `markdown-link-check`
+- Configuration in `.markdown-link-check.json` handles rate limiting and ignores localhost/dev URLs
+- GitHub URLs may be rate-limited during CI - configuration includes appropriate ignore patterns
+- Always verify external links work before adding to documentation
+
 ## Output & Shortcuts
 
 - `--format=plain|json`: Output formats
-- "lint" = "Lint all files and fix all errors"
+- "lint" = "Lint all files and fix all errors (includes link checking)"
 
 ## Development Principles
 

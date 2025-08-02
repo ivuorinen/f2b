@@ -191,7 +191,7 @@ func TestCompletionCmdStructure(t *testing.T) {
 		}
 	}
 
-	if cmd.DisableFlagsInUseLine != true {
+	if !cmd.DisableFlagsInUseLine {
 		t.Errorf("expected DisableFlagsInUseLine to be true")
 	}
 }

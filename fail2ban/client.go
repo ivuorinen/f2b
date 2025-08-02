@@ -86,11 +86,10 @@ func NewClientWithContext(ctx context.Context, logDir, filterDir string) (*RealC
 	path, err := exec.LookPath(Fail2BanClientCommand)
 	if err != nil {
 		// Check if we have a mock runner set up
-		if _, ok := GetRunner().(*MockRunner); ok {
-			path = Fail2BanClientCommand // Use mock path
-		} else {
+		if _, ok := GetRunner().(*MockRunner); !ok {
 			return nil, fmt.Errorf("%s not found in PATH", Fail2BanClientCommand)
 		}
+		path = Fail2BanClientCommand // Use mock path
 	}
 	if logDir == "" {
 		logDir = DefaultLogDir

@@ -262,26 +262,32 @@ func BenchmarkServiceCmd(b *testing.B) {
 		if err != nil {
 			b.Fatalf("failed to create pipe: %v", err)
 		}
-		defer func() {
-			_ = w.Close()
-			_ = r.Close()
-			os.Stdout = oldStdout
-		}()
+
 		os.Stdout = w
 
 		cmd.SetArgs([]string{"status"})
 		if err := cmd.Execute(); err != nil {
+			_ = w.Close()
+			_ = r.Close()
+			os.Stdout = oldStdout
 			b.Fatalf("execute failed: %v", err)
 		}
 
 		if err := w.Close(); err != nil {
+			_ = r.Close()
+			os.Stdout = oldStdout
 			b.Fatalf("failed to close writer: %v", err)
 		}
-		os.Stdout = oldStdout
 
 		var stdoutBuf bytes.Buffer
 		if _, err := stdoutBuf.ReadFrom(r); err != nil {
+			_ = r.Close()
+			os.Stdout = oldStdout
 			b.Fatalf("failed to read output: %v", err)
 		}
+
+		// Clean up at end of iteration
+		_ = r.Close()
+		os.Stdout = oldStdout
 	}
 }

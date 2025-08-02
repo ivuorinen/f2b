@@ -92,7 +92,7 @@ For comprehensive security guidelines, testing patterns, and examples, see:
 
 - All contributions require review and approval before merging.
 - Security-related changes require extra scrutiny and testing.
-- If you are an AI/LLM agent, please see [AGENTS.md](.github/AGENTS.md) for additional guidelines.
+- If you are an AI/LLM agent, please see [AGENTS.md](AGENTS.md) for additional guidelines.
 - By contributing, you agree that your contributions will be licensed under the MIT License.
 
 ---

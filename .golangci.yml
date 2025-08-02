@@ -1,5 +1,5 @@
 ---
-# yaml-language-server: $schema=https://json.schemastore.org/golangci-lint.json
+# yaml-language-server: $schema=https://golangci-lint.run/jsonschema/golangci.v2.jsonschema.json
 # golangci-lint configuration for f2b project
 # https://golangci-lint.run/usage/configuration/
 

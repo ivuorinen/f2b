@@ -38,6 +38,10 @@ dev-deps: ## Install development dependencies
 		echo "Installing markdownlint-cli2..."; \
 		npm install -g markdownlint-cli2; \
 	}
+	@command -v markdown-link-check >/dev/null 2>&1 || { \
+		echo "Installing markdown-link-check..."; \
+		npm install -g markdown-link-check; \
+	}
 	@command -v yamlfmt >/dev/null 2>&1 || { \
 		echo "Installing yamlfmt..."; \
 		go install github.com/google/yamlfmt/cmd/yamlfmt@latest; \
@@ -85,6 +89,8 @@ check-deps: ## Check if all development dependencies are installed
 		echo "golangci-lint is not installed (run: make dev-deps)"; exit 1; }
 	@command -v markdownlint-cli2 >/dev/null 2>&1 || {
 		echo "markdownlint-cli2 is not installed (run: make dev-deps)"; exit 1; }
+	@command -v markdown-link-check >/dev/null 2>&1 || {
+		echo "markdown-link-check is not installed (run: make dev-deps)"; exit 1; }
 	@command -v goimports >/dev/null 2>&1 || {
 		echo "goimports is not installed (run: make dev-deps)"; exit 1; }
 	@command -v editorconfig-checker >/dev/null 2>&1 || {

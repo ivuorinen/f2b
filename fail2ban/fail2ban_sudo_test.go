@@ -400,16 +400,16 @@ func TestGetCurrentUserInfoWithMockChecker(t *testing.T) {
 	info := GetCurrentUserInfo()
 
 	// Verify mock values are reflected
-	if info["is_root"] != true {
+	if !info["is_root"].(bool) {
 		t.Errorf("expected is_root to be true, got %v", info["is_root"])
 	}
-	if info["in_sudo_group"] != true {
+	if !info["in_sudo_group"].(bool) {
 		t.Errorf("expected in_sudo_group to be true, got %v", info["in_sudo_group"])
 	}
-	if info["can_use_sudo"] != true {
+	if !info["can_use_sudo"].(bool) {
 		t.Errorf("expected can_use_sudo to be true, got %v", info["can_use_sudo"])
 	}
-	if info["has_sudo_privileges"] != true {
+	if !info["has_sudo_privileges"].(bool) {
 		t.Errorf("expected has_sudo_privileges to be true, got %v", info["has_sudo_privileges"])
 	}
 }
