@@ -16,33 +16,65 @@ before:
 
 # Build configuration
 builds:
-  # Linux builds with static linking for better portability
-  - id: f2b-linux
+  # Linux builds with static linking for validated architectures
+  - id: f2b-linux-static
     main: .
     binary: f2b
 
     # Custom ldflags for optimized builds with static linking
     ldflags:
       - -s -w # Strip debug info and symbol table
-      - -X github.com/ivuorinen/f2b/cmd.version={{.Version}}
+      - -X github.com/ivuorinen/f2b/cmd.Version={{.Version}}
       - -X github.com/ivuorinen/f2b/cmd.commit={{.Commit}}
       - -X github.com/ivuorinen/f2b/cmd.date={{.Date}}
       - -X github.com/ivuorinen/f2b/cmd.builtBy=goreleaser
-      - -extldflags=-static # Static linking for Linux
+      - -extldflags=-static # Static linking for validated architectures
 
-    # Linux platforms
+    # Linux platforms validated for static linking
     goos:
       - linux
 
     goarch:
       - amd64
       - arm64
+
+    # Set environment variables
+    env:
+      - CGO_ENABLED=0
+
+    # Custom build tags for optimized static builds
+    tags:
+      - netgo # Pure Go network stack
+      - osusergo # Pure Go user/group lookups
+
+    # Build flags for optimization
+    flags:
+      - -trimpath # Remove file system paths from binaries
+
+  # Linux builds without static linking for other architectures
+  - id: f2b-linux-dynamic
+    main: .
+    binary: f2b
+
+    # Custom ldflags for optimized builds without static linking
+    ldflags:
+      - -s -w # Strip debug info and symbol table
+      - -X github.com/ivuorinen/f2b/cmd.Version={{.Version}}
+      - -X github.com/ivuorinen/f2b/cmd.commit={{.Commit}}
+      - -X github.com/ivuorinen/f2b/cmd.date={{.Date}}
+      - -X github.com/ivuorinen/f2b/cmd.builtBy=goreleaser
+
+    # Linux platforms that may have issues with static linking
+    goos:
+      - linux
+
+    goarch:
       - arm
       - "386"
-      - ppc64le # Added PowerPC 64-bit LE support
-      - s390x # Added IBM Z support
-      - mips64 # Added MIPS 64-bit support
-      - mips64le # Added MIPS 64-bit LE support
+      - ppc64le # PowerPC 64-bit LE support
+      - s390x # IBM Z support
+      - mips64 # MIPS 64-bit support
+      - mips64le # MIPS 64-bit LE support
 
     goarm:
       - "6"
@@ -52,7 +84,7 @@ builds:
     env:
       - CGO_ENABLED=0
 
-    # Custom build tags for optimized static builds
+    # Custom build tags
     tags:
       - netgo # Pure Go network stack
       - osusergo # Pure Go user/group lookups
@@ -69,7 +101,7 @@ builds:
     # Custom ldflags for optimized builds without static linking
     ldflags:
       - -s -w # Strip debug info and symbol table
-      - -X github.com/ivuorinen/f2b/cmd.version={{.Version}}
+      - -X github.com/ivuorinen/f2b/cmd.Version={{.Version}}
       - -X github.com/ivuorinen/f2b/cmd.commit={{.Commit}}
       - -X github.com/ivuorinen/f2b/cmd.date={{.Date}}
       - -X github.com/ivuorinen/f2b/cmd.builtBy=goreleaser
@@ -103,7 +135,7 @@ builds:
     # Custom ldflags for optimized builds without static linking
     ldflags:
       - -s -w # Strip debug info and symbol table
-      - -X github.com/ivuorinen/f2b/cmd.version={{.Version}}
+      - -X github.com/ivuorinen/f2b/cmd.Version={{.Version}}
       - -X github.com/ivuorinen/f2b/cmd.commit={{.Commit}}
       - -X github.com/ivuorinen/f2b/cmd.date={{.Date}}
       - -X github.com/ivuorinen/f2b/cmd.builtBy=goreleaser
@@ -138,7 +170,7 @@ builds:
     # Custom ldflags for optimized builds without static linking
     ldflags:
       - -s -w # Strip debug info and symbol table
-      - -X github.com/ivuorinen/f2b/cmd.version={{.Version}}
+      - -X github.com/ivuorinen/f2b/cmd.Version={{.Version}}
       - -X github.com/ivuorinen/f2b/cmd.commit={{.Commit}}
       - -X github.com/ivuorinen/f2b/cmd.date={{.Date}}
       - -X github.com/ivuorinen/f2b/cmd.builtBy=goreleaser

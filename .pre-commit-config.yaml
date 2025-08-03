@@ -82,3 +82,10 @@ repos:
         entry: editorconfig-checker
         language: system
         files: .
+
+      - id: v8r
+        name: v8r - JSON Schema Validator
+        entry: v8r
+        language: system
+        files: \.json$
+        pass_filenames: true

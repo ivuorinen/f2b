@@ -142,14 +142,11 @@ func ValidateFilter(filter string) error {
         return fmt.Errorf("filter name cannot be empty")
     }
 
-    // Advanced path traversal protection with 17 test cases covering:
-    // - Basic directory traversal (../, ..\)
-    // - URL encoding (%2e%2e%2f, %2e%2e%5c)
+    // Path traversal protection checking for:
+    // - Basic directory traversal (..)
+    // - URL encoding (%2e%2e, %2f, %5c)
     // - Null byte injection (\x00)
-    // - Unicode normalization attacks (\u002e\u002e)
-    // - Mixed case traversal (/var/LOG/../../../etc/passwd)
-    // - Multiple slashes (/var/log////../../etc/passwd)
-    // - Windows-style paths on Unix (/var/log\..\..\..\etc\passwd)
+    // - Unicode normalization attacks (\u002e\u002e, \u002f, \u005c)
 
     if containsPathTraversal(filter) {
         return fmt.Errorf("invalid filter name contains path traversal: %s", filter)
@@ -161,7 +158,7 @@ func ValidateFilter(filter string) error {
 func containsPathTraversal(path string) bool {
     // Comprehensive path traversal detection
     dangerous := []string{
-        "..", "/", "\\", "\x00",
+        "..", "\x00",
         "%2e%2e", "%2f", "%5c",
         "\u002e\u002e", "\u002f", "\u005c",
     }

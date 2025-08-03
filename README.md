@@ -76,7 +76,7 @@ cd f2b
 make build
 
 # Or with custom version
-go build -ldflags "-X github.com/ivuorinen/f2b/cmd.version=1.2.3" -o f2b .
+go build -ldflags "-X github.com/ivuorinen/f2b/cmd.Version=1.2.3" -o f2b .
 ```
 
 ---

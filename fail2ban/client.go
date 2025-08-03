@@ -135,7 +135,7 @@ func NewClientWithContext(ctx context.Context, logDir, filterDir string) (*RealC
 		return nil, fmt.Errorf("fail2ban >=0.11.0 required, got %s", out)
 	}
 	// Ping - use sudo if needed with context
-	if err := runnerCombinedRunWithSudoContext(ctx, path, "ping"); err != nil {
+	if _, err := RunnerCombinedOutputWithSudoContext(ctx, path, "ping"); err != nil {
 		return nil, errors.New("fail2ban service not running")
 	}
 	jails, err := rc.fetchJailsWithContext(ctx)

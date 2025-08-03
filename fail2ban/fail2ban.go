@@ -3,7 +3,6 @@
 package fail2ban
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -373,18 +372,6 @@ func (m *MockRunner) CombinedOutputWithSudoContext(ctx context.Context, name str
 
 	// Delegate to the non-context version for simplicity in tests
 	return m.CombinedOutputWithSudo(name, args...)
-}
-
-func runnerCombinedRunWithSudoContext(ctx context.Context, name string, args ...string) error {
-	globalRunnerManager.mu.RLock()
-	currentRunner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
-
-	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, name, args...)
-	if err != nil {
-		return fmt.Errorf("%s", bytes.TrimSpace(out))
-	}
-	return nil
 }
 
 func (c *RealClient) fetchJailsWithContext(ctx context.Context) ([]string, error) {

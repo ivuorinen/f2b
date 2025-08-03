@@ -1,5 +1,4 @@
 {
-  "$schema": "https://raw.githubusercontent.com/tcort/markdown-link-check/master/src/schema.json",
   "timeout": "10s",
   "retryOn429": true,
   "retryCount": 3,
@@ -22,16 +21,13 @@
       "pattern": "^file://"
     },
     {
-      "pattern": "^\\./.*\\.md$",
-      "comment": "Skip relative markdown links - they are checked by other means"
+      "pattern": "^\\./.*\\.md$"
     },
     {
-      "pattern": "^https://github\\.com/ivuorinen/f2b/(releases|issues).*$",
-      "comment": "Skip specific GitHub repository URLs that may be rate limited"
+      "pattern": "^https://github\\.com/ivuorinen/f2b/(releases|issues).*$"
     },
     {
-      "pattern": "^https://github\\.com/ivuorinen$",
-      "comment": "Skip GitHub profile URL that may be rate limited"
+      "pattern": "^https://github\\.com/ivuorinen$"
     }
   ],
   "replacementPatterns": [
