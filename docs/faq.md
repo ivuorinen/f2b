@@ -134,6 +134,43 @@ f2b --log-file=/tmp/f2b.log ban 192.168.1.100
 F2B_LOG_FILE=/tmp/f2b.log f2b ban 192.168.1.100
 ```
 
+### How do I monitor f2b performance?
+
+f2b includes comprehensive performance monitoring:
+
+```bash
+# View performance metrics
+f2b metrics
+
+# Get detailed metrics in JSON format
+f2b metrics --format=json
+
+# Monitor with real-time log watching
+f2b logs-watch all 192.168.1.100
+```
+
+The metrics command shows:
+
+- Operation counts and timing
+- Cache hit/miss ratios
+- Memory usage and optimization
+- System performance statistics
+
+### How do I configure timeouts?
+
+f2b supports configurable timeouts for all operations:
+
+```bash
+# Environment variables
+F2B_COMMAND_TIMEOUT=30s     # Individual command timeout
+F2B_FILE_TIMEOUT=10s        # File operation timeout
+F2B_PARALLEL_TIMEOUT=60s    # Parallel operation timeout
+
+# Command-line flags
+f2b --command-timeout=45s ban 192.168.1.100
+f2b --parallel-timeout=120s banned all
+```
+
 ---
 
 ## Troubleshooting

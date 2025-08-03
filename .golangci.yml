@@ -95,9 +95,6 @@ linters:
     lll:
       line-length: 120 # Set maximum line length to 120 characters
 
-    revive:
-      config: revive.toml # Point to the revive configuration file
-
 formatters:
   enable:
     - gofmt
