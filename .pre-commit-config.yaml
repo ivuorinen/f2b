@@ -45,7 +45,7 @@ repos:
         args: [-c, .markdownlint.json, --fix]
 
   - repo: https://github.com/tcort/markdown-link-check
-    rev: v3.12.2
+    rev: v3.13.7
     hooks:
       - id: markdown-link-check
         args: [-q, -c, .markdown-link-check.json]
@@ -69,11 +69,17 @@ repos:
         files: ^Makefile$
 
   - repo: https://github.com/bridgecrewio/checkov.git
-    rev: "3.2.451"
+    rev: "3.2.457"
     hooks:
       - id: checkov
         args:
           - "--quiet"
+
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.33.2
+    hooks:
+      - id: check-github-workflows
+        args: ["--verbose"]
 
   - repo: local
     hooks:
@@ -82,10 +88,3 @@ repos:
         entry: editorconfig-checker
         language: system
         files: .
-
-      - id: v8r
-        name: v8r - JSON Schema Validator
-        entry: v8r
-        language: system
-        files: \.json$
-        pass_filenames: true
