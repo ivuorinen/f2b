@@ -143,7 +143,7 @@ func TestMixedConcurrentOperations(t *testing.T) {
 	// Group 1: Set runners (now just validates that setting runners works concurrently)
 	for i := 0; i < numGoroutines/3; i++ {
 		wg.Add(1)
-		go func(_ int) {
+		go func() {
 			defer wg.Done()
 
 			for j := 0; j < 20; j++ {
@@ -156,7 +156,7 @@ func TestMixedConcurrentOperations(t *testing.T) {
 				SetRunner(mockRunner)
 				time.Sleep(time.Millisecond)
 			}
-		}(i)
+		}()
 	}
 
 	// Group 2: Execute regular commands (using valid fail2ban commands)
@@ -277,7 +277,7 @@ func TestRunnerStateConsistency(t *testing.T) {
 	// Fewer writers
 	for i := 0; i < numWriters; i++ {
 		wg.Add(1)
-		go func(_ int) {
+		go func() {
 			defer wg.Done()
 
 			for j := 0; j < 10; j++ {
@@ -288,7 +288,7 @@ func TestRunnerStateConsistency(t *testing.T) {
 				SetRunner(mockRunner)
 				time.Sleep(time.Microsecond)
 			}
-		}(i)
+		}()
 	}
 
 	wg.Wait()

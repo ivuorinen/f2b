@@ -376,7 +376,7 @@ dockers:
       - "ghcr.io/ivuorinen/f2b:latest-amd64"
 
     dockerfile: |
-      FROM alpine:latest
+      FROM alpine:3.20
       RUN apk --no-cache add ca-certificates
       COPY f2b /usr/local/bin/
       ENTRYPOINT ["f2b"]
@@ -387,7 +387,7 @@ dockers:
 
     build_flag_templates:
       - "--pull"
-      - "--platform=linux/amd64"
+      # platform inferred from goarch; flag removed for simplicity
       - "--label=org.opencontainers.image.created={{.Date}}"
       - "--label=org.opencontainers.image.title={{.ProjectName}}"
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
@@ -401,7 +401,7 @@ dockers:
       - "ghcr.io/ivuorinen/f2b:latest-arm64"
 
     dockerfile: |
-      FROM alpine:latest
+      FROM alpine:3.20
       RUN apk --no-cache add ca-certificates
       COPY f2b /usr/local/bin/
       ENTRYPOINT ["f2b"]
@@ -412,7 +412,7 @@ dockers:
 
     build_flag_templates:
       - "--pull"
-      - "--platform=linux/arm64"
+      # platform inferred from goarch; flag removed for simplicity
       - "--label=org.opencontainers.image.created={{.Date}}"
       - "--label=org.opencontainers.image.title={{.ProjectName}}"
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
@@ -426,7 +426,7 @@ dockers:
       - "ghcr.io/ivuorinen/f2b:latest-armv7"
 
     dockerfile: |
-      FROM alpine:latest
+      FROM alpine:3.20
       RUN apk --no-cache add ca-certificates
       COPY f2b /usr/local/bin/
       ENTRYPOINT ["f2b"]
@@ -438,7 +438,7 @@ dockers:
 
     build_flag_templates:
       - "--pull"
-      - "--platform=linux/arm/v7"
+      # platform inferred from goarch; flag removed for simplicity
       - "--label=org.opencontainers.image.created={{.Date}}"
       - "--label=org.opencontainers.image.title={{.ProjectName}}"
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"

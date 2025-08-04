@@ -3,6 +3,7 @@ package fail2ban
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -93,11 +94,6 @@ func TestLogValidationConsistency(t *testing.T) {
 			if readErr == nil {
 				t.Errorf("readLogFile should reject malicious path: %s", path)
 			}
-
-			// Both should exist (not nil)
-			if validateErr == nil || readErr == nil {
-				t.Errorf("Both validation functions should reject path: %s", path)
-			}
 		})
 	}
 }
@@ -105,12 +101,8 @@ func TestLogValidationConsistency(t *testing.T) {
 // Helper function to check if error message contains any of the expected strings
 func containsAnyString(s string, substrs []string) bool {
 	for _, substr := range substrs {
-		if len(s) >= len(substr) {
-			for i := 0; i <= len(s)-len(substr); i++ {
-				if s[i:i+len(substr)] == substr {
-					return true
-				}
-			}
+		if strings.Contains(s, substr) {
+			return true
 		}
 	}
 	return false
