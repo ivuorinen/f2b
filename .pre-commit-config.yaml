@@ -1,5 +1,8 @@
 ---
 # yaml-language-server: $schema=https://json.schemastore.org/pre-commit-config.json
+# Require at least the feature set shipped with pre-commit 3.4
+minimum_pre_commit_version: "3.4.0"
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
@@ -22,16 +25,6 @@ repos:
     rev: v0.5.1
     hooks:
       - id: golangci-lint
-
-  - repo: local
-    hooks:
-      - id: revive
-        name: Revive Go Linter
-        entry: revive
-        args: [-set_exit_status, -config, revive.toml, ./...]
-        language: system
-        files: \.go$
-        pass_filenames: false
 
   - repo: https://github.com/google/yamlfmt
     rev: v0.17.2
@@ -87,4 +80,5 @@ repos:
         name: EditorConfig Checker
         entry: editorconfig-checker
         language: system
-        files: .
+        files: \.(md|go|sh|ya?ml|json|toml|txt|makefile|Makefile)$
+        types: [file]

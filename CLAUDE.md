@@ -13,8 +13,8 @@ testing infrastructure with 60-70% code reduction.
 
 ```bash
 # Build & Test
-go build -ldflags "-X github.com/ivuorinen/f2b/cmd.version=1.2.3" -o f2b .
-go test ./... && go test -coverprofile=coverage.out ./...
+go build -ldflags "-X github.com/ivuorinen/f2b/cmd.Version=1.2.3" -o f2b .
+go test -covermode=atomic -coverprofile=coverage.out ./...
 go install github.com/ivuorinen/f2b@latest
 
 # Lint & Format

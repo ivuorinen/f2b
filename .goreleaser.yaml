@@ -11,7 +11,6 @@ project_name: f2b
 # Clean dist folder before build
 before:
   hooks:
-    - go mod tidy
     - go generate ./...
 
 # Build configuration
@@ -36,7 +35,6 @@ builds:
 
     goarch:
       - amd64
-      - arm64
 
     # Set environment variables
     env:
@@ -69,6 +67,7 @@ builds:
       - linux
 
     goarch:
+      - arm64
       - arm
       - "386"
       - ppc64le # PowerPC 64-bit LE support

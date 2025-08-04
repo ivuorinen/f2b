@@ -2,29 +2,37 @@
 
 Technical debt and improvements tracker.
 
-## 📊 Current Status (2025-08-03)
+## 📊 Current Status (2025-08-04)
 
 **Codebase Health:** ⭐ Outstanding (all critical issues resolved + advanced features implemented)
 
 - **Test Coverage:** 76.8% (cmd/), 59.3% (fail2ban/) - Above industry standards
 - **Code Quality:** All critical code quality issues resolved with comprehensive enhancements
-- **Security:** Advanced validation with 17 path traversal test cases and injection prevention
+- **Security:** Advanced validation with comprehensive path traversal test cases and injection prevention
 - **Infrastructure:** Multi-architecture Docker support (amd64, arm64, armv7) with manifests
 - **Performance:** Context-aware timeout handling and validation caching system
 - **Documentation:** ✅ Complete documentation update completed (2025-08-03)
 - **Monitoring:** Full metrics system (`f2b metrics`) and structured logging implemented
 - **Modern CLI:** 21 commands with fluent testing framework (60-70% code reduction)
+- **Build System:** ✅ Fixed ARM64 static linking issues in .goreleaser.yaml (2025-08-04)
 
-**Current Project Status (2025-08-03):**
+**Current Project Status (2025-08-04):**
 
 The f2b project is in **production-ready state** with all major infrastructure improvements completed. The codebase has
 evolved into a mature, enterprise-grade Fail2Ban management tool with advanced features including context-aware
 operations,
 sophisticated security testing, performance monitoring, and comprehensive documentation.
 
-## ✅ COMPLETED: Latest Infrastructure Improvements (2025-08-01)
+## ✅ COMPLETED: Latest Infrastructure Improvements (2025-08-04)
 
 **All Major Enhancements Successfully Implemented:** Complete modern infrastructure achieved.
+
+### Build System Improvements (2025-08-04) ✅
+
+- ✅ **Fixed ARM64 Static Linking Issues**
+  - **Problem:** Static linking with `-extldflags=-static` caused build failures on ARM64 due to missing static libc
+  - **Solution:** Separated static builds (amd64 only) from dynamic builds (arm64 and other architectures)
+  - **Impact:** Reliable builds across all architectures without static libc dependencies
 
 ### Latest Infrastructure Improvements (2025-08-01) ✅
 
