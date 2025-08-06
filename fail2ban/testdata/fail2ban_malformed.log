@@ -1,0 +1,30 @@
+2025-07-20 00:00:15,998 fail2ban.server         [212791]: INFO    rollover performed on /var/log/fail2ban.log
+MALFORMED LINE WITHOUT PROPER FORMAT
+2025-07-20 00:02:41,241 fail2ban.filter         [212791]: INFO    [sshd] Found 192.168.1.100 - 2025-07-20 00:02:40
+incomplete line without ending
+2025-07-20 00:11:41,886 fail2ban.filter         [212791]: INFO    [sshd] Found 192.168.1.101 - 2025-07-20 00:11:41
+invalid-timestamp fail2ban.filter: invalid format
+corrupted entry with missing parts
+2025-07-20 00:21:07,386 fail2ban.filter         [212791]: INFO    [sshd] Found 192.168.1.102 - 2025-07-20 00:21:06
+2025-07-20 00:24:53,328 fail2ban.filter         [212791]: INFO    [sshd] Found 172.16.0.100 - 2025-07-20 00:24:52
+2025-07-20 00:32:14,369 fail2ban.filter         [212791]: INFO    [sshd] Found 172.16.0.100 - 2025-07-20 00:32:13
+2025-07-20 00:52:16,809 fail2ban.filter         [212791]: INFO    [sshd] Found 192.168.1.100 - 2025-07-20 00:52:16
+2025-07-20 00:59:42,886 fail2ban.filter         [212791]: INFO    [sshd] Found 192.168.1.101 - 2025-07-20 00:59:42
+2025-07-20 01:09:38,136 fail2ban.filter         [212791]: INFO    [sshd] Found 172.16.0.102 - 2025-07-20 01:09:37
+2025-07-20 01:41:47,574 fail2ban.filter         [212791]: INFO    [sshd] Found 192.168.1.100 - 2025-07-20 01:41:47
+2025-07-20 INVALID_TIME fail2ban.filter [212791]: INFO [sshd] Found 192.168.1.100
+fail2ban.filter [212791]: INFO [sshd] Found 192.168.1.101 - NO_TIMESTAMP
+2025-07-20 00:00:00,000 fail2ban.actions [INVALID_PID]: NOTICE [sshd] Ban
+CORRUPTED_LINE_WITH_PARTIAL_DATA [sshd] 192.168.1.102
+2025-07-20 00:00:00,000 fail2ban.filter [212791]: INFO [] Found 192.168.1.103
+
+2025-07-20 01:47:44,886 fail2ban.filter         [212791]: INFO    [sshd] Found 192.168.1.101 - 2025-07-20 01:47:44
+2025-07-20 01:48:41,883 fail2ban.filter         [212791]: INFO    [sshd] Found 172.16.0.100 - 2025-07-20 01:48:41
+2025-07-20 01:55:04,385 fail2ban.filter         [212791]: INFO    [sshd] Found 172.16.0.103 - 2025-07-20 01:55:03
+2025-07-20 02:18:38,136 fail2ban.filter         [212791]: INFO    [sshd] Found 192.168.1.102 - 2025-07-20 02:18:37
+2025-07-20 02:22:43,133 fail2ban.filter         [212791]: INFO    [sshd] Found 172.16.0.100 - 2025-07-20 02:22:42
+2025-07-20 02:30:59,135 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.50 - 2025-07-20 02:30:58
+2025-07-20 02:31:17,437 fail2ban.filter         [212791]: INFO    [sshd] Found 192.168.1.100 - 2025-07-20 02:31:17
+2025-07-20 02:33:37,633 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.50 - 2025-07-20 02:33:37
+2025-07-20 02:34:58,383 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.50 - 2025-07-20 02:34:57
+2025-07-20 02:35:46,633 fail2ban.filter         [212791]: INFO    [sshd] Found 192.168.1.101 - 2025-07-20 02:35:46

@@ -1,0 +1,48 @@
+{
+  "timeout": "10s",
+  "retryOn429": true,
+  "retryCount": 3,
+  "fallbackRetryDelay": "30s",
+  "aliveStatusCodes": [200, 206, 299, 301, 302, 304, 307, 308, 429],
+  "ignorePatterns": [
+    {
+      "pattern": "^https?://localhost"
+    },
+    {
+      "pattern": "^https?://127\\.0\\.0\\.1"
+    },
+    {
+      "pattern": "^https?://0\\.0\\.0\\.0"
+    },
+    {
+      "pattern": "^mailto:"
+    },
+    {
+      "pattern": "^file://"
+    },
+    {
+      "pattern": "^\\./.*\\.md$"
+    },
+    {
+      "pattern": "^https://github\\.com/ivuorinen/f2b/(releases|issues).*$"
+    },
+    {
+      "pattern": "^https://github\\.com/ivuorinen$"
+    }
+  ],
+  "replacementPatterns": [
+    {
+      "pattern": "^/",
+      "replacement": "https://github.com/ivuorinen/f2b/blob/main/"
+    }
+  ],
+  "httpHeaders": [
+    {
+      "urls": ["https://github.com", "https://api.github.com"],
+      "headers": {
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "User-Agent": "Mozilla/5.0 (compatible; markdown-link-check)"
+      }
+    }
+  ]
+}

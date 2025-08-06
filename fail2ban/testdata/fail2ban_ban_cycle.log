@@ -1,0 +1,100 @@
+2025-07-20 00:00:15,998 fail2ban.server         [212791]: INFO    rollover performed on /var/log/fail2ban.log
+2025-07-20 02:30:59,135 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.50 - 2025-07-20 02:30:58
+2025-07-20 02:33:37,633 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.50 - 2025-07-20 02:33:37
+2025-07-20 02:34:58,383 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.50 - 2025-07-20 02:34:57
+2025-07-20 02:36:14,633 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.50 - 2025-07-20 02:36:14
+2025-07-20 02:37:26,633 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.50 - 2025-07-20 02:37:26
+2025-07-20 02:37:27,231 fail2ban.actions        [212791]: NOTICE  [sshd] Ban 10.0.0.50
+2025-07-20 02:47:26,575 fail2ban.actions        [212791]: NOTICE  [sshd] Unban 10.0.0.50
+2025-07-20 02:48:25,384 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.50 - 2025-07-20 02:48:25
+2025-07-20 02:49:41,383 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.50 - 2025-07-20 02:49:41
+2025-07-20 02:50:52,633 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.50 - 2025-07-20 02:50:52
+2025-07-20 02:52:00,633 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.50 - 2025-07-20 02:52:00
+2025-07-20 02:54:28,633 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.50 - 2025-07-20 02:54:28
+2025-07-20 02:54:28,708 fail2ban.actions        [212791]: NOTICE  [sshd] Ban 10.0.0.50
+2025-07-20 03:04:28,912 fail2ban.actions        [212791]: NOTICE  [sshd] Unban 10.0.0.50
+2025-07-20 03:05:27,633 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.50 - 2025-07-20 03:05:27
+2025-07-20 03:06:41,133 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.50 - 2025-07-20 03:06:40
+2025-07-20 03:07:57,133 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.50 - 2025-07-20 03:07:56
+2025-07-20 03:09:10,383 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.50 - 2025-07-20 03:09:09
+2025-07-20 08:51:53,383 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.51 - 2025-07-20 08:51:53
+2025-07-20 08:55:10,883 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.51 - 2025-07-20 08:55:10
+2025-07-20 08:56:33,633 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.51 - 2025-07-20 08:56:33
+2025-07-20 08:57:58,633 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.51 - 2025-07-20 08:57:58
+2025-07-20 08:59:23,633 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.51 - 2025-07-20 08:59:23
+2025-07-20 08:59:23,776 fail2ban.actions        [212791]: NOTICE  [sshd] Ban 10.0.0.51
+2025-07-20 09:09:23,947 fail2ban.actions        [212791]: NOTICE  [sshd] Unban 10.0.0.51
+2025-07-20 09:10:33,383 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.51 - 2025-07-20 09:10:33
+2025-07-20 09:12:02,133 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.51 - 2025-07-20 09:12:01
+2025-07-20 09:13:25,633 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.51 - 2025-07-20 09:13:25
+2025-07-20 09:14:45,383 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.51 - 2025-07-20 09:14:45
+2025-07-20 09:16:11,883 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.51 - 2025-07-20 09:16:11
+2025-07-20 09:16:12,108 fail2ban.actions        [212791]: NOTICE  [sshd] Ban 10.0.0.51
+2025-07-20 09:26:12,262 fail2ban.actions        [212791]: NOTICE  [sshd] Unban 10.0.0.51
+2025-07-20 09:26:32,134 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.51 - 2025-07-20 09:26:31
+2025-07-20 09:28:01,383 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.51 - 2025-07-20 09:28:00
+2025-07-20 09:29:28,633 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.51 - 2025-07-20 09:29:28
+2025-07-20 09:30:58,426 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.51 - 2025-07-20 09:30:58
+2025-07-20 09:32:17,883 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.51 - 2025-07-20 09:32:17
+2025-07-20 09:32:18,375 fail2ban.actions        [212791]: NOTICE  [sshd] Ban 10.0.0.51
+2025-07-20 09:42:17,753 fail2ban.actions        [212791]: NOTICE  [sshd] Unban 10.0.0.51
+2025-07-20 14:30:32,291 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.52 - 2025-07-20 14:30:32
+2025-07-20 14:30:34,014 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.52 - 2025-07-20 14:30:33
+2025-07-20 14:30:36,383 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.52 - 2025-07-20 14:30:35
+2025-07-20 14:30:37,883 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.52 - 2025-07-20 14:30:37
+2025-07-20 14:30:39,383 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.52 - 2025-07-20 14:30:39
+2025-07-20 14:30:39,459 fail2ban.actions        [212791]: NOTICE  [sshd] Ban 10.0.0.52
+2025-07-20 14:36:59,601 fail2ban.actions        [212791]: NOTICE  [sshd] Ban 10.0.0.53
+2025-07-20 14:40:39,662 fail2ban.actions        [212791]: NOTICE  [sshd] Unban 10.0.0.52
+2025-07-20 14:46:59,816 fail2ban.actions        [212791]: NOTICE  [sshd] Unban 10.0.0.53
+2025-07-20 14:52:01,956 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.52 - 2025-07-20 14:52:01
+2025-07-20 14:52:03,471 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.52 - 2025-07-20 14:52:03
+2025-07-20 14:52:05,165 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.52 - 2025-07-20 14:52:04
+2025-07-20 14:52:06,883 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.52 - 2025-07-20 14:52:06
+2025-07-20 14:52:09,383 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.52 - 2025-07-20 14:52:08
+2025-07-20 14:52:09,925 fail2ban.actions        [212791]: NOTICE  [sshd] Ban 10.0.0.52
+2025-07-20 14:57:46,009 fail2ban.actions        [212791]: NOTICE  [sshd] Ban 10.0.0.53
+2025-07-20 14:59:52,047 fail2ban.actions        [212791]: NOTICE  [sshd] Ban 192.168.2.109
+2025-07-20 15:02:09,324 fail2ban.actions        [212791]: NOTICE  [sshd] Unban 10.0.0.52
+2025-07-20 15:05:10,949 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.52 - 2025-07-20 15:05:10
+2025-07-20 15:05:13,383 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.52 - 2025-07-20 15:05:12
+2025-07-20 15:05:15,589 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.52 - 2025-07-20 15:05:15
+2025-07-20 15:05:17,622 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.52 - 2025-07-20 15:05:17
+2025-07-20 15:05:19,133 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.52 - 2025-07-20 15:05:18
+2025-07-20 15:05:19,384 fail2ban.actions        [212791]: NOTICE  [sshd] Ban 10.0.0.52
+2025-07-20 15:07:45,468 fail2ban.actions        [212791]: NOTICE  [sshd] Unban 10.0.0.53
+2025-07-20 15:09:51,715 fail2ban.actions        [212791]: NOTICE  [sshd] Unban 192.168.2.109
+2025-07-20 15:10:44,341 fail2ban.actions        [212791]: NOTICE  [sshd] Ban 10.0.0.53
+2025-07-20 15:15:19,040 fail2ban.actions        [212791]: NOTICE  [sshd] Unban 10.0.0.52
+2025-07-20 15:16:07,195 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.52 - 2025-07-20 15:16:06
+2025-07-20 15:16:08,850 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.52 - 2025-07-20 15:16:08
+2025-07-20 15:16:10,383 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.52 - 2025-07-20 15:16:10
+2025-07-20 15:16:11,883 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.52 - 2025-07-20 15:16:11
+2025-07-20 15:16:14,089 fail2ban.filter         [212791]: INFO    [sshd] Found 10.0.0.52 - 2025-07-20 15:16:14
+2025-07-20 15:16:14,270 fail2ban.actions        [212791]: NOTICE  [sshd] Ban 10.0.0.52
+2025-07-20 15:16:18,280 fail2ban.actions        [212791]: NOTICE  [sshd] Ban 192.168.2.110
+2025-07-20 15:18:00,517 fail2ban.actions        [212791]: NOTICE  [sshd] Ban 192.168.2.109
+2025-07-20 15:18:51,749 fail2ban.actions        [212791]: NOTICE  [sshd] Ban 175.139.176.213
+2025-07-20 15:20:43,982 fail2ban.actions        [212791]: NOTICE  [sshd] Unban 10.0.0.53
+2025-07-20 15:20:44,597 fail2ban.actions        [212791]: NOTICE  [sshd] Ban 192.168.2.111
+2025-07-20 15:26:14,679 fail2ban.actions        [212791]: NOTICE  [sshd] Unban 10.0.0.52
+2025-07-20 15:26:17,894 fail2ban.actions        [212791]: NOTICE  [sshd] Unban 192.168.2.110
+2025-07-20 15:28:00,134 fail2ban.actions        [212791]: NOTICE  [sshd] Unban 192.168.2.109
+2025-07-20 15:28:51,367 fail2ban.actions        [212791]: NOTICE  [sshd] Unban 175.139.176.213
+2025-07-20 15:30:44,610 fail2ban.actions        [212791]: NOTICE  [sshd] Unban 192.168.2.111
+2025-07-20 15:34:11,276 fail2ban.actions        [212791]: NOTICE  [sshd] Ban 192.168.2.109
+2025-07-20 15:34:25,289 fail2ban.actions        [212791]: NOTICE  [sshd] Ban 175.139.176.213
+2025-07-20 15:36:09,521 fail2ban.actions        [212791]: NOTICE  [sshd] Ban 192.168.2.110
+2025-07-20 15:39:30,181 fail2ban.actions        [212791]: NOTICE  [sshd] Ban 192.168.2.111
+2025-07-20 15:44:10,865 fail2ban.actions        [212791]: NOTICE  [sshd] Unban 192.168.2.109
+2025-07-20 15:44:24,892 fail2ban.actions        [212791]: NOTICE  [sshd] Unban 175.139.176.213
+2025-07-20 15:44:44,115 fail2ban.actions        [212791]: NOTICE  [sshd] Ban 192.168.2.104
+2025-07-20 15:46:09,344 fail2ban.actions        [212791]: NOTICE  [sshd] Unban 192.168.2.110
+2025-07-20 15:49:29,443 fail2ban.actions        [212791]: NOTICE  [sshd] Unban 192.168.2.111
+2025-07-20 15:53:22,111 fail2ban.actions        [212791]: NOTICE  [sshd] Ban 192.168.2.110
+2025-07-20 15:54:44,138 fail2ban.actions        [212791]: NOTICE  [sshd] Unban 192.168.2.104
+2025-07-20 15:56:41,395 fail2ban.actions        [212791]: NOTICE  [sshd] Ban 192.168.2.111
+2025-07-20 16:01:04,165 fail2ban.actions        [212791]: NOTICE  [sshd] Ban 192.168.2.104
+2025-07-20 16:03:22,254 fail2ban.actions        [212791]: NOTICE  [sshd] Unban 192.168.2.110
+2025-07-20 16:06:41,515 fail2ban.actions        [212791]: NOTICE  [sshd] Unban 192.168.2.111
+2025-07-20 16:11:03,587 fail2ban.actions        [212791]: NOTICE  [sshd] Unban 192.168.2.104

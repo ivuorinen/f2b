@@ -1,0 +1,84 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/pre-commit-config.json
+# Require at least the feature set shipped with pre-commit 3.4
+minimum_pre_commit_version: "3.4.0"
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: check-json
+      - id: check-shebang-scripts-are-executable
+
+  - repo: https://github.com/pre-commit/sync-pre-commit-deps
+    rev: v0.0.3
+    hooks:
+      - id: sync-pre-commit-deps
+
+  - repo: https://github.com/dnephin/pre-commit-golang
+    rev: v0.5.1
+    hooks:
+      - id: golangci-lint
+
+  - repo: https://github.com/google/yamlfmt
+    rev: v0.17.2
+    hooks:
+      - id: yamlfmt
+
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.45.0
+    hooks:
+      - id: markdownlint
+        args: [-c, .markdownlint.json, --fix]
+
+  - repo: https://github.com/tcort/markdown-link-check
+    rev: v3.13.7
+    hooks:
+      - id: markdown-link-check
+        args: [-q, -c, .markdown-link-check.json]
+
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.7
+    hooks:
+      - id: actionlint
+        args: ["-shellcheck="]
+
+  - repo: https://github.com/scop/pre-commit-shfmt
+    rev: v3.12.0-2
+    hooks:
+      - id: shfmt
+
+  - repo: https://github.com/mrtazz/checkmake
+    rev: 0.2.2
+    hooks:
+      - id: checkmake
+        name: Makefile Linter
+        files: ^Makefile$
+
+  - repo: https://github.com/bridgecrewio/checkov.git
+    rev: "3.2.457"
+    hooks:
+      - id: checkov
+        args:
+          - "--quiet"
+
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.33.2
+    hooks:
+      - id: check-github-workflows
+        args: ["--verbose"]
+
+  - repo: local
+    hooks:
+      - id: editorconfig-checker
+        name: EditorConfig Checker
+        entry: editorconfig-checker
+        language: system
+        files: \.(md|go|sh|ya?ml|json|toml|txt|makefile|Makefile)$
+        types: [file]
