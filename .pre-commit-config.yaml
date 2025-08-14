@@ -74,11 +74,7 @@ repos:
       - id: check-github-workflows
         args: ["--verbose"]
 
-  - repo: local
+  - repo: https://github.com/editorconfig-checker/editorconfig-checker
+    rev: v3.4.0
     hooks:
       - id: editorconfig-checker
-        name: EditorConfig Checker
-        entry: editorconfig-checker
-        language: system
-        files: \.(md|go|sh|ya?ml|json|toml|txt|makefile|Makefile)$
-        types: [file]
