@@ -5,7 +5,7 @@ minimum_pre_commit_version: "3.4.0"
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -54,7 +54,7 @@ repos:
     hooks:
       - id: shfmt
 
-  - repo: https://github.com/mrtazz/checkmake
+  - repo: https://github.com/checkmake/checkmake
     rev: 0.2.2
     hooks:
       - id: checkmake
@@ -62,7 +62,7 @@ repos:
         files: ^Makefile$
 
   - repo: https://github.com/bridgecrewio/checkov.git
-    rev: "3.2.457"
+    rev: "3.2.461"
     hooks:
       - id: checkov
         args:
@@ -74,11 +74,7 @@ repos:
       - id: check-github-workflows
         args: ["--verbose"]
 
-  - repo: local
+  - repo: https://github.com/editorconfig-checker/editorconfig-checker
+    rev: v3.4.0
     hooks:
       - id: editorconfig-checker
-        name: EditorConfig Checker
-        entry: editorconfig-checker
-        language: system
-        files: \.(md|go|sh|ya?ml|json|toml|txt|makefile|Makefile)$
-        types: [file]

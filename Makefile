@@ -72,7 +72,7 @@ dev-deps: ## Install development dependencies
 	}
 	@command -v checkmake >/dev/null 2>&1 || { \
 		echo "Installing checkmake..."; \
-		go install github.com/mrtazz/checkmake/cmd/checkmake@latest; \
+		go install github.com/checkmake/checkmake/cmd/checkmake@latest; \
 	}
 	@command -v golines >/dev/null 2>&1 || { \
 		echo "Installing golines..."; \
