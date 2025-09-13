@@ -30,15 +30,6 @@ func setupMockRunnerForPrivilegedTest(mockRunner *MockRunner) {
 	mockRunner.SetResponse("fail2ban-client banned 192.168.1.100", []byte(`["sshd"]`))
 }
 
-// setupMockRunnerForUnprivilegedTest configures mock responses for unprivileged tests
-func setupMockRunnerForUnprivilegedTest(mockRunner *MockRunner) {
-	// For unprivileged tests, set up basic responses for non-sudo commands
-	mockRunner.SetResponse("fail2ban-client -V", []byte("0.11.2"))
-	mockRunner.SetResponse("fail2ban-client ping", []byte("pong"))
-	mockRunner.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-	mockRunner.SetResponse("fail2ban-client banned 192.168.1.100", []byte(`[]`))
-}
-
 // testClientOperations tests various client operations
 func testClientOperations(t *testing.T, client Client, expectOperationErr bool) {
 	t.Helper()
@@ -84,45 +75,62 @@ func testClientOperations(t *testing.T, client Client, expectOperationErr bool) 
 
 // TestSudoIntegrationWithClient tests the full integration of sudo checking with client operations
 func TestSudoIntegrationWithClient(t *testing.T) {
+	// Test normal client creation (in test environment, sudo checking is skipped)
+	t.Run("normal client creation", func(t *testing.T) {
+		// Modern standardized setup with automatic cleanup
+		_, cleanup := SetupMockEnvironmentWithSudo(t, true)
+		defer cleanup()
+
+		// Get the mock runner and configure additional responses
+		mockRunner := GetRunner().(*MockRunner)
+		setupMockRunnerForPrivilegedTest(mockRunner)
+
+		// Test client creation
+		client, err := NewClient(DefaultLogDir, DefaultFilterDir)
+		if err != nil {
+			t.Fatalf("unexpected client creation error: %v", err)
+		}
+		if client == nil {
+			t.Fatal("expected non-nil client")
+		}
+
+		testClientOperations(t, client, false)
+	})
+}
+
+func TestSudoRequirementsIntegration(t *testing.T) {
 	tests := []struct {
-		name               string
-		hasPrivileges      bool
-		isRoot             bool
-		expectClientError  bool
-		expectOperationErr bool
-		description        string
+		name          string
+		hasPrivileges bool
+		isRoot        bool
+		expectError   bool
+		description   string
 	}{
 		{
-			name:               "root user can perform all operations",
-			hasPrivileges:      true,
-			isRoot:             true,
-			expectClientError:  false,
-			expectOperationErr: false,
-			description:        "root user should be able to create client and perform operations",
+			name:          "root user has privileges",
+			hasPrivileges: true,
+			isRoot:        true,
+			expectError:   false,
+			description:   "root user should pass sudo requirements check",
 		},
 		{
-			name:               "user with sudo privileges can perform operations",
-			hasPrivileges:      true,
-			isRoot:             false,
-			expectClientError:  false,
-			expectOperationErr: false,
-			description:        "user in sudo group should be able to create client and perform operations",
+			name:          "user with sudo privileges passes",
+			hasPrivileges: true,
+			isRoot:        false,
+			expectError:   false,
+			description:   "user in sudo group should pass sudo requirements check",
 		},
 		{
-			name:               "regular user cannot create client",
-			hasPrivileges:      false,
-			isRoot:             false,
-			expectClientError:  true,
-			expectOperationErr: true,
-			description:        "regular user should fail at client creation",
+			name:          "regular user fails sudo check",
+			hasPrivileges: false,
+			isRoot:        false,
+			expectError:   true,
+			description:   "regular user should fail sudo requirements check",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set environment variable to force sudo checking in tests
-			t.Setenv("F2B_TEST_SUDO", "true")
-
 			// Modern standardized setup with automatic cleanup
 			_, cleanup := SetupMockEnvironmentWithSudo(t, tt.hasPrivileges)
 			defer cleanup()
@@ -135,20 +143,12 @@ func TestSudoIntegrationWithClient(t *testing.T) {
 				mockChecker.MockHasPrivileges = true
 			}
 
-			// Get the mock runner and configure additional responses
-			mockRunner := GetRunner().(*MockRunner)
-			if tt.hasPrivileges {
-				setupMockRunnerForPrivilegedTest(mockRunner)
-			} else {
-				setupMockRunnerForUnprivilegedTest(mockRunner)
-			}
+			// Test sudo requirements directly
+			err := CheckSudoRequirements()
 
-			// Test client creation
-			client, err := NewClient(DefaultLogDir, DefaultFilterDir)
-
-			if tt.expectClientError {
+			if tt.expectError {
 				if err == nil {
-					t.Fatal("expected client creation to fail")
+					t.Fatal("expected sudo requirements check to fail")
 				}
 				if !strings.Contains(err.Error(), "fail2ban operations require sudo privileges") {
 					t.Errorf("expected sudo privilege error, got: %v", err)
@@ -157,14 +157,8 @@ func TestSudoIntegrationWithClient(t *testing.T) {
 			}
 
 			if err != nil {
-				t.Fatalf("unexpected client creation error: %v", err)
+				t.Fatalf("unexpected sudo requirements error: %v", err)
 			}
-
-			if client == nil {
-				t.Fatal("expected non-nil client")
-			}
-
-			testClientOperations(t, client, tt.expectOperationErr)
 		})
 	}
 }

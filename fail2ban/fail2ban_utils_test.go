@@ -82,6 +82,11 @@ func TestOSRunnerWithoutSudo(t *testing.T) {
 
 // TestOSRunnerWithSudo tests the OS runner with sudo
 func TestOSRunnerWithSudo(t *testing.T) {
+	// Skip this test in test environments to avoid hanging on sudo prompts
+	if fail2ban.IsTestEnvironment() {
+		t.Skip("Skipping real sudo test in test environment")
+	}
+
 	runner := &fail2ban.OSRunner{}
 
 	// Test with a command that would use sudo

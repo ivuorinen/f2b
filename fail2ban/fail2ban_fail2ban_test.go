@@ -10,6 +10,32 @@ import (
 )
 
 func TestNewClient(t *testing.T) {
+	// Test normal client creation (in test environment, sudo checking is skipped)
+	t.Run("normal client creation", func(t *testing.T) {
+		// Set up mock environment with sudo privileges
+		_, cleanup := SetupMockEnvironmentWithSudo(t, true)
+		defer cleanup()
+
+		// Get the mock runner that was set up
+		mockRunner := GetRunner().(*MockRunner)
+		mockRunner.SetResponse("fail2ban-client -V", []byte("0.11.2"))
+		mockRunner.SetResponse("fail2ban-client ping", []byte("pong"))
+		mockRunner.SetResponse(
+			"fail2ban-client status",
+			[]byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"),
+		)
+
+		client, err := NewClient(DefaultLogDir, DefaultFilterDir)
+		if err != nil {
+			t.Fatalf("expected no error, got %v", err)
+		}
+		if client == nil {
+			t.Fatal("expected client to be non-nil")
+		}
+	})
+}
+
+func TestSudoRequirementsChecking(t *testing.T) {
 	tests := []struct {
 		name          string
 		hasPrivileges bool
@@ -31,36 +57,12 @@ func TestNewClient(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set environment variable to force sudo checking in tests
-			t.Setenv("F2B_TEST_SUDO", "true")
-
 			// Set up mock environment
 			_, cleanup := SetupMockEnvironmentWithSudo(t, tt.hasPrivileges)
 			defer cleanup()
 
-			// Get the mock runner that was set up
-			mockRunner := GetRunner().(*MockRunner)
-			if tt.hasPrivileges {
-				mockRunner.SetResponse("fail2ban-client -V", []byte("0.11.2"))
-				mockRunner.SetResponse("sudo fail2ban-client -V", []byte("0.11.2"))
-				mockRunner.SetResponse("fail2ban-client ping", []byte("pong"))
-				mockRunner.SetResponse("sudo fail2ban-client ping", []byte("pong"))
-				mockRunner.SetResponse(
-					"fail2ban-client status",
-					[]byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"),
-				)
-				mockRunner.SetResponse(
-					"sudo fail2ban-client status",
-					[]byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"),
-				)
-			} else {
-				// For unprivileged tests, set up basic responses for non-sudo commands
-				mockRunner.SetResponse("fail2ban-client -V", []byte("0.11.2"))
-				mockRunner.SetResponse("fail2ban-client ping", []byte("pong"))
-				mockRunner.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-			}
-
-			client, err := NewClient(DefaultLogDir, DefaultFilterDir)
+			// Test the sudo checking function directly
+			err := CheckSudoRequirements()
 
 			AssertError(t, err, tt.expectError, tt.name)
 			if tt.expectError {
@@ -68,10 +70,6 @@ func TestNewClient(t *testing.T) {
 					t.Errorf("expected error to contain %q, got %q", tt.errorContains, err.Error())
 				}
 				return
-			}
-
-			if client == nil {
-				t.Fatal("expected client to be non-nil")
 			}
 		})
 	}

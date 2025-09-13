@@ -1,7 +1,7 @@
 # f2b Makefile
 
 .PHONY: help all build test lint fmt clean install dev-deps ci \
-	check-deps test-verbose test-coverage \
+	check-deps test-verbose test-coverage update-deps \
 	lint-go lint-md lint-yaml lint-actions lint-make \
 	ci ci-coverage security dev-setup pre-commit-setup \
 	release-dry-run release release-snapshot release-check _check-tag
@@ -32,7 +32,8 @@ dev-deps: ## Install development dependencies
 	}
 	@command -v golangci-lint >/dev/null 2>&1 || { \
 		echo "Installing golangci-lint..."; \
-		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.2.2; \
+		# renovate: datasource=go depName=github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v1.62.2; \
 	}
 	@command -v markdownlint-cli2 >/dev/null 2>&1 || { \
 		echo "Installing markdownlint-cli2..."; \
@@ -44,11 +45,13 @@ dev-deps: ## Install development dependencies
 	}
 	@command -v yamlfmt >/dev/null 2>&1 || { \
 		echo "Installing yamlfmt..."; \
-		go install github.com/google/yamlfmt/cmd/yamlfmt@latest; \
+		# renovate: datasource=go depName=github.com/google/yamlfmt/cmd/yamlfmt
+		go install github.com/google/yamlfmt/cmd/yamlfmt@v0.17.2; \
 	}
 	@command -v actionlint >/dev/null 2>&1 || { \
 		echo "Installing actionlint..."; \
-		go install github.com/rhysd/actionlint/cmd/actionlint@latest; \
+		# renovate: datasource=go depName=github.com/rhysd/actionlint/cmd/actionlint
+		go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7; \
 	}
 	@command -v goimports >/dev/null 2>&1 || { \
 		echo "Installing goimports..."; \
@@ -60,11 +63,13 @@ dev-deps: ## Install development dependencies
 	}
 	@command -v gosec >/dev/null 2>&1 || { \
 		echo "Installing gosec..."; \
-		go install github.com/securego/gosec/v2/cmd/gosec@latest; \
+		# renovate: datasource=go depName=github.com/securego/gosec/v2/cmd/gosec
+		go install github.com/securego/gosec/v2/cmd/gosec@v2.24.2; \
 	}
 	@command -v staticcheck >/dev/null 2>&1 || { \
 		echo "Installing staticcheck..."; \
-		go install honnef.co/go/tools/cmd/staticcheck@latest; \
+		# renovate: datasource=go depName=honnef.co/go/tools/cmd/staticcheck
+		go install honnef.co/go/tools/cmd/staticcheck@2024.1.1; \
 	}
 	@command -v revive >/dev/null 2>&1 || { \
 		echo "Installing revive..."; \
@@ -122,6 +127,14 @@ test-coverage: ## Run tests with coverage report
 	go test -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report saved to coverage.html"
+
+update-deps: ## Update all Go dependencies to latest versions
+	@echo "Updating Go dependencies..."
+	go get -u ./...
+	go mod tidy
+	@echo "Dependencies updated ✓"
+	@echo "Updated dependencies:"
+	@go list -u -m all | grep '\['
 
 # Code quality targets
 fmt: ## Format Go code

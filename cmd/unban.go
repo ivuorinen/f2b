@@ -31,7 +31,7 @@ func UnbanCmd(client fail2ban.Client, config *Config) *cobra.Command {
 				// Validate IP argument
 				ip, err := ValidateIPArgument(args)
 				if err != nil {
-					return HandleClientError(err)
+					return HandleValidationError(err)
 				}
 
 				// Add IP to context
@@ -59,7 +59,7 @@ func UnbanCmd(client fail2ban.Client, config *Config) *cobra.Command {
 
 				// Output results
 				if config != nil && config.Format == JSONFormat {
-					PrintOutputTo(GetCmdOutput(cmd), results, JSONFormat)
+					OutputResults(cmd, results, config)
 				} else {
 					for _, r := range results {
 						if _, err := fmt.Fprintf(GetCmdOutput(cmd), "%s %s in %s\n", r.Status, r.IP, r.Jail); err != nil {

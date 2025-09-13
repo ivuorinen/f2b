@@ -139,8 +139,7 @@ func TestLogsWatchCmdJSON(t *testing.T) {
 	limitFlag := cmd.Flags().Lookup("limit")
 	if limitFlag == nil {
 		t.Fatalf("limit flag should exist")
-	}
-	if limitFlag.DefValue != "10" {
+	} else if limitFlag.DefValue != "10" {
 		t.Errorf("expected default limit of 10, got %s", limitFlag.DefValue)
 	}
 }
@@ -253,9 +252,7 @@ func TestLogsWatchCmdFlags(t *testing.T) {
 	limitFlag := cmd.Flags().Lookup("limit")
 	if limitFlag == nil {
 		t.Fatal("limit flag should be defined")
-	}
-
-	if limitFlag.Shorthand != "n" {
+	} else if limitFlag.Shorthand != "n" {
 		t.Errorf("expected limit flag shorthand to be 'n', got %q", limitFlag.Shorthand)
 	}
 
@@ -267,8 +264,7 @@ func TestLogsWatchCmdFlags(t *testing.T) {
 	intervalFlag := cmd.Flags().Lookup("interval")
 	if intervalFlag == nil {
 		t.Fatal("interval flag should be defined")
-	}
-	if intervalFlag.Shorthand != "i" {
+	} else if intervalFlag.Shorthand != "i" {
 		t.Errorf("expected interval flag shorthand to be 'i', got %q", intervalFlag.Shorthand)
 	}
 	if intervalFlag.DefValue != DefaultPollingInterval.String() {

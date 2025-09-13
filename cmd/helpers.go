@@ -3,7 +3,9 @@ package cmd
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -17,6 +19,34 @@ const (
 	DefaultPollingInterval = 5 * time.Second
 )
 
+// IsCI detects if we're running in a CI environment
+func IsCI() bool {
+	ciEnvVars := []string{
+		"CI",             // Generic CI indicator
+		"GITHUB_ACTIONS", // GitHub Actions
+		"TRAVIS",         // Travis CI
+		"CIRCLECI",       // Circle CI
+		"JENKINS_URL",    // Jenkins
+		"BUILDKITE",      // Buildkite
+		"TF_BUILD",       // Azure DevOps
+		"GITLAB_CI",      // GitLab CI
+	}
+
+	for _, envVar := range ciEnvVars {
+		if os.Getenv(envVar) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// IsTestEnvironment detects if we're running in a test environment
+func IsTestEnvironment() bool {
+	return strings.Contains(os.Args[0], ".test") ||
+		os.Getenv("GO_TEST") == "true" ||
+		flag.Lookup("test.v") != nil
+}
+
 // Command creation helpers
 
 // NewCommand creates a new cobra command with standard setup
@@ -27,6 +57,37 @@ func NewCommand(use, short string, aliases []string, runE func(*cobra.Command, [
 		Aliases: aliases,
 		RunE:    runE,
 	}
+}
+
+// NewContextualCommand creates a command with standardized context and logging setup
+func NewContextualCommand(
+	use, short string,
+	aliases []string,
+	config *Config,
+	handler func(context.Context, *cobra.Command, []string) error,
+) *cobra.Command {
+	return NewCommand(use, short, aliases, func(cmd *cobra.Command, args []string) error {
+		// Get the contextual logger
+		logger := GetContextualLogger()
+
+		// Create timeout context for the entire operation
+		ctx, cancel := context.WithTimeout(context.Background(), config.CommandTimeout)
+		defer cancel()
+
+		// Extract command name from use string (first word)
+		cmdName := use
+		if spaceIndex := strings.Index(use, " "); spaceIndex != -1 {
+			cmdName = use[:spaceIndex]
+		}
+
+		// Add command context
+		ctx = WithCommand(ctx, cmdName)
+
+		// Log operation with timing
+		return logger.LogOperation(ctx, cmdName+"_command", func() error {
+			return handler(ctx, cmd, args)
+		})
+	})
 }
 
 // AddLogFlags adds common log-related flags to a command
@@ -142,6 +203,143 @@ func HandleClientError(err error) error {
 		return err
 	}
 	return nil
+}
+
+// HandleValidationError specifically handles validation errors with clearer messaging
+func HandleValidationError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	// Check if it's a contextual validation error
+	var contextErr *fail2ban.ContextualError
+	if errors.As(err, &contextErr) && contextErr.GetCategory() == fail2ban.ErrorCategoryValidation {
+		PrintError(err) // PrintError already handles contextual errors well
+		return err
+	}
+
+	// For non-contextual validation errors, wrap them for better messaging
+	if strings.Contains(err.Error(), "invalid") || strings.Contains(err.Error(), "required") {
+		validationErr := fail2ban.NewValidationError(
+			err.Error(),
+			"Check your input parameters and try again. Use --help for usage information.",
+		)
+		PrintError(validationErr)
+		return validationErr
+	}
+
+	return HandleClientError(err)
+}
+
+// HandlePermissionError specifically handles permission/sudo errors with helpful hints
+func HandlePermissionError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	// Check if it's already a contextual permission error
+	var contextErr *fail2ban.ContextualError
+	if errors.As(err, &contextErr) && contextErr.GetCategory() == fail2ban.ErrorCategoryPermission {
+		PrintError(err)
+		return err
+	}
+
+	// Check for common permission-related error patterns
+	errMsg := strings.ToLower(err.Error())
+	if strings.Contains(errMsg, "permission denied") || strings.Contains(errMsg, "sudo") {
+		permErr := fail2ban.NewPermissionError(
+			err.Error(),
+			"Try running with sudo privileges or check that fail2ban service is running.",
+		)
+		PrintError(permErr)
+		return permErr
+	}
+
+	return HandleClientError(err)
+}
+
+// HandleSystemError specifically handles system-level errors with diagnostic hints
+func HandleSystemError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	// Check if it's already a contextual system error
+	var contextErr *fail2ban.ContextualError
+	if errors.As(err, &contextErr) && contextErr.GetCategory() == fail2ban.ErrorCategorySystem {
+		PrintError(err)
+		return err
+	}
+
+	// Check for common system error patterns
+	errMsg := strings.ToLower(err.Error())
+	if strings.Contains(errMsg, "not found") || strings.Contains(errMsg, "command not found") {
+		sysErr := fail2ban.NewSystemError(
+			err.Error(),
+			"Ensure fail2ban is installed and fail2ban-client is in your PATH.",
+			err,
+		)
+		PrintError(sysErr)
+		return sysErr
+	}
+
+	if strings.Contains(errMsg, "not running") || strings.Contains(errMsg, "connection refused") {
+		sysErr := fail2ban.NewSystemError(
+			err.Error(),
+			"Start the fail2ban service: sudo systemctl start fail2ban",
+			err,
+		)
+		PrintError(sysErr)
+		return sysErr
+	}
+
+	return HandleClientError(err)
+}
+
+// HandleErrorWithContext automatically chooses the appropriate error handler based on error context
+func HandleErrorWithContext(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	// Check if it's already a contextual error and route accordingly
+	var contextErr *fail2ban.ContextualError
+	if errors.As(err, &contextErr) {
+		switch contextErr.GetCategory() {
+		case fail2ban.ErrorCategoryValidation:
+			return HandleValidationError(err)
+		case fail2ban.ErrorCategoryPermission:
+			return HandlePermissionError(err)
+		case fail2ban.ErrorCategorySystem:
+			return HandleSystemError(err)
+		default:
+			return HandleClientError(err)
+		}
+	}
+
+	// For non-contextual errors, try to infer the type
+	errMsg := strings.ToLower(err.Error())
+
+	// Validation error patterns
+	if strings.Contains(errMsg, "invalid") || strings.Contains(errMsg, "required") ||
+		strings.Contains(errMsg, "malformed") || strings.Contains(errMsg, "format") {
+		return HandleValidationError(err)
+	}
+
+	// Permission error patterns
+	if strings.Contains(errMsg, "permission") || strings.Contains(errMsg, "sudo") ||
+		strings.Contains(errMsg, "unauthorized") || strings.Contains(errMsg, "forbidden") {
+		return HandlePermissionError(err)
+	}
+
+	// System error patterns
+	if strings.Contains(errMsg, "not found") || strings.Contains(errMsg, "not running") ||
+		strings.Contains(errMsg, "connection") || strings.Contains(errMsg, "timeout") {
+		return HandleSystemError(err)
+	}
+
+	// Default to generic client error handling
+	return HandleClientError(err)
 }
 
 // Output helpers

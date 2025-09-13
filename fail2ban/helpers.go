@@ -2,10 +2,11 @@ package fail2ban
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -48,30 +49,26 @@ func init() {
 	configureCITestLogging()
 }
 
-// configureCITestLogging reduces log verbosity in CI and test environments
-func configureCITestLogging() {
-	// Detect CI environments by checking common CI environment variables
+// isCI detects if we're running in a CI environment
+func isCI() bool {
 	ciEnvVars := []string{
 		"CI", "GITHUB_ACTIONS", "TRAVIS", "CIRCLECI", "JENKINS_URL",
 		"BUILDKITE", "TF_BUILD", "GITLAB_CI",
 	}
 
-	isCI := false
 	for _, envVar := range ciEnvVars {
 		if os.Getenv(envVar) != "" {
-			isCI = true
-			break
+			return true
 		}
 	}
+	return false
+}
 
-	// Also check if we're in test mode
-	isTest := strings.Contains(os.Args[0], ".test") ||
-		os.Getenv("GO_TEST") == "true" ||
-		flag.Lookup("test.v") != nil
-
+// configureCITestLogging reduces log verbosity in CI and test environments
+func configureCITestLogging() {
 	// If in CI or test environment, reduce logging noise unless explicitly overridden
 	// Note: This will be overridden by cmd.Logger once main() runs
-	if (isCI || isTest) && os.Getenv("F2B_LOG_LEVEL") == "" && os.Getenv("F2B_VERBOSE_TESTS") == "" {
+	if (isCI() || IsTestEnvironment()) && os.Getenv("F2B_LOG_LEVEL") == "" && os.Getenv("F2B_VERBOSE_TESTS") == "" {
 		logrus.SetLevel(logrus.ErrorLevel)
 	}
 }
@@ -360,12 +357,12 @@ func IsTestEnvironment() bool {
 
 // ContainsPathTraversal checks for various path traversal patterns
 func ContainsPathTraversal(input string) bool {
-	// Path separators and traversal patterns
-	if strings.ContainsAny(input, "/\\") {
+	// Check for null bytes
+	if strings.Contains(input, "\x00") {
 		return true
 	}
 
-	// Various representations of ".."
+	// Various representations of ".." and dangerous patterns
 	dangerousPatterns := []string{
 		"..",
 		"%2e%2e",       // URL encoded ..
@@ -407,17 +404,19 @@ func ValidateCommand(command string) error {
 		return fmt.Errorf("invalid command format")
 	}
 
+	// Check for dangerous patterns first (before including command in error messages)
+	dangerousPatterns := GetDangerousCommandPatterns()
+	cmdLower := strings.ToLower(command)
+	for _, pattern := range dangerousPatterns {
+		if strings.Contains(cmdLower, strings.ToLower(pattern)) {
+			// Don't include potentially dangerous command in error message
+			return fmt.Errorf("invalid command format")
+		}
+	}
+
 	// Check for path traversal in command name
 	if ContainsPathTraversal(command) {
 		// Don't include potentially malicious input in error message
-		// Check for common dangerous patterns that shouldn't be in command names
-		dangerousPatterns := GetDangerousCommandPatterns()
-		cmdLower := strings.ToLower(command)
-		for _, pattern := range dangerousPatterns {
-			if strings.Contains(cmdLower, strings.ToLower(pattern)) {
-				return fmt.Errorf("invalid command format")
-			}
-		}
 		return NewInvalidCommandError(command + " (path traversal)")
 	}
 
@@ -427,7 +426,7 @@ func ValidateCommand(command string) error {
 		return fmt.Errorf("invalid command format")
 	}
 
-	// Validate against allowlist
+	// Validate against allowlist (safe to include command name for allowed commands)
 	if !allowedCommands[command] {
 		return NewCommandNotAllowedError(command)
 	}
@@ -824,6 +823,14 @@ func GetValidationCacheStats() map[string]int {
 
 // Path helper functions for centralized path validation
 
+// PathSecurityConfig holds configuration for path security validation
+type PathSecurityConfig struct {
+	AllowedBasePaths []string // List of allowed base directories
+	MaxPathLength    int      // Maximum allowed path length (0 = unlimited)
+	AllowSymlinks    bool     // Whether to allow symlinks
+	ResolveSymlinks  bool     // Whether to resolve symlinks before validation
+}
+
 // GetLogAllowedPaths returns allowed paths for log directories
 func GetLogAllowedPaths() []string {
 	paths := []string{"/var/log", "/opt", "/usr/local", "/home"}
@@ -842,6 +849,248 @@ func appendDevPathsIfAllowed(paths []string) []string {
 		return append(paths, "/tmp", "/var/folders") // macOS temp dirs
 	}
 	return paths
+}
+
+// CreateLogPathConfig creates a standard PathSecurityConfig for log directories
+func CreateLogPathConfig() PathSecurityConfig {
+	return PathSecurityConfig{
+		AllowedBasePaths: GetLogAllowedPaths(),
+		MaxPathLength:    4096,
+		AllowSymlinks:    false,
+		ResolveSymlinks:  true,
+	}
+}
+
+// CreateFilterPathConfig creates a standard PathSecurityConfig for filter directories
+func CreateFilterPathConfig() PathSecurityConfig {
+	return PathSecurityConfig{
+		AllowedBasePaths: GetFilterAllowedPaths(),
+		MaxPathLength:    4096,
+		AllowSymlinks:    false,
+		ResolveSymlinks:  true,
+	}
+}
+
+// CreateSingleDirPathConfig creates a path config for a single directory (like log file validation)
+func CreateSingleDirPathConfig(baseDir string) PathSecurityConfig {
+	return PathSecurityConfig{
+		AllowedBasePaths: []string{baseDir},
+		MaxPathLength:    4096,
+		AllowSymlinks:    false,
+		ResolveSymlinks:  true,
+	}
+}
+
+// ValidatePathWithSecurity performs comprehensive path security validation
+func ValidatePathWithSecurity(path string, config PathSecurityConfig) (string, error) {
+	if path == "" {
+		return "", fmt.Errorf("empty path not allowed")
+	}
+
+	// Check path length limits
+	if config.MaxPathLength > 0 && len(path) > config.MaxPathLength {
+		return "", fmt.Errorf("path too long: %d characters (max: %d)", len(path), config.MaxPathLength)
+	}
+
+	// Detect and prevent null byte injection
+	if strings.Contains(path, "\x00") {
+		return "", fmt.Errorf("path contains null byte")
+	}
+
+	// Decode URL-encoded path traversal attempts
+	if decodedPath, err := url.QueryUnescape(path); err == nil && decodedPath != path {
+		getLogger().WithField("original", path).WithField("decoded", decodedPath).
+			Warn("Detected URL-encoded path, using decoded version for validation")
+		path = decodedPath
+	}
+
+	// Normalize unicode characters to prevent bypass attempts
+	path = normalizeUnicode(path)
+
+	// Basic path traversal detection (before cleaning)
+	if hasPathTraversal(path) {
+		return "", fmt.Errorf("path contains path traversal patterns")
+	}
+
+	// Clean and resolve the path
+	cleanPath, err := filepath.Abs(filepath.Clean(path))
+	if err != nil {
+		return "", fmt.Errorf("invalid path: %w", err)
+	}
+
+	// Additional check after cleaning (double-check for sophisticated attacks)
+	if hasPathTraversal(cleanPath) {
+		return "", fmt.Errorf("path contains path traversal patterns after normalization")
+	}
+
+	// Handle symlinks according to configuration
+	finalPath, err := handleSymlinks(cleanPath, config)
+	if err != nil {
+		return "", err
+	}
+
+	// Validate against allowed base paths
+	if err := validateBasePath(finalPath, config.AllowedBasePaths); err != nil {
+		return "", err
+	}
+
+	// Check if path points to a device file or other dangerous file types
+	if err := validateFileType(finalPath); err != nil {
+		return "", err
+	}
+
+	return finalPath, nil
+}
+
+// hasPathTraversal detects various path traversal patterns
+func hasPathTraversal(path string) bool {
+	// Check for various path traversal patterns
+	dangerousPatterns := []string{
+		"..",
+		"./",
+		".\\",
+		"//",
+		"\\\\",
+		"/../",
+		"\\..\\",
+		"%2e%2e",       // URL encoded ..
+		"%2f",          // URL encoded /
+		"%5c",          // URL encoded \
+		"\u002e\u002e", // Unicode ..
+		"\u2024\u2024", // Unicode bullet points (can look like ..)
+		"\uff0e\uff0e", // Full-width Unicode ..
+	}
+
+	pathLower := strings.ToLower(path)
+	for _, pattern := range dangerousPatterns {
+		if strings.Contains(pathLower, strings.ToLower(pattern)) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// normalizeUnicode normalizes unicode characters to prevent bypass attempts
+func normalizeUnicode(path string) string {
+	// Replace various Unicode representations of dots and slashes
+	replacements := map[string]string{
+		"\u002e": ".",  // Unicode dot
+		"\u2024": ".",  // Unicode bullet (one dot leader)
+		"\uff0e": ".",  // Full-width dot
+		"\u002f": "/",  // Unicode slash
+		"\u2044": "/",  // Unicode fraction slash
+		"\uff0f": "/",  // Full-width slash
+		"\u005c": "\\", // Unicode backslash
+		"\uff3c": "\\", // Full-width backslash
+	}
+
+	result := path
+	for unicode, ascii := range replacements {
+		result = strings.ReplaceAll(result, unicode, ascii)
+	}
+
+	return result
+}
+
+// handleSymlinks resolves or validates symlinks according to configuration
+func handleSymlinks(path string, config PathSecurityConfig) (string, error) {
+	// Check if the path is a symlink
+	if info, err := os.Lstat(path); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			if !config.AllowSymlinks {
+				return "", fmt.Errorf("symlinks not allowed: %s", path)
+			}
+
+			if config.ResolveSymlinks {
+				resolved, err := filepath.EvalSymlinks(path)
+				if err != nil {
+					return "", fmt.Errorf("failed to resolve symlink: %w", err)
+				}
+				return resolved, nil
+			}
+		}
+	} else if !os.IsNotExist(err) {
+		return "", fmt.Errorf("failed to check file info: %w", err)
+	}
+
+	return path, nil
+}
+
+// validateBasePath ensures the path is within allowed base directories
+func validateBasePath(path string, allowedBasePaths []string) error {
+	if len(allowedBasePaths) == 0 {
+		return nil // No restrictions if no base paths configured
+	}
+
+	for _, basePath := range allowedBasePaths {
+		cleanBasePath, err := filepath.Abs(filepath.Clean(basePath))
+		if err != nil {
+			continue
+		}
+
+		// Check if path starts with allowed base path
+		if strings.HasPrefix(path, cleanBasePath+string(filepath.Separator)) ||
+			path == cleanBasePath {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("path outside allowed directories: %s", path)
+}
+
+// validateFileType checks for dangerous file types (devices, named pipes, etc.)
+func validateFileType(path string) error {
+	// Check if file exists
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return nil // File doesn't exist yet, allow it
+	}
+	if err != nil {
+		return fmt.Errorf("failed to stat file: %w", err)
+	}
+
+	mode := info.Mode()
+
+	// Block device files
+	if mode&os.ModeDevice != 0 {
+		return fmt.Errorf("device files not allowed: %s", path)
+	}
+
+	// Block named pipes (FIFOs)
+	if mode&os.ModeNamedPipe != 0 {
+		return fmt.Errorf("named pipes not allowed: %s", path)
+	}
+
+	// Block socket files
+	if mode&os.ModeSocket != 0 {
+		return fmt.Errorf("socket files not allowed: %s", path)
+	}
+
+	// Block irregular files (anything that's not a regular file or directory)
+	if !mode.IsRegular() && !mode.IsDir() {
+		return fmt.Errorf("irregular file type not allowed: %s", path)
+	}
+
+	return nil
+}
+
+// ValidateLogPath validates and sanitizes a log file path using standard log directory config
+func ValidateLogPath(path string, logDir string) (string, error) {
+	config := CreateSingleDirPathConfig(logDir)
+	return ValidatePathWithSecurity(path, config)
+}
+
+// ValidateClientLogPath validates log directory path for client initialization
+func ValidateClientLogPath(logDir string) (string, error) {
+	config := CreateLogPathConfig()
+	return ValidatePathWithSecurity(logDir, config)
+}
+
+// ValidateClientFilterPath validates filter directory path for client initialization
+func ValidateClientFilterPath(filterDir string) (string, error) {
+	config := CreateFilterPathConfig()
+	return ValidatePathWithSecurity(filterDir, config)
 }
 
 // GetDangerousCommandPatterns returns patterns that indicate dangerous commands or injections

@@ -1,6 +1,25 @@
 {
-    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-    "extends": [
-        "github>ivuorinen/renovate-config"
-    ]
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["github>ivuorinen/renovate-config", "github>renovatebot/presets:golang", "schedule:weekly"],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "fileMatch": ["^Makefile$", "\\.mk$"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+).+@(?<currentValue>v?\\d+\\.\\d+\\.\\d+)"
+      ],
+      "versioningTemplate": "semver"
+    }
+  ],
+  "go": {
+    "stabilityDays": 3
+  },
+  "packageRules": [
+    {
+      "matchManagers": ["custom.regex"],
+      "matchFileNames": ["Makefile"],
+      "groupName": "development tools",
+      "schedule": ["before 6am on monday"]
+    }
+  ]
 }

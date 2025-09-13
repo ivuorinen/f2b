@@ -31,7 +31,7 @@ func TestFilterCmd(client fail2ban.Client, config *Config) *cobra.Command {
 
 			filterName := args[0]
 			if err := RequireNonEmptyArgument(filterName, "filter name"); err != nil {
-				return HandleClientError(err)
+				return HandleValidationError(err)
 			}
 
 			out, err := client.TestFilterWithContext(ctx, filterName)

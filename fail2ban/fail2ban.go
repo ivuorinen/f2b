@@ -191,9 +191,7 @@ func GetRunner() Runner {
 func RunnerCombinedOutput(name string, args ...string) ([]byte, error) {
 	timer := NewTimedOperation("RunnerCombinedOutput", name, args...)
 
-	globalRunnerManager.mu.RLock()
-	runner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
+	runner := GetRunner()
 
 	output, err := runner.CombinedOutput(name, args...)
 	timer.Finish(err)
@@ -206,9 +204,7 @@ func RunnerCombinedOutput(name string, args ...string) ([]byte, error) {
 func RunnerCombinedOutputWithSudo(name string, args ...string) ([]byte, error) {
 	timer := NewTimedOperation("RunnerCombinedOutputWithSudo", name, args...)
 
-	globalRunnerManager.mu.RLock()
-	runner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
+	runner := GetRunner()
 
 	output, err := runner.CombinedOutputWithSudo(name, args...)
 	timer.Finish(err)
@@ -221,9 +217,7 @@ func RunnerCombinedOutputWithSudo(name string, args ...string) ([]byte, error) {
 func RunnerCombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error) {
 	timer := NewTimedOperation("RunnerCombinedOutputWithContext", name, args...)
 
-	globalRunnerManager.mu.RLock()
-	runner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
+	runner := GetRunner()
 
 	output, err := runner.CombinedOutputWithContext(ctx, name, args...)
 	timer.FinishWithContext(ctx, err)
@@ -236,9 +230,7 @@ func RunnerCombinedOutputWithContext(ctx context.Context, name string, args ...s
 func RunnerCombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error) {
 	timer := NewTimedOperation("RunnerCombinedOutputWithSudoContext", name, args...)
 
-	globalRunnerManager.mu.RLock()
-	runner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
+	runner := GetRunner()
 
 	output, err := runner.CombinedOutputWithSudoContext(ctx, name, args...)
 	timer.FinishWithContext(ctx, err)
@@ -483,9 +475,7 @@ func (c *RealClient) getBanRecordsInternal(ctx context.Context, jails []string) 
 		toQuery = jails
 	}
 
-	globalRunnerManager.mu.RLock()
-	currentRunner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
+	currentRunner := GetRunner()
 
 	// Use parallel processing for multiple jails
 	allRecords, err := ProcessJailsParallel(
@@ -613,9 +603,7 @@ func (c *RealClient) ListJailsWithContext(ctx context.Context) ([]string, error)
 
 // StatusAllWithContext returns the status of all fail2ban jails with context support.
 func (c *RealClient) StatusAllWithContext(ctx context.Context) (string, error) {
-	globalRunnerManager.mu.RLock()
-	currentRunner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
+	currentRunner := GetRunner()
 
 	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, c.Path, "status")
 	return string(out), err
@@ -623,9 +611,7 @@ func (c *RealClient) StatusAllWithContext(ctx context.Context) (string, error) {
 
 // StatusJailWithContext returns the status of a specific fail2ban jail with context support.
 func (c *RealClient) StatusJailWithContext(ctx context.Context, jail string) (string, error) {
-	globalRunnerManager.mu.RLock()
-	currentRunner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
+	currentRunner := GetRunner()
 
 	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, c.Path, "status", jail)
 	return string(out), err
@@ -640,9 +626,7 @@ func (c *RealClient) BanIPWithContext(ctx context.Context, ip, jail string) (int
 		return 0, err
 	}
 
-	globalRunnerManager.mu.RLock()
-	currentRunner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
+	currentRunner := GetRunner()
 
 	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, c.Path, "set", jail, "banip", ip)
 	if err != nil {
@@ -667,9 +651,7 @@ func (c *RealClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (i
 		return 0, err
 	}
 
-	globalRunnerManager.mu.RLock()
-	currentRunner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
+	currentRunner := GetRunner()
 
 	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, c.Path, "set", jail, "unbanip", ip)
 	if err != nil {
@@ -691,9 +673,7 @@ func (c *RealClient) BannedInWithContext(ctx context.Context, ip string) ([]stri
 		return nil, err
 	}
 
-	globalRunnerManager.mu.RLock()
-	currentRunner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
+	currentRunner := GetRunner()
 
 	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, c.Path, "banned", ip)
 	if err != nil {
@@ -848,9 +828,7 @@ func (c *RealClient) TestFilterWithContext(ctx context.Context, filter string) (
 		return "", err
 	}
 
-	globalRunnerManager.mu.RLock()
-	currentRunner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
+	currentRunner := GetRunner()
 
 	output, err := currentRunner.CombinedOutputWithSudoContext(ctx, Fail2BanRegexCommand, logPath, cleanPath)
 	return string(output), err
@@ -863,9 +841,7 @@ func (c *RealClient) TestFilter(filter string) (string, error) {
 		return "", err
 	}
 
-	globalRunnerManager.mu.RLock()
-	currentRunner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
+	currentRunner := GetRunner()
 
 	output, err := currentRunner.CombinedOutputWithSudo(Fail2BanRegexCommand, logPath, cleanPath)
 	return string(output), err

@@ -6,9 +6,9 @@ f2b follows a comprehensive testing strategy that prioritizes security, reliabil
 The core principle is **mock everything** to ensure tests are fast,
 reliable, and never execute real system commands.
 
-Our testing approach includes a **modern fluent testing framework** that reduces test code duplication by 60-70%
+Our testing approach includes a **modern fluent testing framework** that substantially reduces test code duplication
 while maintaining full functionality and improving readability. Enhanced with context-aware testing patterns,
-sophisticated security test coverage including 17 path traversal attack vectors, and thread-safe operations
+sophisticated security test coverage including extensive path traversal attack vectors, and thread-safe operations
 for comprehensive concurrent testing scenarios.
 
 ## Test Organization
@@ -33,7 +33,7 @@ cmd/
 
 fail2ban/
 ├── client_test.go                 # Client interface tests with context support
-├── client_security_test.go        # 17 path traversal security test cases
+├── client_security_test.go        # extensive path traversal security test cases
 ├── mock.go                       # Thread-safe MockClient implementation
 ├── mock_test.go                  # Mock behavior tests
 ├── concurrency_test.go           # Thread safety and race condition tests
@@ -226,10 +226,10 @@ This standardization improves code maintainability and aligns with Go testing co
 
 **✅ Production Results:**
 
-- **60-70% less code**: Fluent interface reduces boilerplate
-- **168+ tests passing**: All tests converted successfully maintain functionality
-- **5 files standardized**: Complete migration of cmd test files
-- **63 field name standardizations**: Consistent naming across all table tests
+- **Substantial code reduction**: Fluent interface reduces boilerplate
+- **Comprehensive test suite**: All tests converted successfully maintain functionality
+- **Complete standardization**: Full migration of cmd test files
+- **Consistent naming**: Standardized field names across all table tests
 
 **Key Improvements:**
 
@@ -323,7 +323,7 @@ defer cleanup()
 
 - **Never execute real sudo commands** - Always use `MockSudoChecker` and `MockRunner`
 - **Test both privilege paths** - Include tests for privileged and unprivileged users with context support
-- **Validate input sanitization** - Test with malicious inputs including 17 path traversal attack vectors
+- **Validate input sanitization** - Test with malicious inputs including extensive path traversal attack vectors
 - **Test privilege escalation** - Ensure commands escalate only when necessary with timeout protection
 - **Context-aware security testing** - Test timeout and cancellation behavior in security scenarios
 - **Thread-safe security operations** - Test concurrent access to security-critical functions
@@ -578,13 +578,13 @@ func BenchmarkBanCommand(b *testing.B) {
 
 ### Enhanced Coverage Requirements
 
-- **Overall**: 85%+ test coverage across the codebase
-- **Security-critical code**: 95%+ coverage for privilege handling with context support
-- **Command implementations**: 90%+ coverage for all CLI commands including timeout scenarios
-- **Input validation**: 100% coverage for validation functions including 17 path traversal cases
-- **Context operations**: 90%+ coverage for timeout and cancellation behavior
-- **Concurrent operations**: 85%+ coverage for thread-safe functions
-- **Performance features**: 80%+ coverage for caching and metrics systems
+- **Overall**: High test coverage across the codebase
+- **Security-critical code**: Comprehensive coverage for privilege handling with context support
+- **Command implementations**: Extensive coverage for all CLI commands including timeout scenarios
+- **Input validation**: Complete coverage for validation functions including extensive path traversal cases
+- **Context operations**: Comprehensive coverage for timeout and cancellation behavior
+- **Concurrent operations**: Extensive coverage for thread-safe functions
+- **Performance features**: Substantial coverage for caching and metrics systems
 
 ### Coverage Verification
 
@@ -613,7 +613,7 @@ go tool cover -func=coverage.out | grep total
 ### Enhanced Security Testing Checklist
 
 - [ ] All privileged operations use mocks with context support
-- [ ] Input validation tested with malicious inputs including 17 path traversal attack vectors
+- [ ] Input validation tested with malicious inputs including extensive path traversal attack vectors
 - [ ] Both privileged and unprivileged paths tested with timeout scenarios
 - [ ] No real file system modifications
 - [ ] No actual network calls
@@ -760,5 +760,5 @@ go test -coverprofile=integration.out -run Integration ./cmd
 
 This comprehensive testing approach ensures f2b remains secure, reliable, and maintainable while providing confidence
 for all changes and contributions. The enhanced testing framework includes context-aware operations, sophisticated
-security coverage with 17 path traversal attack vectors, thread-safe concurrent testing, performance-oriented
+security coverage with extensive path traversal attack vectors, thread-safe concurrent testing, performance-oriented
 validation caching tests, and comprehensive timeout handling verification for enterprise-grade reliability.

@@ -9,3 +9,5 @@ coverage.*
 /*.test
 *.out
 dist/*
+!dist/.gitkeep
+!fail2ban/testdata/*  # Anonymous test data from real fail2ban logs

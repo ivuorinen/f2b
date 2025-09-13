@@ -77,9 +77,7 @@ func TestBanRecordParser(t *testing.T) {
 
 			if record == nil {
 				t.Fatal("Expected record, got nil")
-			}
-
-			if record.IP != tt.wantIP {
+			} else if record.IP != tt.wantIP {
 				t.Errorf("IP mismatch: got %s, want %s", record.IP, tt.wantIP)
 			}
 
@@ -132,9 +130,7 @@ func TestParseBanRecordLineOptimized(t *testing.T) {
 
 	if record == nil {
 		t.Fatal("Expected record, got nil")
-	}
-
-	if record.IP != "192.168.1.100" {
+	} else if record.IP != "192.168.1.100" {
 		t.Errorf("IP mismatch: got %s, want 192.168.1.100", record.IP)
 	}
 

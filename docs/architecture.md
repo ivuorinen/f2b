@@ -74,7 +74,7 @@ validation caching, and parallel processing capabilities for enterprise-grade re
 - Secure command execution using argument arrays
 - No shell string concatenation
 - Comprehensive privilege checking
-- 17 sophisticated path traversal attack test cases
+- extensive sophisticated path traversal attack test cases
 - Enhanced security with timeout handling preventing hanging operations
 
 ### Context-Aware Architecture
@@ -98,7 +98,7 @@ validation caching, and parallel processing capabilities for enterprise-grade re
 - No real system calls in tests
 - Thread-safe mock implementations
 - Configurable behavior for different test scenarios
-- Modern fluent testing patterns reducing code by 60-70%
+- Modern fluent testing patterns with substantial code reduction
 
 ## Data Flow
 
@@ -196,7 +196,7 @@ fail2ban/client.go
 
 - **Unit Tests**: Individual component testing with mocks and fluent framework
 - **Integration Tests**: End-to-end command testing with context support
-- **Security Tests**: Privilege escalation and validation testing (17 path traversal cases)
+- **Security Tests**: Privilege escalation and validation testing (extensive path traversal cases)
 - **Performance Tests**: Benchmarking critical paths with metrics collection
 - **Context Tests**: Timeout and cancellation behavior testing
 - **Parallel Tests**: Multi-worker concurrent operation testing
@@ -207,7 +207,7 @@ fail2ban/client.go
 - `MockRunner`: System command execution mock with timeout handling
 - `MockSudoChecker`: Privilege checking mock with thread-safe operations
 - Thread-safe implementations with configurable behavior
-- Fluent testing framework reducing test code by 60-70%
+- Fluent testing framework with substantial test code reduction
 - Modern mock patterns with SetupMockEnvironmentWithSudo helper
 
 ## Security Architecture
@@ -224,7 +224,7 @@ fail2ban/client.go
 - Comprehensive IP address validation (IPv4/IPv6) with caching
 - Jail name sanitization with validation caching
 - Filter name validation with performance optimization
-- Advanced path traversal prevention (17 sophisticated test cases)
+- Advanced path traversal prevention (extensive sophisticated test cases)
 - Unicode normalization attack protection
 - Mixed case and Windows-style path protection
 

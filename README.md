@@ -13,7 +13,7 @@ Built with Go, featuring automatic sudo privilege management, shell completion, 
 
 ### Prerequisites
 
-- **Go 1.20+** (for building from source)
+- **Go 1.25+** (for building from source)
 - **Fail2Ban** installed and running
 - **Appropriate privileges** (root, sudo group, or sudo access) for ban operations
 
@@ -76,7 +76,7 @@ cd f2b
 make build
 
 # Or with custom version
-go build -ldflags "-X github.com/ivuorinen/f2b/cmd.Version=1.2.3" -o f2b .
+go build -ldflags "-X github.com/ivuorinen/f2b/cmd.version=1.2.3" -o f2b .
 ```
 
 ---
@@ -86,14 +86,14 @@ go build -ldflags "-X github.com/ivuorinen/f2b/cmd.Version=1.2.3" -o f2b .
 ### 🔐 **Enterprise-Grade Security**
 
 - **Smart Privilege Management**: Automatic sudo detection and escalation only when needed
-- **Advanced Input Validation**: 17 sophisticated path traversal attack protections
+- **Advanced Input Validation**: 13 comprehensive path traversal attack protections
 - **Zero Shell Injection**: Secure command execution using argument arrays exclusively
 - **Context-Aware Operations**: Timeout handling and graceful cancellation preventing hanging
 - **Thread-Safe Operations**: Concurrent access protection with proper synchronization
 
 ### 🚀 **Modern CLI Experience**
 
-- **21 Comprehensive Commands**: From basic `ban`/`unban` to advanced `metrics` and `logs-watch`
+- **13 Comprehensive Commands**: From basic `ban`/`unban` to advanced `metrics` and `logs-watch`
 - **Multi-Shell Completion**: Full support for bash, zsh, fish, and PowerShell
 - **Intuitive Command Aliases**: `ls-jails`, `st`, `b`, `ub` for faster workflows
 - **Dual Output Formats**: Human-readable plain text and machine-parseable JSON
@@ -109,7 +109,7 @@ go build -ldflags "-X github.com/ivuorinen/f2b/cmd.Version=1.2.3" -o f2b .
 
 ### 🛡️ **Advanced Security Testing**
 
-- **17 Path Traversal Protections**: Including Unicode normalization and mixed-case attacks
+- **13 Path Traversal Protections**: Including Unicode normalization and mixed-case attacks
 - **Comprehensive Test Coverage**: 76.8% (cmd/), 59.3% (fail2ban/) above industry standards
 - **Mock-Only Testing**: Never executes real sudo commands during testing
 - **Thread Safety**: Extensive race condition testing and protection
@@ -330,7 +330,7 @@ f2b is built as an **enterprise-grade** Go application following modern architec
 
 ### 🎯 **Core Design Principles**
 
-- **Security-First Architecture**: Automatic privilege management with 17 sophisticated path traversal protections
+- **Security-First Architecture**: Automatic privilege management with 13 comprehensive path traversal protections
 - **Context-Aware Operations**: Comprehensive timeout handling and graceful cancellation throughout
 - **Performance-Optimized**: Validation caching, parallel processing, and optimized parsing algorithms
 - **Interface-Based Design**: Full dependency injection for testing and extensibility
@@ -340,12 +340,12 @@ f2b is built as an **enterprise-grade** Go application following modern architec
 
 - **Test Coverage**: 76.8% (cmd/), 59.3% (fail2ban/) - Above industry standards
 - **Modern Testing**: Fluent testing framework reducing code duplication by 60-70%
-- **Security Testing**: 17 comprehensive attack vector test cases implemented
+- **Security Testing**: 13 comprehensive attack vector test cases implemented
 - **Performance**: Context-aware operations with configurable timeouts and resource management
 
 ### 🛠️ **Technology Stack**
 
-- **Language**: Go 1.20+ with modern idioms and patterns
+- **Language**: Go 1.25+ with modern idioms and patterns
 - **CLI Framework**: Cobra with comprehensive command structure and shell completion
 - **Logging**: Structured logging with Logrus and contextual information
 - **Testing**: Advanced mock patterns with thread-safe implementations
@@ -354,7 +354,7 @@ f2b is built as an **enterprise-grade** Go application following modern architec
 
 ### 🎪 **Advanced Features**
 
-- **21 Commands**: Comprehensive functionality from basic operations to advanced monitoring
+- **13 Commands**: Comprehensive functionality from basic operations to advanced monitoring
 - **Parallel Processing**: Automatic concurrent operations for multi-jail scenarios
 - **Real-Time Monitoring**: Live metrics collection and performance analysis
 - **Enterprise Security**: Advanced input validation and privilege management

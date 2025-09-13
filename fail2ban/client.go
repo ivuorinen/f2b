@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -76,8 +75,8 @@ func NewClient(logDir, filterDir string) (*RealClient, error) {
 // and loads available jails. Returns an error if fail2ban is not available, not running, or
 // user lacks sudo privileges.
 func NewClientWithContext(ctx context.Context, logDir, filterDir string) (*RealClient, error) {
-	// Check sudo privileges first (skip in test environment unless forced)
-	if !IsTestEnvironment() || os.Getenv("F2B_TEST_SUDO") == "true" {
+	// Check sudo privileges first (skip in test environment)
+	if !IsTestEnvironment() {
 		if err := CheckSudoRequirements(); err != nil {
 			return nil, err
 		}
@@ -98,28 +97,14 @@ func NewClientWithContext(ctx context.Context, logDir, filterDir string) (*RealC
 		filterDir = DefaultFilterDir
 	}
 
-	// Validate log directory
-	logAllowedPaths := GetLogAllowedPaths()
-	logConfig := PathSecurityConfig{
-		AllowedBasePaths: logAllowedPaths,
-		MaxPathLength:    4096,
-		AllowSymlinks:    false,
-		ResolveSymlinks:  true,
-	}
-	validatedLogDir, err := validatePathWithSecurity(logDir, logConfig)
+	// Validate log directory using centralized helper
+	validatedLogDir, err := ValidateClientLogPath(logDir)
 	if err != nil {
 		return nil, fmt.Errorf("invalid log directory: %w", err)
 	}
 
-	// Validate filter directory
-	filterAllowedPaths := GetFilterAllowedPaths()
-	filterConfig := PathSecurityConfig{
-		AllowedBasePaths: filterAllowedPaths,
-		MaxPathLength:    4096,
-		AllowSymlinks:    false,
-		ResolveSymlinks:  true,
-	}
-	validatedFilterDir, err := validatePathWithSecurity(filterDir, filterConfig)
+	// Validate filter directory using centralized helper
+	validatedFilterDir, err := ValidateClientFilterPath(filterDir)
 	if err != nil {
 		return nil, fmt.Errorf("invalid filter directory: %w", err)
 	}

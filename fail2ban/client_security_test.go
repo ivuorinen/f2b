@@ -6,9 +6,6 @@ import (
 )
 
 func TestNewClientPathTraversalProtection(t *testing.T) {
-	// Enable test mode
-	t.Setenv("F2B_TEST_SUDO", "true")
-
 	// Set up mock environment
 	_, cleanup := SetupMockEnvironment(t)
 	defer cleanup()
@@ -168,9 +165,6 @@ func TestNewClientPathTraversalProtection(t *testing.T) {
 }
 
 func TestNewClientDefaultPathValidation(t *testing.T) {
-	// Enable test mode
-	t.Setenv("F2B_TEST_SUDO", "true")
-
 	// Set up mock environment
 	_, cleanup := SetupMockEnvironment(t)
 	defer cleanup()
