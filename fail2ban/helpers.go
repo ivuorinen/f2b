@@ -426,6 +426,11 @@ func ValidateCommand(command string) error {
 		return fmt.Errorf("invalid command format")
 	}
 
+	// Command must be a bare executable name (no paths or whitespace)
+	if strings.ContainsAny(command, "/\\ \t") {
+		return fmt.Errorf("invalid command format")
+	}
+
 	// Validate against allowlist (safe to include command name for allowed commands)
 	if !allowedCommands[command] {
 		return NewCommandNotAllowedError(command)
@@ -897,10 +902,9 @@ func ValidatePathWithSecurity(path string, config PathSecurityConfig) (string, e
 		return "", fmt.Errorf("path contains null byte")
 	}
 
-	// Decode URL-encoded path traversal attempts
-	if decodedPath, err := url.QueryUnescape(path); err == nil && decodedPath != path {
-		getLogger().WithField("original", path).WithField("decoded", decodedPath).
-			Warn("Detected URL-encoded path, using decoded version for validation")
+	// Decode URL-encoded path traversal attempts (path semantics)
+	if decodedPath, err := url.PathUnescape(path); err == nil && decodedPath != path {
+		getLogger().Debug("Detected URL-encoded path; using decoded version for validation")
 		path = decodedPath
 	}
 

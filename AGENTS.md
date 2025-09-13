@@ -221,7 +221,7 @@ For detailed information about all linting tools and configuration, see [docs/li
 
 ## Testing Requirements
 
-- Use `F2B_TEST_SUDO=true` when testing sudo validation
+- All sudo operations use mocks/stubs (never real sudo)
 - Mock all system interactions with dependency injection
 - Test privilege scenarios: privileged, unprivileged, and edge cases
 - Co-locate tests with source files (`*_test.go`)

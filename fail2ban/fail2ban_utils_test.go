@@ -82,7 +82,9 @@ func TestOSRunnerWithoutSudo(t *testing.T) {
 
 // TestOSRunnerWithSudo tests the OS runner with sudo
 func TestOSRunnerWithSudo(t *testing.T) {
-	t.Parallel()
+	// Do not parallelize: this test mutates global runner
+	orig := fail2ban.GetRunner()
+	t.Cleanup(func() { fail2ban.SetRunner(orig) })
 	mock := &fail2ban.MockRunner{
 		Responses: map[string][]byte{"sudo echo hello": []byte("hello\n")},
 		Errors:    map[string]error{},
