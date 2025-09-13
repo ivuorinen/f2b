@@ -10,7 +10,7 @@ CI, and pre-commit hooks.
 ### Supported Tools
 
 - **Go**: `gofmt`, `go-build-mod`, `go-mod-tidy`, `golangci-lint`
-- **Markdown**: `markdownlint-cli`
+- **Markdown**: `markdownlint`
 - **YAML**: `yamlfmt` (Google's YAML formatter)
 - **GitHub Actions**: `actionlint`
 - **EditorConfig**: `editorconfig-checker`
@@ -108,7 +108,7 @@ make lint-make         # Makefile only
 
 ### Markdown Linting
 
-#### markdownlint-cli (local hook)
+#### markdownlint (local hook)
 
 - **Purpose**: Markdown formatting and style consistency
 - **Configuration**: `.markdownlint.json`

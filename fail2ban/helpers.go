@@ -929,7 +929,7 @@ func ValidatePathWithSecurity(path string, config PathSecurityConfig) (string, e
 		return "", err
 	}
 
-	// Validate against allowed base paths
+	// Validate against allowed base paths using Rel, not prefix
 	if err := validateBasePath(finalPath, config.AllowedBasePaths); err != nil {
 		return "", err
 	}
@@ -1014,6 +1014,38 @@ func handleSymlinks(path string, config PathSecurityConfig) (string, error) {
 		return "", fmt.Errorf("failed to check file info: %w", err)
 	}
 
+	// If leaf doesn't exist, resolve symlinks in the deepest existing ancestor
+	if config.ResolveSymlinks {
+		return resolveAncestorSymlinks(path, config.AllowSymlinks)
+	}
+	return path, nil
+}
+
+// resolveAncestorSymlinks resolves symlinks in existing ancestor directories
+func resolveAncestorSymlinks(path string, allowSymlinks bool) (string, error) {
+	dir := path
+	var tail []string
+	for {
+		d := filepath.Dir(dir)
+		if d == dir {
+			break
+		}
+		if _, err := os.Lstat(dir); err == nil {
+			break
+		}
+		tail = append([]string{filepath.Base(dir)}, tail...)
+		dir = d
+	}
+	if fi, err := os.Lstat(dir); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		if !allowSymlinks {
+			return "", fmt.Errorf("symlinks not allowed in path: %s", dir)
+		}
+		resolved, err := filepath.EvalSymlinks(dir)
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve symlink: %w", err)
+		}
+		return filepath.Join(append([]string{resolved}, tail...)...), nil
+	}
 	return path, nil
 }
 
@@ -1029,9 +1061,8 @@ func validateBasePath(path string, allowedBasePaths []string) error {
 			continue
 		}
 
-		// Check if path starts with allowed base path
-		if strings.HasPrefix(path, cleanBasePath+string(filepath.Separator)) ||
-			path == cleanBasePath {
+		rel, err := filepath.Rel(cleanBasePath, path)
+		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			return nil
 		}
 	}

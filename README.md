@@ -86,14 +86,14 @@ go build -ldflags "-X github.com/ivuorinen/f2b/cmd.version=1.2.3" -o f2b .
 ### 🔐 **Enterprise-Grade Security**
 
 - **Smart Privilege Management**: Automatic sudo detection and escalation only when needed
-- **Advanced Input Validation**: 13 comprehensive path traversal attack protections
+- **Advanced Input Validation**: Comprehensive path traversal attack protections
 - **Zero Shell Injection**: Secure command execution using argument arrays exclusively
 - **Context-Aware Operations**: Timeout handling and graceful cancellation preventing hanging
 - **Thread-Safe Operations**: Concurrent access protection with proper synchronization
 
 ### 🚀 **Modern CLI Experience**
 
-- **13 Comprehensive Commands**: From basic `ban`/`unban` to advanced `metrics` and `logs-watch`
+- **Comprehensive Command Set**: From basic `ban`/`unban` to advanced `metrics` and `logs-watch`
 - **Multi-Shell Completion**: Full support for bash, zsh, fish, and PowerShell
 - **Intuitive Command Aliases**: `ls-jails`, `st`, `b`, `ub` for faster workflows
 - **Dual Output Formats**: Human-readable plain text and machine-parseable JSON
@@ -109,8 +109,8 @@ go build -ldflags "-X github.com/ivuorinen/f2b/cmd.version=1.2.3" -o f2b .
 
 ### 🛡️ **Advanced Security Testing**
 
-- **13 Path Traversal Protections**: Including Unicode normalization and mixed-case attacks
-- **Comprehensive Test Coverage**: 76.8% (cmd/), 59.3% (fail2ban/) above industry standards
+- **Extensive Path Traversal Protections**: Including Unicode normalization and mixed-case attacks
+- **Comprehensive Test Coverage**: High coverage across packages
 - **Mock-Only Testing**: Never executes real sudo commands during testing
 - **Thread Safety**: Extensive race condition testing and protection
 - **Security Audit Trail**: Comprehensive logging of all privileged operations
@@ -330,7 +330,7 @@ f2b is built as an **enterprise-grade** Go application following modern architec
 
 ### 🎯 **Core Design Principles**
 
-- **Security-First Architecture**: Automatic privilege management with 13 comprehensive path traversal protections
+- **Security-First Architecture**: Automatic privilege management with extensive path traversal protections
 - **Context-Aware Operations**: Comprehensive timeout handling and graceful cancellation throughout
 - **Performance-Optimized**: Validation caching, parallel processing, and optimized parsing algorithms
 - **Interface-Based Design**: Full dependency injection for testing and extensibility

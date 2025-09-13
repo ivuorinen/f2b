@@ -54,7 +54,7 @@ For detailed project architecture and design patterns, see [docs/architecture.md
 
 ```bash
 # Build & Test (Go 1.25.0)
-go build -ldflags "-X github.com/ivuorinen/f2b/cmd.Version=1.2.3" -o f2b .
+go build -ldflags "-X github.com/ivuorinen/f2b/cmd.version=1.2.3" -o f2b .
 go test -covermode=atomic -coverprofile=coverage.out ./...
 go install github.com/ivuorinen/f2b@latest
 

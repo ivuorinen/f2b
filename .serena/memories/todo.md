@@ -1,6 +1,6 @@
-# f2b Current TODO Items (2025-09-13)
+# f2b TODO (rolling)
 
-## ✅ COMPLETED TODAY (2025-09-13) - Session Updates
+## ✅ Recently completed (rolling updates)
 
 ### Fixed Critical Issues
 
@@ -17,8 +17,8 @@
 
 ### Documentation Validation - ALL COMPLETED ✅
 
-- ✅ **Validated TODO.md** - All dates current (2025-09-13), Go 1.25.0 correctly referenced
-- ✅ **Validated README.md** - All Go version references show 1.25+, no outdated content
+- ✅ Version policy: see .go-version and go.mod; CI enforces the required toolchain.
+- ✅ README version badges/refs are derived from .go-version via CI check.
 - ✅ **Validated CLAUDE.md** - Current Go 1.25.0, current date, proper documentation structure
 - ✅ **Verified all bash examples in README.md work** - All commands tested and functional
 - ✅ **Checked Makefile targets mentioned in docs exist** - All 7 targets present and working
@@ -107,17 +107,11 @@
 - ✅ **YAML formatting**: Fixed line length issues with proper multiline syntax
 - ✅ **Documentation validation**: All high and medium priority docs validated and current
 
-## 📊 Current Project Health (2025-09-13)
+## 📊 Project signals
 
-**Status: EXCELLENT** ⭐⭐⭐⭐⭐
+- Lint, tests, security: enforced in CI (see badges).
 
-- **Build**: ✅ Working (all tests pass)
-- **Dependencies**: ✅ Up-to-date (latest stable Go 1.25.0, latest packages)
-- **Security**: ✅ All validations passing
-- **Testing**: ✅ No sudo prompts, all mocked properly
-- **Linting**: ✅ Clean (0 issues, all pre-commit hooks pass)
-- **Test Coverage**: ✅ Above industry standards (comprehensive coverage)
-- **Documentation**: ✅ All current, accurate, and verified functional
+- Coverage: tracked in CI; targets defined in docs/testing.md.
 
 **Status**: All critical, high priority, and medium priority tasks are completed. Project is in
 excellent production-ready state.

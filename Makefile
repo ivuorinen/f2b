@@ -130,11 +130,12 @@ test-coverage: ## Run tests with coverage report
 
 update-deps: ## Update all Go dependencies to latest versions
 	@echo "Updating Go dependencies..."
-	go get -u ./...
+	go get -u=patch ./...
 	go mod tidy
+	go mod verify
 	@echo "Dependencies updated ✓"
 	@echo "Updated dependencies:"
-	@go list -u -m all | grep '\['
+	@go list -u -m all | grep '\[' || true
 
 # Code quality targets
 fmt: ## Format Go code

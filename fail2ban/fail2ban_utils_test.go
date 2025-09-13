@@ -82,18 +82,16 @@ func TestOSRunnerWithoutSudo(t *testing.T) {
 
 // TestOSRunnerWithSudo tests the OS runner with sudo
 func TestOSRunnerWithSudo(t *testing.T) {
-	// Skip this test in test environments to avoid hanging on sudo prompts
-	if fail2ban.IsTestEnvironment() {
-		t.Skip("Skipping real sudo test in test environment")
+	t.Parallel()
+	mock := &fail2ban.MockRunner{
+		Responses: map[string][]byte{"sudo echo hello": []byte("hello\n")},
+		Errors:    map[string]error{},
 	}
-
-	runner := &fail2ban.OSRunner{}
-
-	// Test with a command that would use sudo
-	// Note: This might fail in CI/test environments without sudo
-	_, err := runner.CombinedOutput("sudo", "echo", "hello")
-	if err != nil {
-		t.Logf("sudo command failed as expected in test environment: %v", err)
+	fail2ban.SetRunner(mock)
+	out, err := fail2ban.RunnerCombinedOutput("sudo", "echo", "hello")
+	fail2ban.AssertError(t, err, false, "RunnerCombinedOutput with sudo (mocked)")
+	if strings.TrimSpace(string(out)) != "hello" {
+		t.Fatalf("expected %q, got %q", "hello", strings.TrimSpace(string(out)))
 	}
 }
 

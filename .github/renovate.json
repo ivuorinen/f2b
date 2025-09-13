@@ -11,9 +11,7 @@
       "versioningTemplate": "semver"
     }
   ],
-  "go": {
-    "stabilityDays": 3
-  },
+  "stabilityDays": 3,
   "packageRules": [
     {
       "matchManagers": ["custom.regex"],

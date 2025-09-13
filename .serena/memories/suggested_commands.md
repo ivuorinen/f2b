@@ -54,7 +54,7 @@ go test ./...                     # All tests
 go test -v ./...                  # Verbose output
 make test-verbose                 # Via Makefile
 
-# Coverage analysis (Current: 73.9% cmd/, 72.1% fail2ban/)
+# Coverage analysis
 go test -coverprofile=coverage.out ./...
 go tool cover -html=coverage.out -o coverage.html
 make test-coverage               # Combined coverage workflow
@@ -84,7 +84,7 @@ make lint-make                   # Makefile linting
 
 # Direct tool usage
 golangci-lint run --timeout=5m
-markdownlint-cli2 *.md **/*.md
+markdownlint-cli "**/*.md"
 yamlfmt -lint .
 actionlint .github/workflows/*.yml
 ```

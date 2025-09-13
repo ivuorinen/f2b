@@ -70,8 +70,17 @@ func NewContextualCommand(
 		// Get the contextual logger
 		logger := GetContextualLogger()
 
+		// Base on Cobra's context so signals/cancellations propagate
+		base := cmd.Context()
+		if base == nil {
+			base = context.Background()
+		}
 		// Create timeout context for the entire operation
-		ctx, cancel := context.WithTimeout(context.Background(), config.CommandTimeout)
+		timeout := time.Minute
+		if config != nil && config.CommandTimeout > 0 {
+			timeout = config.CommandTimeout
+		}
+		ctx, cancel := context.WithTimeout(base, timeout)
 		defer cancel()
 
 		// Extract command name from use string (first word)
