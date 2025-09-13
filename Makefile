@@ -28,8 +28,9 @@ dev-deps: ## Install development dependencies
 	@echo "Installing development dependencies..."
 	@command -v goreleaser >/dev/null 2>&1 || { \
 		echo "Installing goreleaser..."; \
-		go install github.com/goreleaser/goreleaser/v2@latest; \
+		go install github.com/goreleaser/goreleaser/v2@v2.12.0; \
 	}
+	# renovate: datasource=go depName=github.com/goreleaser/goreleaser/v2
 	@command -v golangci-lint >/dev/null 2>&1 || { \
 		echo "Installing golangci-lint..."; \
 		go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.62.2; \
@@ -59,11 +60,12 @@ dev-deps: ## Install development dependencies
 	}
 	@command -v editorconfig-checker >/dev/null 2>&1 || { \
 		echo "Installing editorconfig-checker..."; \
-		go install github.com/editorconfig-checker/editorconfig-checker/cmd/editorconfig-checker@latest; \
+		go install github.com/editorconfig-checker/editorconfig-checker/cmd/editorconfig-checker@v3.4.0; \
 	}
+	# renovate: datasource=go depName=github.com/editorconfig-checker/editorconfig-checker/cmd/editorconfig-checker
 	@command -v gosec >/dev/null 2>&1 || { \
 		echo "Installing gosec..."; \
-		go install github.com/securego/gosec/v2/cmd/gosec@v2.24.2; \
+		go install github.com/securego/gosec/v2/cmd/gosec@v2.22.8; \
 	}
 	# renovate: datasource=go depName=github.com/securego/gosec/v2/cmd/gosec
 	@command -v staticcheck >/dev/null 2>&1 || { \
@@ -73,16 +75,19 @@ dev-deps: ## Install development dependencies
 	# renovate: datasource=go depName=honnef.co/go/tools/cmd/staticcheck
 	@command -v revive >/dev/null 2>&1 || { \
 		echo "Installing revive..."; \
-		go install github.com/mgechev/revive@latest; \
+		go install github.com/mgechev/revive@v1.12.0; \
 	}
+	# renovate: datasource=go depName=github.com/mgechev/revive
 	@command -v checkmake >/dev/null 2>&1 || { \
 		echo "Installing checkmake..."; \
-		go install github.com/checkmake/checkmake/cmd/checkmake@latest; \
+		go install github.com/checkmake/checkmake/cmd/checkmake@0.2.2; \
 	}
+	# renovate: datasource=go depName=github.com/checkmake/checkmake/cmd/checkmake
 	@command -v golines >/dev/null 2>&1 || { \
 		echo "Installing golines..."; \
-		go install github.com/segmentio/golines@latest; \
+		go install github.com/segmentio/golines@v0.13.0; \
 	}
+	# renovate: datasource=go depName=github.com/segmentio/golines
 
 check-deps: ## Check if all development dependencies are installed
 	@echo "Checking development dependencies..."
