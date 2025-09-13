@@ -32,9 +32,9 @@ dev-deps: ## Install development dependencies
 	}
 	@command -v golangci-lint >/dev/null 2>&1 || { \
 		echo "Installing golangci-lint..."; \
-		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v1.62.2; \
+		go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.62.2; \
 	}
-	# renovate: datasource=go depName=github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+	# renovate: datasource=go depName=github.com/golangci/golangci-lint/cmd/golangci-lint
 	@command -v markdownlint-cli2 >/dev/null 2>&1 || { \
 		echo "Installing markdownlint-cli2..."; \
 		npm install -g markdownlint-cli2; \
