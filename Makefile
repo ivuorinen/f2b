@@ -63,7 +63,7 @@ dev-deps: ## Install development dependencies
 	}
 	@command -v gosec >/dev/null 2>&1 || { \
 		echo "Installing gosec..."; \
-		go install github.com/securego/gosec/v2/cmd/gosec@v2.24.2; \
+		go install github.com/securego/gosec/v2/cmd/gosec@latest; \
 	}
 	# renovate: datasource=go depName=github.com/securego/gosec/v2/cmd/gosec
 	@command -v staticcheck >/dev/null 2>&1 || { \
