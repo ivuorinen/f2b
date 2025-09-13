@@ -32,9 +32,9 @@ dev-deps: ## Install development dependencies
 	}
 	@command -v golangci-lint >/dev/null 2>&1 || { \
 		echo "Installing golangci-lint..."; \
-		# renovate: datasource=go depName=github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v1.62.2; \
 	}
+	# renovate: datasource=go depName=github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 	@command -v markdownlint-cli2 >/dev/null 2>&1 || { \
 		echo "Installing markdownlint-cli2..."; \
 		npm install -g markdownlint-cli2; \
@@ -45,14 +45,14 @@ dev-deps: ## Install development dependencies
 	}
 	@command -v yamlfmt >/dev/null 2>&1 || { \
 		echo "Installing yamlfmt..."; \
-		# renovate: datasource=go depName=github.com/google/yamlfmt/cmd/yamlfmt
 		go install github.com/google/yamlfmt/cmd/yamlfmt@v0.17.2; \
 	}
+	# renovate: datasource=go depName=github.com/google/yamlfmt/cmd/yamlfmt
 	@command -v actionlint >/dev/null 2>&1 || { \
 		echo "Installing actionlint..."; \
-		# renovate: datasource=go depName=github.com/rhysd/actionlint/cmd/actionlint
 		go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7; \
 	}
+	# renovate: datasource=go depName=github.com/rhysd/actionlint/cmd/actionlint
 	@command -v goimports >/dev/null 2>&1 || { \
 		echo "Installing goimports..."; \
 		go install golang.org/x/tools/cmd/goimports@latest; \
@@ -63,14 +63,14 @@ dev-deps: ## Install development dependencies
 	}
 	@command -v gosec >/dev/null 2>&1 || { \
 		echo "Installing gosec..."; \
-		# renovate: datasource=go depName=github.com/securego/gosec/v2/cmd/gosec
 		go install github.com/securego/gosec/v2/cmd/gosec@v2.24.2; \
 	}
+	# renovate: datasource=go depName=github.com/securego/gosec/v2/cmd/gosec
 	@command -v staticcheck >/dev/null 2>&1 || { \
 		echo "Installing staticcheck..."; \
-		# renovate: datasource=go depName=honnef.co/go/tools/cmd/staticcheck
 		go install honnef.co/go/tools/cmd/staticcheck@2024.1.1; \
 	}
+	# renovate: datasource=go depName=honnef.co/go/tools/cmd/staticcheck
 	@command -v revive >/dev/null 2>&1 || { \
 		echo "Installing revive..."; \
 		go install github.com/mgechev/revive@latest; \
