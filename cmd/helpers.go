@@ -3,9 +3,7 @@ package cmd
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -21,30 +19,12 @@ const (
 
 // IsCI detects if we're running in a CI environment
 func IsCI() bool {
-	ciEnvVars := []string{
-		"CI",             // Generic CI indicator
-		"GITHUB_ACTIONS", // GitHub Actions
-		"TRAVIS",         // Travis CI
-		"CIRCLECI",       // Circle CI
-		"JENKINS_URL",    // Jenkins
-		"BUILDKITE",      // Buildkite
-		"TF_BUILD",       // Azure DevOps
-		"GITLAB_CI",      // GitLab CI
-	}
-
-	for _, envVar := range ciEnvVars {
-		if os.Getenv(envVar) != "" {
-			return true
-		}
-	}
-	return false
+	return fail2ban.IsCI()
 }
 
 // IsTestEnvironment detects if we're running in a test environment
 func IsTestEnvironment() bool {
-	return strings.Contains(os.Args[0], ".test") ||
-		os.Getenv("GO_TEST") == "true" ||
-		flag.Lookup("test.v") != nil
+	return fail2ban.IsTestEnvironment()
 }
 
 // Command creation helpers

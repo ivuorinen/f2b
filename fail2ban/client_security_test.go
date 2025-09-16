@@ -190,7 +190,13 @@ func TestNewClientDefaultPathValidation(t *testing.T) {
 	}
 
 	if client.FilterDir != DefaultFilterDir {
-		t.Errorf("expected FilterDir to be %s, got %s", DefaultFilterDir, client.FilterDir)
+		if resolved, err := resolveAncestorSymlinks(DefaultFilterDir, true); err == nil {
+			if client.FilterDir != resolved {
+				t.Errorf("expected FilterDir to be %s or %s, got %s", DefaultFilterDir, resolved, client.FilterDir)
+			}
+		} else {
+			t.Errorf("expected FilterDir to be %s, got %s", DefaultFilterDir, client.FilterDir)
+		}
 	}
 }
 

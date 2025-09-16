@@ -258,15 +258,27 @@ func NewMockRunner() *MockRunner {
 
 // CombinedOutput returns a mocked response or error for a command.
 func (m *MockRunner) CombinedOutput(name string, args ...string) ([]byte, error) {
-	// Prevent actual sudo execution in tests
+	key := name + " " + strings.Join(args, " ")
 	if name == "sudo" {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+
+		m.CallLog = append(m.CallLog, key)
+
+		if err, exists := m.Errors[key]; exists {
+			return nil, err
+		}
+
+		if response, exists := m.Responses[key]; exists {
+			return response, nil
+		}
+
 		return nil, fmt.Errorf("sudo should not be called directly in tests")
 	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	key := name + " " + strings.Join(args, " ")
 	m.CallLog = append(m.CallLog, key)
 
 	if err, exists := m.Errors[key]; exists {

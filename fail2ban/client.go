@@ -48,10 +48,11 @@ type Client interface {
 
 // RealClient is the default implementation of Client, using the local fail2ban-client binary.
 type RealClient struct {
-	Path      string // Path to fail2ban-client
-	Jails     []string
-	LogDir    string
-	FilterDir string
+	Path         string // Command used to invoke fail2ban-client
+	ResolvedPath string // Absolute path discovered during initialization
+	Jails        []string
+	LogDir       string
+	FilterDir    string
 }
 
 // BanRecord represents a single ban entry with jail, IP, ban time, and remaining duration.
@@ -109,18 +110,28 @@ func NewClientWithContext(ctx context.Context, logDir, filterDir string) (*RealC
 		return nil, fmt.Errorf("invalid filter directory: %w", err)
 	}
 
-	rc := &RealClient{Path: path, LogDir: validatedLogDir, FilterDir: validatedFilterDir}
+	rc := &RealClient{
+		Path:         Fail2BanClientCommand,
+		ResolvedPath: path,
+		LogDir:       validatedLogDir,
+		FilterDir:    validatedFilterDir,
+	}
 
 	// Version check - use sudo if needed with context
-	out, err := RunnerCombinedOutputWithSudoContext(ctx, path, "-V")
+	out, err := RunnerCombinedOutputWithSudoContext(ctx, rc.Path, "-V")
 	if err != nil {
 		return nil, fmt.Errorf("version check failed: %w", err)
 	}
-	if CompareVersions(strings.TrimSpace(string(out)), "0.11.0") < 0 {
-		return nil, fmt.Errorf("fail2ban >=0.11.0 required, got %s", out)
+	rawVersion := strings.TrimSpace(string(out))
+	parsedVersion, err := ExtractFail2BanVersion(rawVersion)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse fail2ban version: %w", err)
+	}
+	if CompareVersions(parsedVersion, "0.11.0") < 0 {
+		return nil, fmt.Errorf("fail2ban >=0.11.0 required, got %s", rawVersion)
 	}
 	// Ping - use sudo if needed with context
-	if _, err := RunnerCombinedOutputWithSudoContext(ctx, path, "ping"); err != nil {
+	if _, err := RunnerCombinedOutputWithSudoContext(ctx, rc.Path, "ping"); err != nil {
 		return nil, errors.New("fail2ban service not running")
 	}
 	jails, err := rc.fetchJailsWithContext(ctx)

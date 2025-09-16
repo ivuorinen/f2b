@@ -598,52 +598,114 @@ logpath = /var/log/auth.log`
 }
 
 func TestVersionComparison(t *testing.T) {
-	// This tests the version comparison logic indirectly through NewClient
 	tests := []struct {
-		name        string
-		version     string
-		expectError bool
+		name           string
+		versionOutput  string
+		expectError    bool
+		errorSubstring string
 	}{
 		{
-			name:        "version 0.11.2 should work",
-			version:     "0.11.2",
-			expectError: false,
+			name:          "prefixed supported version",
+			versionOutput: "Fail2Ban v0.11.2",
+			expectError:   false,
 		},
 		{
-			name:        "version 0.12.0 should work",
-			version:     "0.12.0",
-			expectError: false,
+			name:          "plain supported version",
+			versionOutput: "0.12.0",
+			expectError:   false,
 		},
 		{
-			name:        "version 0.10.9 should fail",
-			version:     "0.10.9",
-			expectError: true,
+			name:           "unsupported version",
+			versionOutput:  "Fail2Ban v0.10.9",
+			expectError:    true,
+			errorSubstring: "fail2ban >=0.11.0 required",
+		},
+		{
+			name:           "unparseable version",
+			versionOutput:  "unexpected output",
+			expectError:    true,
+			errorSubstring: "failed to parse fail2ban version",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up mock environment with privileges based on expected outcome
-			_, cleanup := SetupMockEnvironmentWithSudo(t, !tt.expectError)
+			_, cleanup := SetupMockEnvironmentWithSudo(t, true)
 			defer cleanup()
 
-			// Configure specific responses for this test
 			mock := GetRunner().(*MockRunner)
-			mock.SetResponse("fail2ban-client -V", []byte(tt.version))
-			mock.SetResponse("sudo fail2ban-client -V", []byte(tt.version))
+			mock.SetResponse("fail2ban-client -V", []byte(tt.versionOutput))
+			mock.SetResponse("sudo fail2ban-client -V", []byte(tt.versionOutput))
+
 			if !tt.expectError {
 				mock.SetResponse("fail2ban-client ping", []byte("pong"))
 				mock.SetResponse("sudo fail2ban-client ping", []byte("pong"))
-				mock.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-				mock.SetResponse(
-					"sudo fail2ban-client status",
-					[]byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"),
-				)
+				statusOutput := []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd")
+				mock.SetResponse("fail2ban-client status", statusOutput)
+				mock.SetResponse("sudo fail2ban-client status", statusOutput)
 			}
 
 			_, err := NewClient(DefaultLogDir, DefaultFilterDir)
 
 			AssertError(t, err, tt.expectError, tt.name)
+			if tt.expectError && tt.errorSubstring != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.errorSubstring) {
+					t.Fatalf("expected error containing %q, got %v", tt.errorSubstring, err)
+				}
+			}
+		})
+	}
+}
+
+func TestExtractFail2BanVersion(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		expect    string
+		expectErr bool
+	}{
+		{
+			name:   "prefixed output",
+			input:  "Fail2Ban v0.11.2",
+			expect: "0.11.2",
+		},
+		{
+			name:   "with extra context",
+			input:  "fail2ban 0.12.0 (Python 3)",
+			expect: "0.12.0",
+		},
+		{
+			name:   "plain version",
+			input:  "0.13.1",
+			expect: "0.13.1",
+		},
+		{
+			name:   "leading v",
+			input:  "v1.0.0",
+			expect: "1.0.0",
+		},
+		{
+			name:      "invalid output",
+			input:     "not a version",
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			version, err := ExtractFail2BanVersion(tt.input)
+			if tt.expectErr {
+				if err == nil {
+					t.Fatalf("expected error for input %q", tt.input)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error for input %q: %v", tt.input, err)
+			}
+			if version != tt.expect {
+				t.Fatalf("expected version %q, got %q", tt.expect, version)
+			}
 		})
 	}
 }

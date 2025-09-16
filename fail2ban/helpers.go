@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -49,8 +50,8 @@ func init() {
 	configureCITestLogging()
 }
 
-// isCI detects if we're running in a CI environment
-func isCI() bool {
+// IsCI detects if we're running in a CI environment
+func IsCI() bool {
 	ciEnvVars := []string{
 		"CI", "GITHUB_ACTIONS", "TRAVIS", "CIRCLECI", "JENKINS_URL",
 		"BUILDKITE", "TF_BUILD", "GITLAB_CI",
@@ -68,7 +69,7 @@ func isCI() bool {
 func configureCITestLogging() {
 	// If in CI or test environment, reduce logging noise unless explicitly overridden
 	// Note: This will be overridden by cmd.Logger once main() runs
-	if (isCI() || IsTestEnvironment()) && os.Getenv("F2B_LOG_LEVEL") == "" && os.Getenv("F2B_VERBOSE_TESTS") == "" {
+	if (IsCI() || IsTestEnvironment()) && os.Getenv("F2B_LOG_LEVEL") == "" && os.Getenv("F2B_VERBOSE_TESTS") == "" {
 		logrus.SetLevel(logrus.ErrorLevel)
 	}
 }
@@ -324,6 +325,12 @@ func ParseBracketedList(output string) []string {
 // Utility helpers
 
 // CompareVersions compares two version strings
+var (
+	fail2banVersionPattern = regexp.MustCompile(`(?i)fail2ban(?:-client)?[\s-]*v?([0-9]+(?:\.[0-9]+)*)(?:[-+].*)?`)
+	versionNumberPattern   = regexp.MustCompile(`^v?([0-9]+(?:\.[0-9]+)*)(?:[-+].*)?$`)
+)
+
+// CompareVersions compares two version strings
 func CompareVersions(v1, v2 string) int {
 	version1, err1 := version.NewVersion(v1)
 	version2, err2 := version.NewVersion(v2)
@@ -334,6 +341,21 @@ func CompareVersions(v1, v2 string) int {
 	}
 
 	return version1.Compare(version2)
+}
+
+// ExtractFail2BanVersion extracts the semantic version from fail2ban-client -V output
+func ExtractFail2BanVersion(output string) (string, error) {
+	trimmed := strings.TrimSpace(output)
+	if trimmed == "" {
+		return "", fmt.Errorf("empty version output")
+	}
+	if match := fail2banVersionPattern.FindStringSubmatch(trimmed); len(match) == 2 {
+		return match[1], nil
+	}
+	if match := versionNumberPattern.FindStringSubmatch(trimmed); len(match) == 2 {
+		return match[1], nil
+	}
+	return "", fmt.Errorf("unable to parse version from %q", trimmed)
 }
 
 // FormatDuration formats seconds into a human-readable duration string
@@ -839,13 +861,15 @@ type PathSecurityConfig struct {
 // GetLogAllowedPaths returns allowed paths for log directories
 func GetLogAllowedPaths() []string {
 	paths := []string{"/var/log", "/opt", "/usr/local", "/home"}
-	return appendDevPathsIfAllowed(paths)
+	paths = appendDevPathsIfAllowed(paths)
+	return expandAllowedPaths(paths)
 }
 
 // GetFilterAllowedPaths returns allowed paths for filter directories
 func GetFilterAllowedPaths() []string {
 	paths := []string{"/etc/fail2ban", "/usr/local/etc/fail2ban", "/opt/fail2ban", "/home"}
-	return appendDevPathsIfAllowed(paths)
+	paths = appendDevPathsIfAllowed(paths)
+	return expandAllowedPaths(paths)
 }
 
 // appendDevPathsIfAllowed adds development paths if ALLOW_DEV_PATHS is set
@@ -856,12 +880,34 @@ func appendDevPathsIfAllowed(paths []string) []string {
 	return paths
 }
 
+// expandAllowedPaths adds resolved equivalents for allowed paths and removes duplicates
+func expandAllowedPaths(paths []string) []string {
+	seen := make(map[string]struct{}, len(paths)*2)
+	expanded := make([]string, 0, len(paths)*2)
+	for _, p := range paths {
+		if p == "" {
+			continue
+		}
+		if _, ok := seen[p]; !ok {
+			expanded = append(expanded, p)
+			seen[p] = struct{}{}
+		}
+		if resolved, err := resolveAncestorSymlinks(p, true); err == nil && resolved != "" && resolved != p {
+			if _, ok := seen[resolved]; !ok {
+				expanded = append(expanded, resolved)
+				seen[resolved] = struct{}{}
+			}
+		}
+	}
+	return expanded
+}
+
 // CreateLogPathConfig creates a standard PathSecurityConfig for log directories
 func CreateLogPathConfig() PathSecurityConfig {
 	return PathSecurityConfig{
 		AllowedBasePaths: GetLogAllowedPaths(),
 		MaxPathLength:    4096,
-		AllowSymlinks:    false,
+		AllowSymlinks:    true,
 		ResolveSymlinks:  true,
 	}
 }
@@ -871,7 +917,7 @@ func CreateFilterPathConfig() PathSecurityConfig {
 	return PathSecurityConfig{
 		AllowedBasePaths: GetFilterAllowedPaths(),
 		MaxPathLength:    4096,
-		AllowSymlinks:    false,
+		AllowSymlinks:    true,
 		ResolveSymlinks:  true,
 	}
 }
