@@ -60,9 +60,9 @@ dev-deps: ## Install development dependencies
 	}
 	@command -v editorconfig-checker >/dev/null 2>&1 || { \
 		echo "Installing editorconfig-checker..."; \
-		go install github.com/editorconfig-checker/editorconfig-checker/cmd/editorconfig-checker@v3.4.0; \
+		go install github.com/editorconfig-checker/editorconfig-checker/v3/cmd/editorconfig-checker@v3.4.0; \
 	}
-	# renovate: datasource=go depName=github.com/editorconfig-checker/editorconfig-checker/cmd/editorconfig-checker
+	# renovate: datasource=go depName=github.com/editorconfig-checker/editorconfig-checker/v3
 	@command -v gosec >/dev/null 2>&1 || { \
 		echo "Installing gosec..."; \
 		go install github.com/securego/gosec/v2/cmd/gosec@v2.22.8; \
