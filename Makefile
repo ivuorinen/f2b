@@ -26,16 +26,13 @@ install: ## Install f2b globally
 # Development dependencies
 dev-deps: ## Install development dependencies
 	@echo "Installing development dependencies..."
-	@command -v goreleaser >/dev/null 2>&1 || { \
-		echo "Installing goreleaser..."; \
-		go install github.com/goreleaser/goreleaser/v2@v2.12.0; \
-	}
+	@echo ""
+	@echo "Installing goreleaser..."
+	@go install github.com/goreleaser/goreleaser/v2@v2.12.0;
 	# renovate: datasource=go depName=github.com/goreleaser/goreleaser/v2
-	@command -v golangci-lint >/dev/null 2>&1 || { \
-		echo "Installing golangci-lint..."; \
-		go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.62.2; \
-	}
-	# renovate: datasource=go depName=github.com/golangci/golangci-lint/cmd/golangci-lint
+	@echo "Installing golangci-lint...";
+	@go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.4.0;
+	# renovate: datasource=go depName=github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 	@command -v markdownlint-cli2 >/dev/null 2>&1 || { \
 		echo "Installing markdownlint-cli2..."; \
 		npm install -g markdownlint-cli2; \
