@@ -143,7 +143,7 @@ fail2ban/client.go
 
 ### Core Technologies
 
-- **Language**: Go 1.20+
+- **Language**: Go 1.25+
 - **CLI Framework**: [Cobra](https://github.com/spf13/cobra)
 - **Logging**: [Logrus](https://github.com/sirupsen/logrus) with structured output and contextual logging
 - **Testing**: Go's built-in testing with comprehensive mocks and fluent testing framework
