@@ -376,7 +376,7 @@ dockers:
       - "ghcr.io/ivuorinen/f2b:latest-amd64"
 
     dockerfile: |
-      FROM alpine:3.20
+      FROM alpine:3.22
       RUN apk --no-cache add ca-certificates
       COPY f2b /usr/local/bin/
       ENTRYPOINT ["f2b"]
@@ -401,7 +401,7 @@ dockers:
       - "ghcr.io/ivuorinen/f2b:latest-arm64"
 
     dockerfile: |
-      FROM alpine:3.20
+      FROM alpine:3.22
       RUN apk --no-cache add ca-certificates
       COPY f2b /usr/local/bin/
       ENTRYPOINT ["f2b"]
@@ -426,7 +426,7 @@ dockers:
       - "ghcr.io/ivuorinen/f2b:latest-armv7"
 
     dockerfile: |
-      FROM alpine:3.20
+      FROM alpine:3.22
       RUN apk --no-cache add ca-certificates
       COPY f2b /usr/local/bin/
       ENTRYPOINT ["f2b"]

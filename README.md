@@ -4,7 +4,7 @@ A modern, secure, and extensible Go CLI tool for managing [Fail2Ban](https://www
 Built with Go, featuring automatic sudo privilege management, shell completion, and comprehensive security.
 
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://choosealicense.com/licenses/mit/)
-[![Go Version](https://img.shields.io/badge/Go-%3E%3D1.20-blue.svg)](https://golang.org/)
+[![Go Version](https://img.shields.io/badge/Go-%3E%3D1.25-blue.svg)](https://golang.org/)
 [![Build Status](https://img.shields.io/badge/tests-passing-brightgreen.svg)](https://github.com/ivuorinen/f2b/actions)
 
 ---
