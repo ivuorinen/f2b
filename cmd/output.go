@@ -1,3 +1,6 @@
+// Package cmd provides output formatting and display utilities for the f2b CLI.
+// This package handles structured output in both plain text and JSON formats,
+// supporting consistent CLI output patterns across all commands.
 package cmd
 
 import (

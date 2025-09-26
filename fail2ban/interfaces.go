@@ -1,3 +1,6 @@
+// Package fail2ban defines core interfaces and contracts for fail2ban operations.
+// This package provides the primary interfaces (Client, Runner, SudoChecker) that
+// define the contract for interacting with fail2ban services and system operations.
 package fail2ban
 
 import (

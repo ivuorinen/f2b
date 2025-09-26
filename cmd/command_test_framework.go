@@ -1,3 +1,6 @@
+// Package cmd provides a comprehensive testing framework for CLI commands.
+// This package offers fluent testing utilities, mock builders, and standardized
+// test patterns to ensure robust testing of f2b command functionality.
 package cmd
 
 import (

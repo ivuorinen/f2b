@@ -1,3 +1,6 @@
+// Package fail2ban defines common data structures and types.
+// This package provides core types used throughout the fail2ban integration,
+// including ban records, configuration structures, and logging interfaces.
 package fail2ban
 
 import (

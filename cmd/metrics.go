@@ -1,3 +1,6 @@
+// Package cmd provides comprehensive metrics collection and monitoring capabilities.
+// This package tracks performance metrics, operation statistics, and provides
+// observability features for f2b CLI operations and fail2ban interactions.
 package cmd
 
 import (

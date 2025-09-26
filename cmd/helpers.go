@@ -1,3 +1,6 @@
+// Package cmd provides common helper functions and utilities for CLI commands.
+// This package contains shared functionality used across multiple f2b commands,
+// including argument validation, error handling, and output formatting helpers.
 package cmd
 
 import (
