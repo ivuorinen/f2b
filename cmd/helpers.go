@@ -530,7 +530,7 @@ func RequireArguments(args []string, n int, errorMsg string) error {
 
 // RequireNonEmptyArgument checks that an argument is not empty
 func RequireNonEmptyArgument(arg, name string) error {
-	if strings.TrimSpace(arg) == "" {
+	if IsEmptyString(arg) {
 		return fmt.Errorf("%s cannot be empty", name)
 	}
 	return nil
@@ -552,4 +552,46 @@ func FormatStatusResult(jail, status string) string {
 		return status
 	}
 	return fmt.Sprintf("Status for %s:\n%s", jail, status)
+}
+
+// String processing helpers
+
+// TrimmedString safely trims whitespace and returns empty string for nil input
+func TrimmedString(s string) string {
+	return strings.TrimSpace(s)
+}
+
+// IsEmptyString checks if a string is empty after trimming whitespace
+func IsEmptyString(s string) bool {
+	return strings.TrimSpace(s) == ""
+}
+
+// NonEmptyString checks if a string has content after trimming whitespace
+func NonEmptyString(s string) bool {
+	return strings.TrimSpace(s) != ""
+}
+
+// Error handling helpers
+
+// WrapError provides consistent error wrapping with operation context
+func WrapError(err error, operation string) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%s failed: %w", operation, err)
+}
+
+// WrapErrorf provides formatted error wrapping with context
+func WrapErrorf(err error, format string, args ...interface{}) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf(fmt.Sprintf(format, args...)+": %w", err)
+}
+
+// Command output helpers
+
+// TrimmedOutput safely trims whitespace from command output bytes
+func TrimmedOutput(output []byte) string {
+	return strings.TrimSpace(string(output))
 }

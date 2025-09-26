@@ -464,7 +464,7 @@ func (result *CommandTestResult) AssertJSONField(fieldPath, expected string) *Co
 // AssertEmpty validates that output is empty
 func (result *CommandTestResult) AssertEmpty() *CommandTestResult {
 	result.t.Helper()
-	if strings.TrimSpace(result.Output) != "" {
+	if NonEmptyString(result.Output) {
 		result.t.Fatalf("%s: expected empty output, got: %s", result.name, result.Output)
 	}
 	return result
@@ -473,7 +473,7 @@ func (result *CommandTestResult) AssertEmpty() *CommandTestResult {
 // AssertNotEmpty validates that output is not empty
 func (result *CommandTestResult) AssertNotEmpty() *CommandTestResult {
 	result.t.Helper()
-	if strings.TrimSpace(result.Output) == "" {
+	if IsEmptyString(result.Output) {
 		result.t.Fatalf("%s: expected non-empty output", result.name)
 	}
 	return result
