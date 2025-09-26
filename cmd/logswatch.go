@@ -48,7 +48,7 @@ func LogsWatchCmd(ctx context.Context, client fail2ban.Client, config *Config) *
 			PrintOutput(strings.Join(prev, "\n"), config.Format)
 
 			if interval <= 0 {
-				interval = 5 * time.Second
+				interval = DefaultPollingInterval
 			}
 			ticker := time.NewTicker(interval)
 			defer ticker.Stop()
