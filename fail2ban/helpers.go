@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 	"unicode"
 
@@ -315,33 +314,6 @@ func FormatDuration(sec int64) string {
 	return fmt.Sprintf("%02d:%02d:%02d:%02d", days, h, m, s)
 }
 
-// ContainsPathTraversal checks for various path traversal patterns
-func ContainsPathTraversal(input string) bool {
-	// Check for null bytes
-	if strings.Contains(input, "\x00") {
-		return true
-	}
-
-	// Various representations of ".." and dangerous patterns
-	dangerousPatterns := []string{
-		"..",
-		"%2e%2e",       // URL encoded ..
-		"%2f",          // URL encoded /
-		"%5c",          // URL encoded \
-		"\u002e\u002e", // Unicode ..
-		"\uff0e\uff0e", // Full-width Unicode ..
-	}
-
-	inputLower := strings.ToLower(input)
-	for _, pattern := range dangerousPatterns {
-		if strings.Contains(inputLower, strings.ToLower(pattern)) {
-			return true
-		}
-	}
-
-	return false
-}
-
 // ValidateCommand validates that a command is in the allowlist for security
 func ValidateCommand(command string) error {
 	// Allowlist of commands that f2b is permitted to execute
@@ -555,178 +527,6 @@ func (t *TimedOperation) FinishWithContext(ctx context.Context, err error) {
 			// Log fast operations at debug level to reduce noise
 			logger.Debugf("Operation completed in %v", duration)
 		}
-	}
-}
-
-// Validation caching for performance optimization
-
-// ValidationCache provides thread-safe caching for validation results
-type ValidationCache struct {
-	mu    sync.RWMutex
-	cache map[string]error
-}
-
-// NewValidationCache creates a new validation cache
-func NewValidationCache() *ValidationCache {
-	return &ValidationCache{
-		cache: make(map[string]error),
-	}
-}
-
-// Get retrieves a cached validation result
-func (vc *ValidationCache) Get(key string) (bool, error) {
-	vc.mu.RLock()
-	defer vc.mu.RUnlock()
-	result, exists := vc.cache[key]
-	return exists, result
-}
-
-// Set stores a validation result in the cache
-func (vc *ValidationCache) Set(key string, err error) {
-	vc.mu.Lock()
-	defer vc.mu.Unlock()
-	vc.cache[key] = err
-}
-
-// Clear removes all cached entries
-func (vc *ValidationCache) Clear() {
-	vc.mu.Lock()
-	defer vc.mu.Unlock()
-	vc.cache = make(map[string]error)
-}
-
-// Size returns the number of cached entries
-func (vc *ValidationCache) Size() int {
-	vc.mu.RLock()
-	defer vc.mu.RUnlock()
-	return len(vc.cache)
-}
-
-// Global validation caches for frequently used validators
-var (
-	ipValidationCache      = NewValidationCache()
-	jailValidationCache    = NewValidationCache()
-	filterValidationCache  = NewValidationCache()
-	commandValidationCache = NewValidationCache()
-
-	// metricsRecorder is set by the cmd package to avoid circular dependencies
-	metricsRecorder   MetricsRecorder
-	metricsRecorderMu sync.RWMutex
-)
-
-// SetMetricsRecorder sets the metrics recorder for validation cache tracking
-func SetMetricsRecorder(recorder MetricsRecorder) {
-	metricsRecorderMu.Lock()
-	defer metricsRecorderMu.Unlock()
-	metricsRecorder = recorder
-}
-
-// getMetricsRecorder returns the current metrics recorder
-func getMetricsRecorder() MetricsRecorder {
-	metricsRecorderMu.RLock()
-	defer metricsRecorderMu.RUnlock()
-	return metricsRecorder
-}
-
-// CachedValidateIP validates an IP address with caching
-func CachedValidateIP(ip string) error {
-	cacheKey := "ip:" + ip
-	if exists, result := ipValidationCache.Get(cacheKey); exists {
-		// Record cache hit in metrics
-		if recorder := getMetricsRecorder(); recorder != nil {
-			recorder.RecordValidationCacheHit()
-		}
-		return result
-	}
-
-	// Record cache miss in metrics
-	if recorder := getMetricsRecorder(); recorder != nil {
-		recorder.RecordValidationCacheMiss()
-	}
-
-	err := ValidateIP(ip)
-	ipValidationCache.Set(cacheKey, err)
-	return err
-}
-
-// CachedValidateJail validates a jail name with caching
-func CachedValidateJail(jail string) error {
-	cacheKey := "jail:" + jail
-	if exists, result := jailValidationCache.Get(cacheKey); exists {
-		// Record cache hit in metrics
-		if recorder := getMetricsRecorder(); recorder != nil {
-			recorder.RecordValidationCacheHit()
-		}
-		return result
-	}
-
-	// Record cache miss in metrics
-	if recorder := getMetricsRecorder(); recorder != nil {
-		recorder.RecordValidationCacheMiss()
-	}
-
-	err := ValidateJail(jail)
-	jailValidationCache.Set(cacheKey, err)
-	return err
-}
-
-// CachedValidateFilter validates a filter name with caching
-func CachedValidateFilter(filter string) error {
-	cacheKey := "filter:" + filter
-	if exists, result := filterValidationCache.Get(cacheKey); exists {
-		// Record cache hit in metrics
-		if recorder := getMetricsRecorder(); recorder != nil {
-			recorder.RecordValidationCacheHit()
-		}
-		return result
-	}
-
-	// Record cache miss in metrics
-	if recorder := getMetricsRecorder(); recorder != nil {
-		recorder.RecordValidationCacheMiss()
-	}
-
-	err := ValidateFilter(filter)
-	filterValidationCache.Set(cacheKey, err)
-	return err
-}
-
-// CachedValidateCommand validates a command with caching
-func CachedValidateCommand(command string) error {
-	cacheKey := "command:" + command
-	if exists, result := commandValidationCache.Get(cacheKey); exists {
-		// Record cache hit in metrics
-		if recorder := getMetricsRecorder(); recorder != nil {
-			recorder.RecordValidationCacheHit()
-		}
-		return result
-	}
-
-	// Record cache miss in metrics
-	if recorder := getMetricsRecorder(); recorder != nil {
-		recorder.RecordValidationCacheMiss()
-	}
-
-	err := ValidateCommand(command)
-	commandValidationCache.Set(cacheKey, err)
-	return err
-}
-
-// ClearValidationCaches clears all validation caches
-func ClearValidationCaches() {
-	ipValidationCache.Clear()
-	jailValidationCache.Clear()
-	filterValidationCache.Clear()
-	commandValidationCache.Clear()
-}
-
-// GetValidationCacheStats returns cache statistics
-func GetValidationCacheStats() map[string]int {
-	return map[string]int{
-		"ip_cache_size":      ipValidationCache.Size(),
-		"jail_cache_size":    jailValidationCache.Size(),
-		"filter_cache_size":  filterValidationCache.Size(),
-		"command_cache_size": commandValidationCache.Size(),
 	}
 }
 
@@ -1054,17 +854,4 @@ func ValidateClientLogPath(logDir string) (string, error) {
 func ValidateClientFilterPath(filterDir string) (string, error) {
 	config := CreateFilterPathConfig()
 	return ValidatePathWithSecurity(filterDir, config)
-}
-
-// GetDangerousCommandPatterns returns patterns that indicate dangerous commands or injections
-func GetDangerousCommandPatterns() []string {
-	return []string{
-		"rm -rf", "dangerous_rm_command", "dangerous_system_call",
-		"drop table", "'; cat", "/etc/", "DANGEROUS_RM_COMMAND",
-		"DANGEROUS_SYSTEM_CALL", "DANGEROUS_COMMAND", "DANGEROUS_PWD_COMMAND",
-		"DANGEROUS_LIST_COMMAND", "DANGEROUS_READ_COMMAND", "DANGEROUS_OUTPUT_FILE",
-		"DANGEROUS_INPUT_FILE", "DANGEROUS_EXEC_COMMAND", "DANGEROUS_WGET_COMMAND",
-		"DANGEROUS_CURL_COMMAND", "DANGEROUS_EXEC_FUNCTION", "DANGEROUS_SYSTEM_FUNCTION",
-		"DANGEROUS_EVAL_FUNCTION",
-	}
 }
