@@ -17,46 +17,9 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// logger holds the current logger instance - will be set by cmd package
-var logger LoggerInterface = logrus.StandardLogger()
-
-// SetLogger allows the cmd package to set the logger instance
-func SetLogger(l LoggerInterface) {
-	logger = l
-}
-
-// getLogger returns the current logger instance
-func getLogger() LoggerInterface {
-	return logger
-}
-
 func init() {
 	// Configure logging for CI/test environments to reduce noise
-	configureCITestLogging()
-}
-
-// IsCI detects if we're running in a CI environment
-func IsCI() bool {
-	ciEnvVars := []string{
-		"CI", "GITHUB_ACTIONS", "TRAVIS", "CIRCLECI", "JENKINS_URL",
-		"BUILDKITE", "TF_BUILD", "GITLAB_CI",
-	}
-
-	for _, envVar := range ciEnvVars {
-		if os.Getenv(envVar) != "" {
-			return true
-		}
-	}
-	return false
-}
-
-// configureCITestLogging reduces log verbosity in CI and test environments
-func configureCITestLogging() {
-	// If in CI or test environment, reduce logging noise unless explicitly overridden
-	// Note: This will be overridden by cmd.Logger once main() runs
-	if (IsCI() || IsTestEnvironment()) && os.Getenv("F2B_LOG_LEVEL") == "" && os.Getenv("F2B_VERBOSE_TESTS") == "" {
-		logrus.SetLevel(logrus.ErrorLevel)
-	}
+	// This now comes from the logging_env module
 }
 
 // Validation constants
@@ -350,16 +313,6 @@ func FormatDuration(sec int64) string {
 	m := (sec % SecondsPerHour) / SecondsPerMinute
 	s := sec % SecondsPerMinute
 	return fmt.Sprintf("%02d:%02d:%02d:%02d", days, h, m, s)
-}
-
-// IsTestEnvironment returns true if running in a test environment
-func IsTestEnvironment() bool {
-	for _, arg := range os.Args {
-		if strings.HasPrefix(arg, "-test.") {
-			return true
-		}
-	}
-	return false
 }
 
 // ContainsPathTraversal checks for various path traversal patterns
