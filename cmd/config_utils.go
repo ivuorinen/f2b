@@ -50,15 +50,17 @@ func createPathVariations(path string) []string {
 	return variations
 }
 
+// Cache compiled regex for performance
+var overlongEncodingRegex = regexp.MustCompile(
+	`\xc0[\x80-\xbf]|\xe0[\x80-\x9f][\x80-\xbf]|\xf0[\x80-\x8f][\x80-\xbf][\x80-\xbf]`,
+)
+
 // checkPathVariationsForTraversal checks all path variations against dangerous patterns
 func checkPathVariationsForTraversal(variations []string) bool {
 	allPatterns := getAllDangerousPatterns()
-	overlongRegex := regexp.MustCompile(
-		`\xc0[\x80-\xbf]|\xe0[\x80-\x9f][\x80-\xbf]|\xf0[\x80-\x8f][\x80-\xbf][\x80-\xbf]`,
-	)
 
 	for _, variant := range variations {
-		if checkSingleVariantForTraversal(variant, allPatterns, overlongRegex) {
+		if checkSingleVariantForTraversal(variant, allPatterns, overlongEncodingRegex) {
 			return true
 		}
 	}
