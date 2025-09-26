@@ -15,18 +15,6 @@ const (
 	DefaultSudoTimeout = 5 * time.Second
 )
 
-// SudoChecker provides methods to check sudo privileges
-type SudoChecker interface {
-	// IsRoot returns true if the current user is root (UID 0)
-	IsRoot() bool
-	// InSudoGroup returns true if the current user is in the sudo group
-	InSudoGroup() bool
-	// CanUseSudo returns true if the current user can use sudo
-	CanUseSudo() bool
-	// HasSudoPrivileges returns true if user has any form of sudo access
-	HasSudoPrivileges() bool
-}
-
 // RealSudoChecker implements SudoChecker using actual system calls
 type RealSudoChecker struct{}
 

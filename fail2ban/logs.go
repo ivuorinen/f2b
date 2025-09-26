@@ -45,7 +45,7 @@ func GetLogLinesWithLimit(jailFilter string, ipFilter string, maxLines int) ([]s
 		BaseDir:     GetLogDir(),
 	}
 
-	return collectLogLines(context.TODO(), GetLogDir(), config)
+	return collectLogLines(context.Background(), GetLogDir(), config)
 }
 
 // collectLogLines reads log files under the provided directory using the supplied configuration.

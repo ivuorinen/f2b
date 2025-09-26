@@ -1,8 +1,10 @@
 *.log
 /f2b*
 coverage.*
-.env               # real secrets
-!.env.example      # keep the template under VCS
+# real secrets
+.env
+# keep the template under VCS
+!.env.example
 *.exe
 *.dll
 .DS_Store
@@ -10,4 +12,5 @@ coverage.*
 *.out
 dist/*
 !dist/.gitkeep
-!fail2ban/testdata/*  # Anonymous test data from real fail2ban logs
+# Anonymous test data from real fail2ban logs
+!fail2ban/testdata/*

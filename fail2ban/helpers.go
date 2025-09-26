@@ -17,31 +17,16 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// loggerInterface defines the logging interface we need
-type loggerInterface interface {
-	WithField(key string, value interface{}) *logrus.Entry
-	WithFields(fields logrus.Fields) *logrus.Entry
-	WithError(err error) *logrus.Entry
-	Debug(args ...interface{})
-	Info(args ...interface{})
-	Warn(args ...interface{})
-	Error(args ...interface{})
-	Debugf(format string, args ...interface{})
-	Infof(format string, args ...interface{})
-	Warnf(format string, args ...interface{})
-	Errorf(format string, args ...interface{})
-}
-
 // logger holds the current logger instance - will be set by cmd package
-var logger loggerInterface = logrus.StandardLogger()
+var logger LoggerInterface = logrus.StandardLogger()
 
 // SetLogger allows the cmd package to set the logger instance
-func SetLogger(l loggerInterface) {
+func SetLogger(l LoggerInterface) {
 	logger = l
 }
 
 // getLogger returns the current logger instance
-func getLogger() loggerInterface {
+func getLogger() LoggerInterface {
 	return logger
 }
 
@@ -712,12 +697,6 @@ func (vc *ValidationCache) Size() int {
 	vc.mu.RLock()
 	defer vc.mu.RUnlock()
 	return len(vc.cache)
-}
-
-// MetricsRecorder interface for recording validation metrics
-type MetricsRecorder interface {
-	RecordValidationCacheHit()
-	RecordValidationCacheMiss()
 }
 
 // Global validation caches for frequently used validators

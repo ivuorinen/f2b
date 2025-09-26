@@ -60,16 +60,6 @@ func SetFilterDir(dir string) {
 	filterDir = dir
 }
 
-// Runner executes system commands.
-// Implementations may use sudo or other mechanisms as needed.
-type Runner interface {
-	CombinedOutput(name string, args ...string) ([]byte, error)
-	CombinedOutputWithSudo(name string, args ...string) ([]byte, error)
-	// Context-aware versions for timeout and cancellation support
-	CombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error)
-	CombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error)
-}
-
 // OSRunner runs commands locally.
 type OSRunner struct{}
 
@@ -539,6 +529,11 @@ func (c *RealClient) GetLogLines(jail, ip string) ([]string, error) {
 
 // GetLogLinesWithLimit returns log lines with configurable limits for memory management.
 func (c *RealClient) GetLogLinesWithLimit(jail, ip string, maxLines int) ([]string, error) {
+	return c.GetLogLinesWithLimitContext(context.Background(), jail, ip, maxLines)
+}
+
+// GetLogLinesWithLimitContext returns log lines with configurable limits and context support.
+func (c *RealClient) GetLogLinesWithLimitContext(ctx context.Context, jail, ip string, maxLines int) ([]string, error) {
 	if maxLines == 0 {
 		return []string{}, nil
 	}
@@ -551,7 +546,7 @@ func (c *RealClient) GetLogLinesWithLimit(jail, ip string, maxLines int) ([]stri
 		BaseDir:     c.LogDir,
 	}
 
-	return collectLogLines(context.TODO(), c.LogDir, config)
+	return collectLogLines(ctx, c.LogDir, config)
 }
 
 // ListFilters returns a list of available fail2ban filter files.
