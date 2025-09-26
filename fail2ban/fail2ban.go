@@ -539,55 +539,19 @@ func (c *RealClient) GetLogLines(jail, ip string) ([]string, error) {
 
 // GetLogLinesWithLimit returns log lines with configurable limits for memory management.
 func (c *RealClient) GetLogLinesWithLimit(jail, ip string, maxLines int) ([]string, error) {
-	pattern := filepath.Join(c.LogDir, "fail2ban.log*")
-	files, err := filepath.Glob(pattern)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(files) == 0 {
+	if maxLines == 0 {
 		return []string{}, nil
 	}
 
-	// Sort files to read in order (current log first, then rotated logs newest to oldest)
-	sort.Strings(files)
-
-	// Use streaming approach with memory limits
 	config := LogReadConfig{
 		MaxLines:    maxLines,
 		MaxFileSize: DefaultMaxFileSize,
 		JailFilter:  jail,
 		IPFilter:    ip,
+		BaseDir:     c.LogDir,
 	}
 
-	var allLines []string
-	totalLines := 0
-
-	for _, fpath := range files {
-		if config.MaxLines > 0 && totalLines >= config.MaxLines {
-			break
-		}
-
-		// Adjust remaining lines limit
-		remainingLines := config.MaxLines - totalLines
-		if remainingLines <= 0 {
-			break
-		}
-
-		fileConfig := config
-		fileConfig.MaxLines = remainingLines
-
-		lines, err := streamLogFile(fpath, fileConfig)
-		if err != nil {
-			getLogger().WithError(err).WithField("file", fpath).Error("Failed to read log file")
-			continue
-		}
-
-		allLines = append(allLines, lines...)
-		totalLines += len(lines)
-	}
-
-	return allLines, nil
+	return collectLogLines(context.TODO(), c.LogDir, config)
 }
 
 // ListFilters returns a list of available fail2ban filter files.
@@ -711,72 +675,23 @@ func (c *RealClient) GetLogLinesWithLimitAndContext(
 	jail, ip string,
 	maxLines int,
 ) ([]string, error) {
-	// Check context before starting
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	default:
-	}
-
-	pattern := filepath.Join(c.LogDir, "fail2ban.log*")
-	files, err := filepath.Glob(pattern)
-	if err != nil {
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
-	if len(files) == 0 {
+	if maxLines == 0 {
 		return []string{}, nil
 	}
 
-	// Sort files to read in order (current log first, then rotated logs newest to oldest)
-	sort.Strings(files)
-
-	// Use streaming approach with memory limits and context support
 	config := LogReadConfig{
 		MaxLines:    maxLines,
 		MaxFileSize: DefaultMaxFileSize,
 		JailFilter:  jail,
 		IPFilter:    ip,
+		BaseDir:     c.LogDir,
 	}
 
-	var allLines []string
-	totalLines := 0
-
-	for _, fpath := range files {
-		// Check context before processing each file
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-		}
-
-		if config.MaxLines > 0 && totalLines >= config.MaxLines {
-			break
-		}
-
-		// Adjust remaining lines limit
-		remainingLines := config.MaxLines - totalLines
-		if remainingLines <= 0 {
-			break
-		}
-
-		fileConfig := config
-		fileConfig.MaxLines = remainingLines
-
-		lines, err := streamLogFileWithContext(ctx, fpath, fileConfig)
-		if err != nil {
-			if errors.Is(err, ctx.Err()) {
-				return nil, err // Return context error immediately
-			}
-			getLogger().WithError(err).WithField("file", fpath).Error("Failed to read log file")
-			continue
-		}
-
-		allLines = append(allLines, lines...)
-		totalLines += len(lines)
-	}
-
-	return allLines, nil
+	return collectLogLines(ctx, c.LogDir, config)
 }
 
 // ListFiltersWithContext returns a list of available fail2ban filter files with context support.

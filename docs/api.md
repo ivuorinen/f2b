@@ -94,7 +94,7 @@ type RealClient struct {
 }
 ```
 
-#### Configuration
+#### Configure RealClient
 
 ```go
 // Create a new client with custom timeout
@@ -547,7 +547,7 @@ func (h *HTTPHandler) writeError(w http.ResponseWriter, code int, err error) {
 
 ## Best Practices
 
-### Error Handling
+### Error Handling Best Practices
 
 1. Always use contextual errors for user-facing messages
 2. Provide remediation hints where possible

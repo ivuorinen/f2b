@@ -48,10 +48,10 @@ func TestParseUltraOptimized(_ *testing.T) {
 	jail := "sshd"
 
 	// Call the function - may fail, that's ok for coverage
-	_, _ = ParseBanRecordLineUltraOptimized(line, jail)
+	_, _ = ParseBanRecordsUltraOptimized(line, jail)
 
 	// Test with empty line
-	_, _ = ParseBanRecordLineUltraOptimized("", jail)
+	_, _ = ParseBanRecordsUltraOptimized("", jail)
 
 	// Test with malformed line
 	_, _ = ParseBanRecordLineUltraOptimized("invalid line", jail)

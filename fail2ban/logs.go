@@ -3,6 +3,7 @@ package fail2ban
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 )
 
 /*
@@ -31,12 +33,28 @@ func GetLogLines(jailFilter string, ipFilter string) ([]string, error) {
 
 // GetLogLinesWithLimit returns log lines with configurable limits for memory management.
 func GetLogLinesWithLimit(jailFilter string, ipFilter string, maxLines int) ([]string, error) {
-	// Handle zero limit case - return empty slice immediately
 	if maxLines == 0 {
 		return []string{}, nil
 	}
 
-	pattern := filepath.Join(GetLogDir(), "fail2ban.log*")
+	config := LogReadConfig{
+		MaxLines:    maxLines,
+		MaxFileSize: 100 * 1024 * 1024, // 100MB file size limit
+		JailFilter:  jailFilter,
+		IPFilter:    ipFilter,
+		BaseDir:     GetLogDir(),
+	}
+
+	return collectLogLines(context.TODO(), GetLogDir(), config)
+}
+
+// collectLogLines reads log files under the provided directory using the supplied configuration.
+func collectLogLines(ctx context.Context, logDir string, baseConfig LogReadConfig) ([]string, error) {
+	if baseConfig.MaxLines == 0 {
+		return []string{}, nil
+	}
+
+	pattern := filepath.Join(logDir, "fail2ban.log*")
 	files, err := filepath.Glob(pattern)
 	if err != nil {
 		return nil, fmt.Errorf("error listing log files: %w", err)
@@ -48,64 +66,53 @@ func GetLogLinesWithLimit(jailFilter string, ipFilter string, maxLines int) ([]s
 
 	currentLog, rotated := parseLogFiles(files)
 
-	// Use streaming approach with memory limits
-	config := LogReadConfig{
-		MaxLines:     maxLines,
-		MaxFileSize:  100 * 1024 * 1024, // 100MB file size limit
-		JailFilter:   jailFilter,
-		IPFilter:     ipFilter,
-		ReverseOrder: false,
+	var allLines []string
+
+	appendAndTrim := func(lines []string) {
+		if len(lines) == 0 {
+			return
+		}
+		allLines = append(allLines, lines...)
+		if baseConfig.MaxLines > 0 && len(allLines) > baseConfig.MaxLines {
+			allLines = allLines[len(allLines)-baseConfig.MaxLines:]
+		}
 	}
 
-	var allLines []string
-	totalLines := 0
-
-	// Read rotated logs first (oldest to newest) - maintains original ordering
 	for _, rotatedFile := range rotated {
-		if config.MaxLines > 0 && totalLines >= config.MaxLines {
-			break
-		}
-
-		// Adjust remaining lines limit (skip limit check for negative MaxLines)
-		fileConfig := config
-		if config.MaxLines > 0 {
-			remainingLines := config.MaxLines - totalLines
-			if remainingLines <= 0 {
-				break
-			}
-			fileConfig.MaxLines = remainingLines
-		}
-
-		lines, err := streamLogFile(rotatedFile.path, fileConfig)
+		fileLines, err := readLogLinesFromFile(ctx, rotatedFile.path, baseConfig)
 		if err != nil {
+			if ctx != nil && errors.Is(err, ctx.Err()) {
+				return nil, err
+			}
 			getLogger().WithError(err).WithField("file", rotatedFile.path).Error("Failed to read rotated log file")
 			continue
 		}
-
-		allLines = append(allLines, lines...)
-		totalLines += len(lines)
+		appendAndTrim(fileLines)
 	}
 
-	// Read current log last (most recent) - maintains original ordering
-	if currentLog != "" && (config.MaxLines <= 0 || totalLines < config.MaxLines) {
-		fileConfig := config
-		if config.MaxLines > 0 {
-			remainingLines := config.MaxLines - totalLines
-			if remainingLines <= 0 {
-				return allLines, nil
-			}
-			fileConfig.MaxLines = remainingLines
-		}
-
-		lines, err := streamLogFile(currentLog, fileConfig)
+	if currentLog != "" {
+		fileLines, err := readLogLinesFromFile(ctx, currentLog, baseConfig)
 		if err != nil {
+			if ctx != nil && errors.Is(err, ctx.Err()) {
+				return nil, err
+			}
 			getLogger().WithError(err).WithField("file", currentLog).Error("Failed to read current log file")
 		} else {
-			allLines = append(allLines, lines...)
+			appendAndTrim(fileLines)
 		}
 	}
 
 	return allLines, nil
+}
+
+func readLogLinesFromFile(ctx context.Context, path string, baseConfig LogReadConfig) ([]string, error) {
+	fileConfig := baseConfig
+	fileConfig.MaxLines = 0
+
+	if ctx != nil {
+		return streamLogFileWithContext(ctx, path, fileConfig)
+	}
+	return streamLogFile(path, fileConfig)
 }
 
 // parseLogFiles parses log file names and returns the current log and a slice of rotated logs
@@ -151,16 +158,20 @@ type rotatedLog struct {
 
 // LogReadConfig holds configuration for streaming log reading
 type LogReadConfig struct {
-	MaxLines     int    // Maximum number of lines to read (0 = unlimited)
-	MaxFileSize  int64  // Maximum file size to process in bytes (0 = unlimited)
-	JailFilter   string // Filter by jail name (empty = no filter)
-	IPFilter     string // Filter by IP address (empty = no filter)
-	ReverseOrder bool   // Read from end of file backwards (for recent logs)
+	MaxLines    int    // Maximum number of lines to read (0 = unlimited)
+	MaxFileSize int64  // Maximum file size to process in bytes (0 = unlimited)
+	JailFilter  string // Filter by jail name (empty = no filter)
+	IPFilter    string // Filter by IP address (empty = no filter)
+	BaseDir     string // Base directory for log validation
 }
 
 // streamLogFile reads a log file line by line with memory limits and filtering
 func streamLogFile(path string, config LogReadConfig) ([]string, error) {
-	cleanPath, err := validateLogPath(path)
+	baseDir := config.BaseDir
+	if baseDir == "" {
+		baseDir = GetLogDir()
+	}
+	cleanPath, err := validateLogPathForDir(path, baseDir)
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +199,11 @@ func streamLogFileWithContext(ctx context.Context, path string, config LogReadCo
 	default:
 	}
 
-	cleanPath, err := validateLogPath(path)
+	baseDir := config.BaseDir
+	if baseDir == "" {
+		baseDir = GetLogDir()
+	}
+	cleanPath, err := validateLogPathForDir(path, baseDir)
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +223,11 @@ func streamLogFileWithContext(ctx context.Context, path string, config LogReadCo
 
 // validateLogPath validates and sanitizes the log file path with comprehensive security checks
 func validateLogPath(path string) (string, error) {
-	return ValidateLogPath(path, GetLogDir())
+	return validateLogPathForDir(path, GetLogDir())
+}
+
+func validateLogPathForDir(path string, baseDir string) (string, error) {
+	return ValidateLogPath(path, baseDir)
 }
 
 // shouldSkipFile checks if a file should be skipped due to size limits
@@ -344,4 +363,57 @@ func readLogFile(path string) ([]byte, error) {
 	}()
 
 	return io.ReadAll(reader)
+}
+
+// OptimizedLogProcessor is a thin wrapper maintained for backwards compatibility
+// with existing benchmarks and tests. Internally it delegates to the shared log collection
+// helpers so we have a single codepath to maintain.
+type OptimizedLogProcessor struct {
+	cacheHits   atomic.Int64
+	cacheMisses atomic.Int64
+}
+
+// NewOptimizedLogProcessor creates a new optimized processor wrapper.
+func NewOptimizedLogProcessor() *OptimizedLogProcessor {
+	return &OptimizedLogProcessor{}
+}
+
+// GetLogLinesOptimized proxies to the shared collector to keep behavior identical
+// while allowing benchmarks to exercise this entrypoint.
+func (olp *OptimizedLogProcessor) GetLogLinesOptimized(jailFilter, ipFilter string, maxLines int) ([]string, error) {
+	config := LogReadConfig{
+		MaxLines:    maxLines,
+		MaxFileSize: 100 * 1024 * 1024,
+		JailFilter:  jailFilter,
+		IPFilter:    ipFilter,
+		BaseDir:     GetLogDir(),
+	}
+
+	lines, err := collectLogLines(context.Background(), GetLogDir(), config)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]string, len(lines))
+	copy(result, lines)
+	return result, nil
+}
+
+// GetCacheStats exposes the atomic counters used by concurrency tests.
+func (olp *OptimizedLogProcessor) GetCacheStats() (hits, misses int64) {
+	return olp.cacheHits.Load(), olp.cacheMisses.Load()
+}
+
+// ClearCaches resets the counters. No other cache state is maintained.
+func (olp *OptimizedLogProcessor) ClearCaches() {
+	olp.cacheHits.Store(0)
+	olp.cacheMisses.Store(0)
+}
+
+var optimizedLogProcessor = NewOptimizedLogProcessor()
+
+// GetLogLinesUltraOptimized retains the legacy API that benchmarks expect while now
+// sharing the simplified implementation.
+func GetLogLinesUltraOptimized(jailFilter, ipFilter string, maxLines int) ([]string, error) {
+	return optimizedLogProcessor.GetLogLinesOptimized(jailFilter, ipFilter, maxLines)
 }

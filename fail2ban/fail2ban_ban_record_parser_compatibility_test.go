@@ -102,8 +102,8 @@ func TestParserCompatibility(t *testing.T) {
 			originalRecords, originalErr := originalParser.ParseBanRecords(tc.input, tc.jail)
 
 			// Parse with optimized parser
-			optimizedParser := NewOptimizedBanRecordParser()
-			optimizedRecords, optimizedErr := optimizedParser.ParseBanRecordsOptimized(tc.input, tc.jail)
+			optimizedParser := NewBanRecordParser()
+			optimizedRecords, optimizedErr := optimizedParser.ParseBanRecords(tc.input, tc.jail)
 
 			compareParserResults(t, originalRecords, originalErr, optimizedRecords, optimizedErr)
 		})
@@ -198,8 +198,8 @@ func TestParserCompatibilityLineByLine(t *testing.T) {
 			originalRecord, originalErr := originalParser.ParseBanRecordLine(tc.line, tc.jail)
 
 			// Parse with optimized parser
-			optimizedParser := NewOptimizedBanRecordParser()
-			optimizedRecord, optimizedErr := optimizedParser.ParseBanRecordLineOptimized(tc.line, tc.jail)
+			optimizedParser := NewBanRecordParser()
+			optimizedRecord, optimizedErr := optimizedParser.ParseBanRecordLine(tc.line, tc.jail)
 
 			compareSingleRecords(t, originalRecord, originalErr, optimizedRecord, optimizedErr)
 		})
@@ -208,7 +208,7 @@ func TestParserCompatibilityLineByLine(t *testing.T) {
 
 // TestOptimizedParserStatistics tests the statistics functionality
 func TestOptimizedParserStatistics(t *testing.T) {
-	parser := NewOptimizedBanRecordParser()
+	parser := NewBanRecordParser()
 
 	// Initial stats should be zero
 	parseCount, errorCount := parser.GetStats()
@@ -221,7 +221,7 @@ func TestOptimizedParserStatistics(t *testing.T) {
 
 10.0.0.50 2025-07-20 14:36:59 + 2025-07-20 14:46:59 remaining`
 
-	records, err := parser.ParseBanRecordsOptimized(input, "sshd")
+	records, err := parser.ParseBanRecords(input, "sshd")
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
@@ -284,14 +284,14 @@ func TestStringBuildingOptimizations(t *testing.T) {
 
 // BenchmarkParserStatistics tests performance impact of statistics tracking
 func BenchmarkParserStatistics(b *testing.B) {
-	parser := NewOptimizedBanRecordParser()
+	parser := NewBanRecordParser()
 	testLine := "192.168.1.100 2025-07-20 14:30:39 + 2025-07-20 14:40:39 remaining"
 
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		_, err := parser.ParseBanRecordLineOptimized(testLine, "sshd")
+		_, err := parser.ParseBanRecordLine(testLine, "sshd")
 		if err != nil {
 			b.Fatal(err)
 		}

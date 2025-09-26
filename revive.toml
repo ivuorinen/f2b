@@ -2,10 +2,10 @@
 # https://revive.run/
 # Configuration reference: https://github.com/mgechev/revive#configuration
 
-ignoreGeneratedHeader = false
+ignoreGeneratedHeader = true
 severity = "warning"
 confidence = 0.8
-errorCode = 0
+errorCode = 1
 warningCode = 0
 
 # Core rules that align with golangci-lint settings

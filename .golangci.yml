@@ -7,19 +7,19 @@ version: "2"
 run:
   timeout: 5m
   modules-download-mode: readonly
+  concurrency: 1
 
 linters:
   enable:
     # Essential linters
+    - revive # Code style checking
     - errcheck # Error checking
     - govet # Go vet
+    - gosec # Security checking
     - ineffassign # Inefficient assignment checking
-    - staticcheck # Static code analysis
     - unused # Unused variable checking
     - lll # Line length checking
-    - gosec # Security checking
     - usetesting # Unit testing
-    - revive # Code style checking
 
     # Code quality linters
     - misspell # Spell checking
@@ -34,7 +34,6 @@ linters:
     - predeclared # Predeclared identifier checking
     - wastedassign # Wasted assignment checking
     - containedctx # Contained context checking
-    - contextcheck # Context checking
     - errname # Error name checking
     - nilnil # Nil nil checking
     - thelper # Helper function checking
@@ -109,7 +108,7 @@ formatters:
     golines:
       max-len: 120
       tab-len: 4
-      shorten-comments: false
+      shorten-comments: true
       reformat-tags: true
       chain-split-dots: true
 

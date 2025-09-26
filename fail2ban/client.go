@@ -48,11 +48,10 @@ type Client interface {
 
 // RealClient is the default implementation of Client, using the local fail2ban-client binary.
 type RealClient struct {
-	Path         string // Command used to invoke fail2ban-client
-	ResolvedPath string // Absolute path discovered during initialization
-	Jails        []string
-	LogDir       string
-	FilterDir    string
+	Path      string // Command used to invoke fail2ban-client
+	Jails     []string
+	LogDir    string
+	FilterDir string
 }
 
 // BanRecord represents a single ban entry with jail, IP, ban time, and remaining duration.
@@ -83,13 +82,10 @@ func NewClientWithContext(ctx context.Context, logDir, filterDir string) (*RealC
 		}
 	}
 
-	path, err := exec.LookPath(Fail2BanClientCommand)
-	if err != nil {
-		// Check if we have a mock runner set up
+	if _, err := exec.LookPath(Fail2BanClientCommand); err != nil {
 		if _, ok := GetRunner().(*MockRunner); !ok {
 			return nil, fmt.Errorf("%s not found in PATH", Fail2BanClientCommand)
 		}
-		path = Fail2BanClientCommand // Use mock path
 	}
 	if logDir == "" {
 		logDir = DefaultLogDir
@@ -111,10 +107,9 @@ func NewClientWithContext(ctx context.Context, logDir, filterDir string) (*RealC
 	}
 
 	rc := &RealClient{
-		Path:         Fail2BanClientCommand,
-		ResolvedPath: path,
-		LogDir:       validatedLogDir,
-		FilterDir:    validatedFilterDir,
+		Path:      Fail2BanClientCommand,
+		LogDir:    validatedLogDir,
+		FilterDir: validatedFilterDir,
 	}
 
 	// Version check - use sudo if needed with context

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -491,6 +492,47 @@ func TestGetLogLines(t *testing.T) {
 				t.Errorf("expected %d lines, got %d", tt.expectedLines, len(lines))
 			}
 		})
+	}
+}
+func TestGetLogLinesWithLimitPrefersRecent(t *testing.T) {
+	originalDir := GetLogDir()
+	SetLogDir(t.TempDir())
+	defer SetLogDir(originalDir)
+
+	logDir := GetLogDir()
+	oldPath := filepath.Join(logDir, "fail2ban.log.1")
+	newPath := filepath.Join(logDir, "fail2ban.log")
+
+	// Older rotated log with more entries than the requested limit
+	oldContent := "old-entry-1\nold-entry-2\nold-entry-3\n"
+	if err := os.WriteFile(oldPath, []byte(oldContent), 0o600); err != nil {
+		t.Fatalf("failed to create rotated log: %v", err)
+	}
+
+	// Current log with the most recent entries
+	newContent := "new-entry-1\nnew-entry-2\n"
+	if err := os.WriteFile(newPath, []byte(newContent), 0o600); err != nil {
+		t.Fatalf("failed to create current log: %v", err)
+	}
+
+	lines, err := GetLogLinesWithLimit("", "", 2)
+	if err != nil {
+		t.Fatalf("GetLogLinesWithLimit returned error: %v", err)
+	}
+
+	expected := []string{"new-entry-1", "new-entry-2"}
+	if !reflect.DeepEqual(lines, expected) {
+		t.Fatalf("expected %v, got %v", expected, lines)
+	}
+
+	client := &RealClient{LogDir: logDir}
+	clientLines, err := client.GetLogLinesWithLimit("", "", 2)
+	if err != nil {
+		t.Fatalf("RealClient.GetLogLinesWithLimit returned error: %v", err)
+	}
+
+	if !reflect.DeepEqual(clientLines, expected) {
+		t.Fatalf("client expected %v, got %v", expected, clientLines)
 	}
 }
 

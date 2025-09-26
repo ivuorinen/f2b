@@ -39,13 +39,13 @@ func BenchmarkOriginalBanRecordParsing(b *testing.B) {
 
 // BenchmarkOptimizedBanRecordParsing benchmarks the new optimized implementation
 func BenchmarkOptimizedBanRecordParsing(b *testing.B) {
-	parser := NewOptimizedBanRecordParser()
+	parser := NewBanRecordParser()
 
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		_, err := parser.ParseBanRecordsOptimized(benchmarkBanRecordOutput, "sshd")
+		_, err := parser.ParseBanRecords(benchmarkBanRecordOutput, "sshd")
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -70,12 +70,12 @@ func BenchmarkBanRecordLineParsing(b *testing.B) {
 	})
 
 	b.Run("optimized", func(b *testing.B) {
-		parser := NewOptimizedBanRecordParser()
+		parser := NewBanRecordParser()
 		b.ResetTimer()
 		b.ReportAllocs()
 
 		for i := 0; i < b.N; i++ {
-			_, err := parser.ParseBanRecordLineOptimized(testLine, "sshd")
+			_, err := parser.ParseBanRecordLine(testLine, "sshd")
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -167,12 +167,12 @@ func BenchmarkLargeDataset(b *testing.B) {
 	})
 
 	b.Run("optimized_large", func(b *testing.B) {
-		parser := NewOptimizedBanRecordParser()
+		parser := NewBanRecordParser()
 		b.ResetTimer()
 		b.ReportAllocs()
 
 		for i := 0; i < b.N; i++ {
-			_, err := parser.ParseBanRecordsOptimized(largeOutput, "sshd")
+			_, err := parser.ParseBanRecords(largeOutput, "sshd")
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -209,7 +209,7 @@ func BenchmarkDurationFormatting(b *testing.B) {
 
 // BenchmarkMemoryPooling tests the effectiveness of object pooling
 func BenchmarkMemoryPooling(b *testing.B) {
-	parser := NewOptimizedBanRecordParser()
+	parser := NewBanRecordParser()
 	testLine := "192.168.1.100 2025-07-20 14:30:39 + 2025-07-20 14:40:39 remaining"
 
 	b.ResetTimer()
@@ -218,7 +218,7 @@ func BenchmarkMemoryPooling(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		// This should demonstrate reduced allocations due to pooling
 		for j := 0; j < 10; j++ {
-			_, err := parser.ParseBanRecordLineOptimized(testLine, "sshd")
+			_, err := parser.ParseBanRecordLine(testLine, "sshd")
 			if err != nil {
 				b.Fatal(err)
 			}
