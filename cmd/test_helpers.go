@@ -54,7 +54,7 @@ func executeCommand(client fail2ban.Client, args ...string) (string, error) {
 	defer cleanup()
 
 	rootCmd := &cobra.Command{Use: "f2b"}
-	config := Config{Format: "plain"}
+	config := Config{Format: PlainFormat}
 
 	// Set up persistent flags like in the real root command
 	rootCmd.PersistentFlags().StringVar(&config.Format, "format", config.Format, "Output format: plain or json")

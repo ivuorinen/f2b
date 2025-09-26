@@ -146,7 +146,7 @@ func NewCommandTest(t *testing.T, commandName string) *CommandTestBuilder {
 		name:    commandName,
 		command: commandName,
 		args:    make([]string, 0),
-		config:  &Config{Format: "plain"},
+		config:  &Config{Format: PlainFormat},
 	}
 }
 

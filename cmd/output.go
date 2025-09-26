@@ -16,6 +16,8 @@ import (
 const (
 	// JSONFormat represents the JSON output format
 	JSONFormat = "json"
+	// PlainFormat represents the plain text output format
+	PlainFormat = "plain"
 )
 
 // Logger is the global logger for the CLI.
@@ -43,7 +45,7 @@ func configureCIFriendlyLogging() {
 	}
 }
 
-// PrintOutput prints data to stdout in the specified format ("plain" or "json").
+// PrintOutput prints data to stdout in the specified format (PlainFormat or JSONFormat).
 func PrintOutput(data interface{}, format string) {
 	switch format {
 	case JSONFormat:

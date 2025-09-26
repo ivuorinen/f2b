@@ -338,7 +338,7 @@ func OutputResults(cmd *cobra.Command, results interface{}, config *Config) {
 	if config != nil && config.Format == JSONFormat {
 		PrintOutputTo(GetCmdOutput(cmd), results, JSONFormat)
 	} else {
-		PrintOutputTo(GetCmdOutput(cmd), results, "plain")
+		PrintOutputTo(GetCmdOutput(cmd), results, PlainFormat)
 	}
 }
 

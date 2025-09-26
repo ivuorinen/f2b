@@ -24,7 +24,7 @@ import (
 type Config struct {
 	LogDir          string        // Path to Fail2Ban log directory
 	FilterDir       string        // Path to Fail2Ban filter directory
-	Format          string        // Output format: "plain" or "json"
+	Format          string        // Output format: PlainFormat or JSONFormat
 	CommandTimeout  time.Duration // Timeout for individual fail2ban commands
 	FileTimeout     time.Duration // Timeout for file operations
 	ParallelTimeout time.Duration // Timeout for parallel operations

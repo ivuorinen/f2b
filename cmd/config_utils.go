@@ -226,7 +226,7 @@ func NewConfigFromEnv() Config {
 	cfg.FileTimeout = parseTimeoutFromEnv("F2B_FILE_TIMEOUT", DefaultFileTimeout)
 	cfg.ParallelTimeout = parseTimeoutFromEnv("F2B_PARALLEL_TIMEOUT", DefaultParallelTimeout)
 
-	cfg.Format = "plain"
+	cfg.Format = PlainFormat
 	return cfg
 }
 
@@ -281,7 +281,7 @@ func (c *Config) ValidateConfig() error {
 	}
 
 	// Validate Format
-	validFormats := map[string]bool{"plain": true, "json": true}
+	validFormats := map[string]bool{PlainFormat: true, JSONFormat: true}
 	if !validFormats[c.Format] {
 		errors = append(errors, fmt.Sprintf("invalid format '%s', must be 'plain' or 'json'", c.Format))
 	}

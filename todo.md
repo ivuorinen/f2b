@@ -51,6 +51,11 @@
   - ✅ Cached overlongEncodingRegex in cmd/config_utils.go to avoid recompilation
   - ✅ Improved performance for path validation operations
 
+- ✅ **COMPLETED**: Consolidate magic strings to constants
+  - ✅ Created PlainFormat constant to replace hardcoded "plain" strings
+  - ✅ Updated all usages of format strings to use constants (PlainFormat, JSONFormat)
+  - ✅ Improved maintainability and reduced magic string usage
+
 - **Remove Code Duplication**: Consolidate repeated patterns
   - Path validation logic appears in multiple places
   - Command execution patterns can be unified
