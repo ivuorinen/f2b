@@ -6,18 +6,9 @@ import (
 )
 
 func TestNewClientPathTraversalProtection(t *testing.T) {
-	// Set up mock environment
-	_, cleanup := SetupMockEnvironment(t)
+	// Set up mock environment with standard responses
+	_, cleanup := SetupMockEnvironmentWithStandardResponses(t)
 	defer cleanup()
-
-	// Get the mock runner and configure additional responses
-	mock := GetRunner().(*MockRunner)
-	mock.SetResponse("fail2ban-client -V", []byte("Fail2Ban v0.11.2"))
-	mock.SetResponse("sudo fail2ban-client -V", []byte("Fail2Ban v0.11.2"))
-	mock.SetResponse("fail2ban-client ping", []byte("pong"))
-	mock.SetResponse("sudo fail2ban-client ping", []byte("pong"))
-	mock.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail:      1\n`- Jail list:   sshd"))
-	mock.SetResponse("sudo fail2ban-client status", []byte("Status\n|- Number of jail:      1\n`- Jail list:   sshd"))
 
 	tests := []struct {
 		name          string
@@ -165,18 +156,9 @@ func TestNewClientPathTraversalProtection(t *testing.T) {
 }
 
 func TestNewClientDefaultPathValidation(t *testing.T) {
-	// Set up mock environment
-	_, cleanup := SetupMockEnvironment(t)
+	// Set up mock environment with standard responses
+	_, cleanup := SetupMockEnvironmentWithStandardResponses(t)
 	defer cleanup()
-
-	// Get the mock runner and configure additional responses
-	mock := GetRunner().(*MockRunner)
-	mock.SetResponse("fail2ban-client -V", []byte("Fail2Ban v0.11.2"))
-	mock.SetResponse("sudo fail2ban-client -V", []byte("Fail2Ban v0.11.2"))
-	mock.SetResponse("fail2ban-client ping", []byte("pong"))
-	mock.SetResponse("sudo fail2ban-client ping", []byte("pong"))
-	mock.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail:      1\n`- Jail list:   sshd"))
-	mock.SetResponse("sudo fail2ban-client status", []byte("Status\n|- Number of jail:      1\n`- Jail list:   sshd"))
 
 	// Test with empty paths (should use defaults and validate them)
 	client, err := NewClient("", "")

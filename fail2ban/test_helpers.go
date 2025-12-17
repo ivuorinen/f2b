@@ -265,3 +265,64 @@ func assertContainsText(t *testing.T, lines []string, text string) {
 	}
 	t.Errorf("Expected to find '%s' in results", text)
 }
+
+// StandardMockSetup configures comprehensive standard responses for MockRunner
+// This eliminates the need for repetitive SetResponse calls in individual tests
+func StandardMockSetup(mockRunner *MockRunner) {
+	// Version responses
+	mockRunner.SetResponse("fail2ban-client -V", []byte("Fail2Ban v0.11.2"))
+	mockRunner.SetResponse("sudo fail2ban-client -V", []byte("Fail2Ban v0.11.2"))
+
+	// Ping responses
+	mockRunner.SetResponse("fail2ban-client ping", []byte("pong"))
+	mockRunner.SetResponse("sudo fail2ban-client ping", []byte("pong"))
+
+	// Status responses
+	statusResponse := "Status\n|- Number of jail:      2\n`- Jail list:   sshd, apache"
+	mockRunner.SetResponse("fail2ban-client status", []byte(statusResponse))
+	mockRunner.SetResponse("sudo fail2ban-client status", []byte(statusResponse))
+
+	// Individual jail status responses
+	sshdStatus := "Status for the jail: sshd\n|- Filter\n|  |- Currently failed:\t0\n|  " +
+		"|- Total failed:\t5\n|  `- File list:\t/var/log/auth.log\n`- Actions\n   " +
+		"|- Currently banned:\t1\n   |- Total banned:\t2\n   `- Banned IP list:\t192.168.1.100"
+
+	mockRunner.SetResponse("fail2ban-client status sshd", []byte(sshdStatus))
+	mockRunner.SetResponse("sudo fail2ban-client status sshd", []byte(sshdStatus))
+
+	apacheStatus := "Status for the jail: apache\n|- Filter\n|  |- Currently failed:\t0\n|  " +
+		"|- Total failed:\t3\n|  `- File list:\t/var/log/apache2/error.log\n`- Actions\n   " +
+		"|- Currently banned:\t0\n   |- Total banned:\t1\n   `- Banned IP list:\t"
+
+	mockRunner.SetResponse("fail2ban-client status apache", []byte(apacheStatus))
+	mockRunner.SetResponse("sudo fail2ban-client status apache", []byte(apacheStatus))
+
+	// Ban/unban responses
+	mockRunner.SetResponse("fail2ban-client set sshd banip 192.168.1.100", []byte("0"))
+	mockRunner.SetResponse("sudo fail2ban-client set sshd banip 192.168.1.100", []byte("0"))
+	mockRunner.SetResponse("fail2ban-client set sshd unbanip 192.168.1.100", []byte("0"))
+	mockRunner.SetResponse("sudo fail2ban-client set sshd unbanip 192.168.1.100", []byte("0"))
+
+	mockRunner.SetResponse("fail2ban-client set apache banip 192.168.1.101", []byte("0"))
+	mockRunner.SetResponse("sudo fail2ban-client set apache banip 192.168.1.101", []byte("0"))
+	mockRunner.SetResponse("fail2ban-client set apache unbanip 192.168.1.101", []byte("0"))
+	mockRunner.SetResponse("sudo fail2ban-client set apache unbanip 192.168.1.101", []byte("0"))
+
+	// Banned IP responses
+	mockRunner.SetResponse("fail2ban-client banned 192.168.1.100", []byte("[\"sshd\"]"))
+	mockRunner.SetResponse("sudo fail2ban-client banned 192.168.1.100", []byte("[\"sshd\"]"))
+	mockRunner.SetResponse("fail2ban-client banned 192.168.1.101", []byte("[]"))
+	mockRunner.SetResponse("sudo fail2ban-client banned 192.168.1.101", []byte("[]"))
+}
+
+// SetupMockEnvironmentWithStandardResponses combines mock environment setup with standard responses
+// This is a convenience function for tests that need comprehensive mock responses
+func SetupMockEnvironmentWithStandardResponses(t TestingInterface) (client *MockClient, cleanup func()) {
+	t.Helper()
+
+	client, cleanup = SetupMockEnvironment(t)
+	mockRunner := GetRunner().(*MockRunner)
+	StandardMockSetup(mockRunner)
+
+	return client, cleanup
+}

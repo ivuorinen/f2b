@@ -7,27 +7,8 @@ import (
 
 // setupMockRunnerForPrivilegedTest configures mock responses for privileged tests
 func setupMockRunnerForPrivilegedTest(mockRunner *MockRunner) {
-	// Set up responses for successful client creation
-	mockRunner.SetResponse("fail2ban-client -V", []byte("0.11.2"))
-	mockRunner.SetResponse("sudo fail2ban-client -V", []byte("0.11.2"))
-	mockRunner.SetResponse("fail2ban-client ping", []byte("pong"))
-	mockRunner.SetResponse("sudo fail2ban-client ping", []byte("pong"))
-	mockRunner.SetResponse(
-		"fail2ban-client status",
-		[]byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"),
-	)
-	mockRunner.SetResponse(
-		"sudo fail2ban-client status",
-		[]byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"),
-	)
-
-	// Set up responses for operations (both sudo and non-sudo for root users)
-	mockRunner.SetResponse("sudo fail2ban-client set sshd banip 192.168.1.100", []byte("0"))
-	mockRunner.SetResponse("fail2ban-client set sshd banip 192.168.1.100", []byte("0"))
-	mockRunner.SetResponse("sudo fail2ban-client set sshd unbanip 192.168.1.100", []byte("0"))
-	mockRunner.SetResponse("fail2ban-client set sshd unbanip 192.168.1.100", []byte("0"))
-	mockRunner.SetResponse("sudo fail2ban-client banned 192.168.1.100", []byte(`["sshd"]`))
-	mockRunner.SetResponse("fail2ban-client banned 192.168.1.100", []byte(`["sshd"]`))
+	// Use standard mock setup as the base
+	StandardMockSetup(mockRunner)
 }
 
 // testClientOperations tests various client operations

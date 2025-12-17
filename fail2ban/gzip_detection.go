@@ -51,7 +51,11 @@ func (gd *GzipDetector) hasGzipMagicBytes(path string) (bool, error) {
 	}
 
 	// Check if we have gzip magic bytes (0x1f, 0x8b)
-	return n >= 2 && magic[0] == 0x1f && magic[1] == 0x8b, nil
+	if n < 2 {
+		return false, nil
+	}
+	// #nosec G602 - Length check above guarantees slice has at least 2 elements
+	return magic[0] == 0x1f && magic[1] == 0x8b, nil
 }
 
 // OpenGzipAwareReader opens a file and returns appropriate reader (gzip or regular)
