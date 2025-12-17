@@ -197,95 +197,98 @@ func HandleClientError(err error) error {
 	return nil
 }
 
-// HandleValidationError specifically handles validation errors with clearer messaging
-func HandleValidationError(err error) error {
+// errorPatternMatch defines a pattern and its associated remediation message
+type errorPatternMatch struct {
+	patterns    []string
+	remediation string
+}
+
+// handleCategorizedError is a shared helper for handling categorized errors with pattern matching
+func handleCategorizedError(
+	err error,
+	category fail2ban.ErrorCategory,
+	patternMatches []errorPatternMatch,
+	createError func(error, string) error,
+) error {
 	if err == nil {
 		return nil
 	}
 
-	// Check if it's a contextual validation error
+	// Check if it's already a contextual error of this category
 	var contextErr *fail2ban.ContextualError
-	if errors.As(err, &contextErr) && contextErr.GetCategory() == fail2ban.ErrorCategoryValidation {
-		PrintError(err) // PrintError already handles contextual errors well
+	if errors.As(err, &contextErr) && contextErr.GetCategory() == category {
+		PrintError(err)
 		return err
 	}
 
-	// For non-contextual validation errors, wrap them for better messaging
-	if strings.Contains(err.Error(), "invalid") || strings.Contains(err.Error(), "required") {
-		validationErr := fail2ban.NewValidationError(
-			err.Error(),
-			"Check your input parameters and try again. Use --help for usage information.",
-		)
-		PrintError(validationErr)
-		return validationErr
+	// Check for pattern matches
+	errMsg := strings.ToLower(err.Error())
+	for _, pm := range patternMatches {
+		for _, pattern := range pm.patterns {
+			if strings.Contains(errMsg, pattern) {
+				newErr := createError(err, pm.remediation)
+				PrintError(newErr)
+				return newErr
+			}
+		}
 	}
 
 	return HandleClientError(err)
+}
+
+// HandleValidationError specifically handles validation errors with clearer messaging
+func HandleValidationError(err error) error {
+	return handleCategorizedError(
+		err,
+		fail2ban.ErrorCategoryValidation,
+		[]errorPatternMatch{
+			{
+				patterns:    []string{"invalid", "required"},
+				remediation: "Check your input parameters and try again. Use --help for usage information.",
+			},
+		},
+		func(err error, remediation string) error {
+			return fail2ban.NewValidationError(err.Error(), remediation)
+		},
+	)
 }
 
 // HandlePermissionError specifically handles permission/sudo errors with helpful hints
 func HandlePermissionError(err error) error {
-	if err == nil {
-		return nil
-	}
-
-	// Check if it's already a contextual permission error
-	var contextErr *fail2ban.ContextualError
-	if errors.As(err, &contextErr) && contextErr.GetCategory() == fail2ban.ErrorCategoryPermission {
-		PrintError(err)
-		return err
-	}
-
-	// Check for common permission-related error patterns
-	errMsg := strings.ToLower(err.Error())
-	if strings.Contains(errMsg, "permission denied") || strings.Contains(errMsg, "sudo") {
-		permErr := fail2ban.NewPermissionError(
-			err.Error(),
-			"Try running with sudo privileges or check that fail2ban service is running.",
-		)
-		PrintError(permErr)
-		return permErr
-	}
-
-	return HandleClientError(err)
+	return handleCategorizedError(
+		err,
+		fail2ban.ErrorCategoryPermission,
+		[]errorPatternMatch{
+			{
+				patterns:    []string{"permission denied", "sudo"},
+				remediation: "Try running with sudo privileges or check that fail2ban service is running.",
+			},
+		},
+		func(err error, remediation string) error {
+			return fail2ban.NewPermissionError(err.Error(), remediation)
+		},
+	)
 }
 
 // HandleSystemError specifically handles system-level errors with diagnostic hints
 func HandleSystemError(err error) error {
-	if err == nil {
-		return nil
-	}
-
-	// Check if it's already a contextual system error
-	var contextErr *fail2ban.ContextualError
-	if errors.As(err, &contextErr) && contextErr.GetCategory() == fail2ban.ErrorCategorySystem {
-		PrintError(err)
-		return err
-	}
-
-	// Check for common system error patterns
-	errMsg := strings.ToLower(err.Error())
-	if strings.Contains(errMsg, "not found") || strings.Contains(errMsg, "command not found") {
-		sysErr := fail2ban.NewSystemError(
-			err.Error(),
-			"Ensure fail2ban is installed and fail2ban-client is in your PATH.",
-			err,
-		)
-		PrintError(sysErr)
-		return sysErr
-	}
-
-	if strings.Contains(errMsg, "not running") || strings.Contains(errMsg, "connection refused") {
-		sysErr := fail2ban.NewSystemError(
-			err.Error(),
-			"Start the fail2ban service: sudo systemctl start fail2ban",
-			err,
-		)
-		PrintError(sysErr)
-		return sysErr
-	}
-
-	return HandleClientError(err)
+	return handleCategorizedError(
+		err,
+		fail2ban.ErrorCategorySystem,
+		[]errorPatternMatch{
+			{
+				patterns:    []string{"not found", "command not found"},
+				remediation: "Ensure fail2ban is installed and fail2ban-client is in your PATH.",
+			},
+			{
+				patterns:    []string{"not running", "connection refused"},
+				remediation: "Start the fail2ban service: sudo systemctl start fail2ban",
+			},
+		},
+		func(err error, remediation string) error {
+			return fail2ban.NewSystemError(err.Error(), remediation, err)
+		},
+	)
 }
 
 // HandleErrorWithContext automatically chooses the appropriate error handler based on error context

@@ -45,7 +45,7 @@
       - Require additional confirmation for these ranges
   - **User Confirmation Flow**: Enhanced safety workflow
     - Show CIDR expansion: "This will ban X.X.X.X to Y.Y.Y.Y (Z addresses)"
-  - Display sample IPs from the range for verification
+    - Display sample IPs from the range for verification
     - Require explicit confirmation: "Type 'yes' to confirm bulk ban"
     - Show estimated impact before execution
   - **Implementation Requirements**:

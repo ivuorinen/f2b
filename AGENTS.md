@@ -5,7 +5,7 @@ Use this guide to contribute effectively to f2b, the Go-based CLI for managing F
 ## Project Structure & Module Organization
 
 - `main.go` wires logging, sudo detection, and client startup.
-- `cmd/` contains Cobra commands and fluent command tests; mirror changes under `cmd.test/` when adding scenarios.
+- `cmd/` contains Cobra commands and fluent command tests; mirror changes under `cmd/*_test.go` when adding scenarios.
 - `fail2ban/` hosts the client interfaces, runners, and mocks used across commands.
 - `docs/` centralizes architecture, testing, and security references; keep updates in sync with code changes.
 

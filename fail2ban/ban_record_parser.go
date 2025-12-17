@@ -20,9 +20,7 @@ var (
 
 // BanRecordParser provides high-performance parsing of ban records
 type BanRecordParser struct {
-	// Pre-allocated buffers for zero-allocation parsing
-	fieldBuf   []string
-	timeBuf    []byte
+	// Pools for zero-allocation parsing (goroutine-safe)
 	stringPool sync.Pool
 	recordPool sync.Pool
 	timeCache  *FastTimeCache
@@ -43,8 +41,6 @@ type FastTimeCache struct {
 // NewBanRecordParser creates a new high-performance ban record parser
 func NewBanRecordParser() *BanRecordParser {
 	parser := &BanRecordParser{
-		fieldBuf:  make([]string, 0, 16), // Pre-allocate for max expected fields
-		timeBuf:   make([]byte, 0, 32),   // Pre-allocate for time string building
 		timeCache: NewFastTimeCache("2006-01-02 15:04:05"),
 	}
 

@@ -78,14 +78,18 @@ func ExecuteIPCommand(
 				return HandleClientError(err)
 			}
 
-			// Read the format flag and override config.Format if set
+			// Compute final format without modifying shared config
+			finalFormat := ""
+			if config != nil {
+				finalFormat = config.Format
+			}
 			format, _ := cmd.Flags().GetString("format")
 			if format != "" {
-				config.Format = format
+				finalFormat = format
 			}
 
 			// Output results
-			if config != nil && config.Format == JSONFormat {
+			if finalFormat == JSONFormat {
 				OutputResults(cmd, results, config)
 			} else {
 				for _, r := range results {

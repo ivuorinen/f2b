@@ -17,3 +17,5 @@ SHOW_SKIPPED_LINTERS: false # Show skipped linters in MegaLinter log
 DISABLE_LINTERS:
   - REPOSITORY_DEVSKIM
   - GO_REVIVE # run as part of golangci-lint
+  - GO_GOLANGCI_LINT # stuck in go version 1.24
+  - JSON_V8R # not needed

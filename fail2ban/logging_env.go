@@ -46,8 +46,14 @@ func IsCI() bool {
 // configureCITestLogging reduces log verbosity in CI and test environments
 func configureCITestLogging() {
 	if IsCI() || IsTestEnvironment() {
-		if stdLogger, ok := logger.(*logrus.Logger); ok {
-			stdLogger.SetLevel(logrus.WarnLevel)
+		// Try interface-based assertion first to support custom loggers
+		if l, ok := logger.(interface{ SetLevel(logrus.Level) }); ok {
+			l.SetLevel(logrus.WarnLevel)
+		} else {
+			// Log when we can't adjust level (observable for debugging)
+			logrus.StandardLogger().Debug(
+				"Non-standard logger in use; CI/test log level adjustment skipped",
+			)
 		}
 	}
 }

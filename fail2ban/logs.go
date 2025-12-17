@@ -11,7 +11,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync/atomic"
 )
 
 /*
@@ -368,10 +367,7 @@ func readLogFile(path string) ([]byte, error) {
 // OptimizedLogProcessor is a thin wrapper maintained for backwards compatibility
 // with existing benchmarks and tests. Internally it delegates to the shared log collection
 // helpers so we have a single codepath to maintain.
-type OptimizedLogProcessor struct {
-	cacheHits   atomic.Int64
-	cacheMisses atomic.Int64
-}
+type OptimizedLogProcessor struct{}
 
 // NewOptimizedLogProcessor creates a new optimized processor wrapper.
 func NewOptimizedLogProcessor() *OptimizedLogProcessor {
@@ -389,25 +385,19 @@ func (olp *OptimizedLogProcessor) GetLogLinesOptimized(jailFilter, ipFilter stri
 		BaseDir:     GetLogDir(),
 	}
 
-	lines, err := collectLogLines(context.Background(), GetLogDir(), config)
-	if err != nil {
-		return nil, err
-	}
-
-	result := make([]string, len(lines))
-	copy(result, lines)
-	return result, nil
+	return collectLogLines(context.Background(), GetLogDir(), config)
 }
 
-// GetCacheStats exposes the atomic counters used by concurrency tests.
+// GetCacheStats is a no-op maintained for test compatibility.
+// No caching is actually performed by this processor.
 func (olp *OptimizedLogProcessor) GetCacheStats() (hits, misses int64) {
-	return olp.cacheHits.Load(), olp.cacheMisses.Load()
+	return 0, 0
 }
 
-// ClearCaches resets the counters. No other cache state is maintained.
+// ClearCaches is a no-op maintained for test compatibility.
+// No caching is actually performed by this processor.
 func (olp *OptimizedLogProcessor) ClearCaches() {
-	olp.cacheHits.Store(0)
-	olp.cacheMisses.Store(0)
+	// No-op: no cache state to clear
 }
 
 var optimizedLogProcessor = NewOptimizedLogProcessor()

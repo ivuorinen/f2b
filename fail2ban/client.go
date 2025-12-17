@@ -36,11 +36,16 @@ func NewClientWithContext(ctx context.Context, logDir, filterDir string) (*RealC
 		}
 	}
 
-	if _, err := exec.LookPath(Fail2BanClientCommand); err != nil {
+	// Resolve the absolute path to prevent PATH hijacking
+	resolvedPath, err := exec.LookPath(Fail2BanClientCommand)
+	if err != nil {
 		if _, ok := GetRunner().(*MockRunner); !ok {
 			return nil, fmt.Errorf("%s not found in PATH", Fail2BanClientCommand)
 		}
+		// For mock runner, use the plain command name
+		resolvedPath = Fail2BanClientCommand
 	}
+
 	if logDir == "" {
 		logDir = DefaultLogDir
 	}
@@ -61,7 +66,7 @@ func NewClientWithContext(ctx context.Context, logDir, filterDir string) (*RealC
 	}
 
 	rc := &RealClient{
-		Path:      Fail2BanClientCommand,
+		Path:      resolvedPath, // Use resolved absolute path
 		LogDir:    validatedLogDir,
 		FilterDir: validatedFilterDir,
 	}
