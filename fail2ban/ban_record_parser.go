@@ -27,6 +27,9 @@ type BoundedTimeCache struct {
 
 // NewBoundedTimeCache creates a new bounded time cache
 func NewBoundedTimeCache(maxSize int) *BoundedTimeCache {
+	if maxSize <= 0 {
+		panic("BoundedTimeCache maxSize must be positive")
+	}
 	return &BoundedTimeCache{
 		cache:   make(map[string]time.Time),
 		maxSize: maxSize,

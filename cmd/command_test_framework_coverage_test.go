@@ -208,7 +208,6 @@ func TestCommandTestBuilder_Run(t *testing.T) {
 
 	if result == nil {
 		t.Fatal("Run should return a non-nil result")
-		return
 	}
 
 	if result.name != "version" {

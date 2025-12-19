@@ -5,55 +5,55 @@ import (
 	"time"
 )
 
-// compareParserResults compares results from original and optimized parsers
-func compareParserResults(t *testing.T, originalRecords []BanRecord, originalErr error,
-	optimizedRecords []BanRecord, optimizedErr error) {
+// compareParserResults compares results from two consecutive parser runs
+func compareParserResults(t *testing.T, firstRecords []BanRecord, firstErr error,
+	secondRecords []BanRecord, secondErr error) {
 	t.Helper()
 	// Compare errors
-	if (originalErr == nil) != (optimizedErr == nil) {
-		t.Fatalf("Error mismatch: original=%v, optimized=%v", originalErr, optimizedErr)
+	if (firstErr == nil) != (secondErr == nil) {
+		t.Fatalf("Error mismatch: first=%v, second=%v", firstErr, secondErr)
 	}
 
 	// Compare record counts
-	if len(originalRecords) != len(optimizedRecords) {
-		t.Fatalf("Record count mismatch: original=%d, optimized=%d",
-			len(originalRecords), len(optimizedRecords))
+	if len(firstRecords) != len(secondRecords) {
+		t.Fatalf("Record count mismatch: first=%d, second=%d",
+			len(firstRecords), len(secondRecords))
 	}
 
 	// Compare each record
-	for i := range originalRecords {
-		compareRecords(t, i, &originalRecords[i], &optimizedRecords[i])
+	for i := range firstRecords {
+		compareRecords(t, i, &firstRecords[i], &secondRecords[i])
 	}
 }
 
 // compareRecords compares individual ban records
-func compareRecords(t *testing.T, index int, orig, opt *BanRecord) {
+func compareRecords(t *testing.T, index int, first, second *BanRecord) {
 	t.Helper()
-	if orig.Jail != opt.Jail {
-		t.Errorf("Record %d jail mismatch: original=%s, optimized=%s", index, orig.Jail, opt.Jail)
+	if first.Jail != second.Jail {
+		t.Errorf("Record %d jail mismatch: first=%s, second=%s", index, first.Jail, second.Jail)
 	}
 
-	if orig.IP != opt.IP {
-		t.Errorf("Record %d IP mismatch: original=%s, optimized=%s", index, orig.IP, opt.IP)
+	if first.IP != second.IP {
+		t.Errorf("Record %d IP mismatch: first=%s, second=%s", index, first.IP, second.IP)
 	}
 
 	// For time comparison, allow small differences due to parsing
-	if !orig.BannedAt.IsZero() && !opt.BannedAt.IsZero() {
-		if orig.BannedAt.Unix() != opt.BannedAt.Unix() {
-			t.Errorf("Record %d banned time mismatch: original=%v, optimized=%v",
-				index, orig.BannedAt, opt.BannedAt)
+	if !first.BannedAt.IsZero() && !second.BannedAt.IsZero() {
+		if first.BannedAt.Unix() != second.BannedAt.Unix() {
+			t.Errorf("Record %d banned time mismatch: first=%v, second=%v",
+				index, first.BannedAt, second.BannedAt)
 		}
 	}
 
 	// Remaining time should be consistent
-	if orig.Remaining != opt.Remaining {
-		t.Errorf("Record %d remaining time mismatch: original=%s, optimized=%s",
-			index, orig.Remaining, opt.Remaining)
+	if first.Remaining != second.Remaining {
+		t.Errorf("Record %d remaining time mismatch: first=%s, second=%s",
+			index, first.Remaining, second.Remaining)
 	}
 }
 
-// TestParserCompatibility ensures the optimized parser produces identical results to the original
-func TestParserCompatibility(t *testing.T) {
+// TestParserDeterminism ensures the parser produces identical results across consecutive runs
+func TestParserDeterminism(t *testing.T) {
 	testCases := []struct {
 		name  string
 		input string
@@ -97,8 +97,7 @@ func TestParserCompatibility(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Note: After optimization consolidation, this test validates parser consistency
-			// by running the same parser twice to ensure deterministic behavior
+			// Validates parser determinism by running twice with identical input
 			parser := NewBanRecordParser()
 
 			// First parse
@@ -113,54 +112,54 @@ func TestParserCompatibility(t *testing.T) {
 }
 
 // compareSingleRecords compares individual parsed records
-func compareSingleRecords(t *testing.T, originalRecord *BanRecord, originalErr error,
-	optimizedRecord *BanRecord, optimizedErr error) {
+func compareSingleRecords(t *testing.T, firstRecord *BanRecord, firstErr error,
+	secondRecord *BanRecord, secondErr error) {
 	t.Helper()
 	// Compare errors
-	if (originalErr == nil) != (optimizedErr == nil) {
-		t.Fatalf("Error mismatch: original=%v, optimized=%v", originalErr, optimizedErr)
+	if (firstErr == nil) != (secondErr == nil) {
+		t.Fatalf("Error mismatch: first=%v, second=%v", firstErr, secondErr)
 	}
 
 	// If both have errors, that's fine - they should be the same type
-	if originalErr != nil && optimizedErr != nil {
+	if firstErr != nil && secondErr != nil {
 		return
 	}
 
 	// Compare records
-	if (originalRecord == nil) != (optimizedRecord == nil) {
-		t.Fatalf("Record nil mismatch: original=%v, optimized=%v",
-			originalRecord == nil, optimizedRecord == nil)
+	if (firstRecord == nil) != (secondRecord == nil) {
+		t.Fatalf("Record nil mismatch: first=%v, second=%v",
+			firstRecord == nil, secondRecord == nil)
 	}
 
-	if originalRecord != nil && optimizedRecord != nil {
-		compareRecordFields(t, originalRecord, optimizedRecord)
+	if firstRecord != nil && secondRecord != nil {
+		compareRecordFields(t, firstRecord, secondRecord)
 	}
 }
 
 // compareRecordFields compares fields of two ban records
-func compareRecordFields(t *testing.T, original, optimized *BanRecord) {
+func compareRecordFields(t *testing.T, first, second *BanRecord) {
 	t.Helper()
-	if original.Jail != optimized.Jail {
-		t.Errorf("Jail mismatch: original=%s, optimized=%s",
-			original.Jail, optimized.Jail)
+	if first.Jail != second.Jail {
+		t.Errorf("Jail mismatch: first=%s, second=%s",
+			first.Jail, second.Jail)
 	}
 
-	if original.IP != optimized.IP {
-		t.Errorf("IP mismatch: original=%s, optimized=%s",
-			original.IP, optimized.IP)
+	if first.IP != second.IP {
+		t.Errorf("IP mismatch: first=%s, second=%s",
+			first.IP, second.IP)
 	}
 
 	// Time comparison with tolerance
-	if !original.BannedAt.IsZero() && !optimized.BannedAt.IsZero() {
-		if original.BannedAt.Unix() != optimized.BannedAt.Unix() {
-			t.Errorf("BannedAt mismatch: original=%v, optimized=%v",
-				original.BannedAt, optimized.BannedAt)
+	if !first.BannedAt.IsZero() && !second.BannedAt.IsZero() {
+		if first.BannedAt.Unix() != second.BannedAt.Unix() {
+			t.Errorf("BannedAt mismatch: first=%v, second=%v",
+				first.BannedAt, second.BannedAt)
 		}
 	}
 }
 
-// TestParserCompatibilityLineByLine tests individual line parsing compatibility
-func TestParserCompatibilityLineByLine(t *testing.T) {
+// TestParserDeterminismLineByLine tests individual line parsing determinism
+func TestParserDeterminismLineByLine(t *testing.T) {
 	testLines := []struct {
 		name string
 		line string
@@ -195,8 +194,7 @@ func TestParserCompatibilityLineByLine(t *testing.T) {
 
 	for _, tc := range testLines {
 		t.Run(tc.name, func(t *testing.T) {
-			// Note: After optimization consolidation, this test validates parser consistency
-			// by running the same parser twice to ensure deterministic behavior
+			// Validates parser determinism by running twice with identical input
 			parser := NewBanRecordParser()
 
 			// First parse

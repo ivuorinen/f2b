@@ -1,7 +1,6 @@
 package fail2ban
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
@@ -114,10 +113,13 @@ func TestTimeParsingCache_BoundedEviction(t *testing.T) {
 	// Fill cache beyond threshold to trigger eviction
 	maxSize := int(float64(shared.CacheMaxSize)*shared.CacheEvictionThreshold) + 100
 
+	// Create base time for monotonic timestamp generation
+	baseTime := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+
 	for i := 0; i < maxSize; i++ {
-		// Generate unique time strings
-		timeStr := fmt.Sprintf("2024-01-01 %02d:%02d:%02d",
-			i%24, (i/24)%60, (i/1440)%60)
+		// Generate unique time strings using monotonic increment
+		uniqueTime := baseTime.Add(time.Duration(i) * time.Second)
+		timeStr := uniqueTime.Format("2006-01-02 15:04:05")
 		_, err := cache.ParseTime(timeStr)
 		require.NoError(t, err)
 	}

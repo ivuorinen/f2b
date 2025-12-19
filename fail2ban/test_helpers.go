@@ -320,7 +320,13 @@ func SetupMockEnvironmentWithStandardResponses(t TestingInterface) (client *Mock
 	t.Helper()
 
 	client, cleanup = SetupMockEnvironment(t)
-	mockRunner := GetRunner().(*MockRunner)
+
+	// Safe type assertion with error handling
+	mockRunner, ok := GetRunner().(*MockRunner)
+	if !ok {
+		t.Fatalf("Expected GetRunner() to return *MockRunner, got %T", GetRunner())
+	}
+
 	StandardMockSetup(mockRunner)
 
 	return client, cleanup

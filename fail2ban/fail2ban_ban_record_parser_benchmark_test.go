@@ -125,20 +125,7 @@ func BenchmarkLargeDataset(b *testing.B) {
 	}
 	largeOutput := strings.Join(largeData, "\n")
 
-	b.Run("original_large", func(b *testing.B) {
-		parser := NewBanRecordParser()
-		b.ResetTimer()
-		b.ReportAllocs()
-
-		for i := 0; i < b.N; i++ {
-			_, err := parser.ParseBanRecords(largeOutput, "sshd")
-			if err != nil {
-				b.Fatal(err)
-			}
-		}
-	})
-
-	b.Run("optimized_large", func(b *testing.B) {
+	b.Run("large_dataset", func(b *testing.B) {
 		parser := NewBanRecordParser()
 		b.ResetTimer()
 		b.ReportAllocs()

@@ -41,7 +41,7 @@ func (gd *GzipDetector) hasGzipMagicBytes(path string) (bool, error) {
 	defer func() {
 		if closeErr := f.Close(); closeErr != nil {
 			getLogger().WithError(closeErr).
-				WithField("path", path).
+				WithField(shared.LogFieldFile, path).
 				Warn("Failed to close file in gzip magic byte check")
 		}
 	}()
