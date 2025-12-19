@@ -4,6 +4,7 @@ package fail2ban_test
 
 import (
 	"compress/gzip"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -34,7 +35,7 @@ func TestSetLogDir(t *testing.T) {
 	err := os.WriteFile(filepath.Join(tempDir, "fail2ban.log"), []byte(logContent), 0600)
 	fail2ban.AssertError(t, err, false, "create test log file")
 
-	lines, err := fail2ban.GetLogLines("", "")
+	lines, err := fail2ban.GetLogLines(context.Background(), "", "")
 	fail2ban.AssertError(t, err, false, "GetLogLines")
 
 	if len(lines) != 1 || lines[0] != logContent {
@@ -201,7 +202,7 @@ func TestLogFileReading(t *testing.T) {
 			}
 
 			// Test reading
-			lines, err := fail2ban.GetLogLines("", "")
+			lines, err := fail2ban.GetLogLines(context.Background(), "", "")
 			fail2ban.AssertError(t, err, false, tt.name)
 
 			validateLogLines(t, lines, tt.expected, tt.name)
@@ -229,7 +230,7 @@ func TestLogFileOrdering(t *testing.T) {
 		}
 	}
 
-	lines, err := fail2ban.GetLogLines("", "")
+	lines, err := fail2ban.GetLogLines(context.Background(), "", "")
 	fail2ban.AssertError(t, err, false, "GetLogLines ordering test")
 
 	// Should be in chronological order: oldest rotated first, then current
@@ -323,7 +324,7 @@ func TestLogFiltering(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			lines, err := fail2ban.GetLogLines(tt.jailFilter, tt.ipFilter)
+			lines, err := fail2ban.GetLogLines(context.Background(), tt.jailFilter, tt.ipFilter)
 			fail2ban.AssertError(t, err, false, tt.name)
 
 			if len(lines) != tt.expectedCount {

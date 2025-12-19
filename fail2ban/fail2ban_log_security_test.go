@@ -33,6 +33,7 @@ func TestReadLogFileSecurityValidation(t *testing.T) {
 					"invalid path",
 					"not in expected system location",
 					"outside allowed directories",
+					"null byte",
 				},
 			) {
 				t.Errorf("Error should be security-related, got: %s", errorMsg)

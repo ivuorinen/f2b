@@ -15,7 +15,7 @@
   "packageRules": [
     {
       "matchManagers": ["custom.regex"],
-      "matchFileNames": ["Makefile"],
+      "matchFileNames": ["Makefile", "*.mk"],
       "groupName": "development tools",
       "schedule": ["before 6am on monday"]
     }

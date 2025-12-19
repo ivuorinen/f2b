@@ -20,6 +20,9 @@ var _ LoggerEntry = (*logrusEntryAdapter)(nil)
 
 // NewLogrusAdapter creates a logger adapter from a logrus logger
 func NewLogrusAdapter(logger *logrus.Logger) LoggerInterface {
+	if logger == nil {
+		logger = logrus.StandardLogger()
+	}
 	return &logrusAdapter{entry: logrus.NewEntry(logger)}
 }
 

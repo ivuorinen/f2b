@@ -116,7 +116,7 @@ func ValidateIPArgument(args []string) (string, error) {
 	}
 	ip := args[0]
 	// Validate the IP address
-	if err := fail2ban.CachedValidateIP(ip); err != nil {
+	if err := fail2ban.CachedValidateIP(context.Background(), ip); err != nil {
 		return "", err
 	}
 	return ip, nil
@@ -597,7 +597,9 @@ func WrapErrorf(err error, format string, args ...interface{}) error {
 	if err == nil {
 		return nil
 	}
-	return fmt.Errorf(fmt.Sprintf(format, args...)+": %w", err)
+	// Append ": %w" to format and add err as final argument for single formatting
+	allArgs := append(args, err)
+	return fmt.Errorf(format+": %w", allArgs...)
 }
 
 // Command output helpers

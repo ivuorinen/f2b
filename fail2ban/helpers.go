@@ -329,7 +329,7 @@ func validateSingleArgument(arg string, _ int) error {
 
 	// For IP arguments, validate IP format
 	if isLikelyIPArgument(arg) {
-		if err := CachedValidateIP(arg); err != nil {
+		if err := CachedValidateIP(context.Background(), arg); err != nil {
 			return fmt.Errorf("invalid IP format: %w", err)
 		}
 	}
@@ -551,12 +551,12 @@ func ValidatePathWithSecurity(path string, config PathSecurityConfig) (string, e
 		return "", fmt.Errorf("empty path not allowed")
 	}
 
-	// Check path length limits
+	// Check path length limits (initial check)
 	if config.MaxPathLength > 0 && len(path) > config.MaxPathLength {
 		return "", fmt.Errorf("path too long: %d characters (max: %d)", len(path), config.MaxPathLength)
 	}
 
-	// Detect and prevent null byte injection
+	// Detect and prevent null byte injection (initial check)
 	if strings.Contains(path, "\x00") {
 		return "", fmt.Errorf("path contains null byte")
 	}
@@ -569,6 +569,16 @@ func ValidatePathWithSecurity(path string, config PathSecurityConfig) (string, e
 
 	// Normalize unicode characters to prevent bypass attempts
 	path = normalizeUnicode(path)
+
+	// Re-validate after decoding and normalization to prevent bypass
+	if config.MaxPathLength > 0 && len(path) > config.MaxPathLength {
+		return "", fmt.Errorf("path too long after decoding: %d characters (max: %d)", len(path), config.MaxPathLength)
+	}
+
+	// Re-check for null bytes after decoding and normalization
+	if strings.Contains(path, "\x00") {
+		return "", fmt.Errorf("path contains null byte after decoding")
+	}
 
 	// Basic path traversal detection (before cleaning)
 	if hasPathTraversal(path) {
@@ -770,22 +780,25 @@ func validateFileType(path string) error {
 }
 
 // ValidateLogPath validates and sanitizes a log file path using standard log directory config
-// with context support for timeout/cancellation
-func ValidateLogPath(_ context.Context, path string, logDir string) (string, error) {
+// Context parameter accepted for API consistency but not currently used
+func ValidateLogPath(ctx context.Context, path string, logDir string) (string, error) {
+	_ = ctx // Context not currently used by ValidatePathWithSecurity
 	config := CreateSingleDirPathConfig(logDir)
 	return ValidatePathWithSecurity(path, config)
 }
 
 // ValidateClientLogPath validates log directory path for client initialization
-// with context support for timeout/cancellation
-func ValidateClientLogPath(_ context.Context, logDir string) (string, error) {
+// Context parameter accepted for API consistency but not currently used
+func ValidateClientLogPath(ctx context.Context, logDir string) (string, error) {
+	_ = ctx // Context not currently used by ValidatePathWithSecurity
 	config := CreateLogPathConfig()
 	return ValidatePathWithSecurity(logDir, config)
 }
 
 // ValidateClientFilterPath validates filter directory path for client initialization
-// with context support for timeout/cancellation
-func ValidateClientFilterPath(_ context.Context, filterDir string) (string, error) {
+// Context parameter accepted for API consistency but not currently used
+func ValidateClientFilterPath(ctx context.Context, filterDir string) (string, error) {
+	_ = ctx // Context not currently used by ValidatePathWithSecurity
 	config := CreateFilterPathConfig()
 	return ValidatePathWithSecurity(filterDir, config)
 }

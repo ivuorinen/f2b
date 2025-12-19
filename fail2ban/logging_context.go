@@ -5,21 +5,31 @@ package fail2ban
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"strings"
-	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/ivuorinen/f2b/shared"
 )
 
 // WithRequestID adds a request ID to the context
 func WithRequestID(ctx context.Context, requestID string) context.Context {
+	// Trim whitespace and validate
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
+		return ctx // Don't store empty request IDs
+	}
 	return context.WithValue(ctx, shared.ContextKeyRequestID, requestID)
 }
 
 // WithOperation adds an operation name to the context
 func WithOperation(ctx context.Context, operation string) context.Context {
+	// Trim whitespace and validate
+	operation = strings.TrimSpace(operation)
+	if operation == "" {
+		return ctx // Don't store empty operations
+	}
 	return context.WithValue(ctx, shared.ContextKeyOperation, operation)
 }
 
@@ -73,7 +83,7 @@ func LoggerFromContext(ctx context.Context) LoggerEntry {
 	return getLogger().WithFields(fields)
 }
 
-// GenerateRequestID generates a simple request ID for tracing
+// GenerateRequestID generates a unique request ID using UUID for tracing
 func GenerateRequestID() string {
-	return fmt.Sprintf("req_%d", time.Now().UnixNano())
+	return uuid.NewString()
 }

@@ -19,6 +19,18 @@ func (p *BanProcessor) ProcessSingle(
 	ip string,
 	jails []string,
 ) ([]OperationResult, error) {
+	// Validate IP address before privilege escalation
+	if err := fail2ban.ValidateIP(ip); err != nil {
+		return nil, err
+	}
+
+	// Validate each jail name before privilege escalation
+	for _, jail := range jails {
+		if err := fail2ban.ValidateJail(jail); err != nil {
+			return nil, err
+		}
+	}
+
 	return ProcessBanOperationWithContext(ctx, client, ip, jails)
 }
 
@@ -29,6 +41,18 @@ func (p *BanProcessor) ProcessParallel(
 	ip string,
 	jails []string,
 ) ([]OperationResult, error) {
+	// Validate IP address before privilege escalation
+	if err := fail2ban.ValidateIP(ip); err != nil {
+		return nil, err
+	}
+
+	// Validate each jail name before privilege escalation
+	for _, jail := range jails {
+		if err := fail2ban.ValidateJail(jail); err != nil {
+			return nil, err
+		}
+	}
+
 	return ProcessBanOperationParallelWithContext(ctx, client, ip, jails)
 }
 
@@ -42,6 +66,18 @@ func (p *UnbanProcessor) ProcessSingle(
 	ip string,
 	jails []string,
 ) ([]OperationResult, error) {
+	// Validate IP address before privilege escalation
+	if err := fail2ban.ValidateIP(ip); err != nil {
+		return nil, err
+	}
+
+	// Validate each jail name before privilege escalation
+	for _, jail := range jails {
+		if err := fail2ban.ValidateJail(jail); err != nil {
+			return nil, err
+		}
+	}
+
 	return ProcessUnbanOperationWithContext(ctx, client, ip, jails)
 }
 
@@ -52,5 +88,17 @@ func (p *UnbanProcessor) ProcessParallel(
 	ip string,
 	jails []string,
 ) ([]OperationResult, error) {
+	// Validate IP address before privilege escalation
+	if err := fail2ban.ValidateIP(ip); err != nil {
+		return nil, err
+	}
+
+	// Validate each jail name before privilege escalation
+	for _, jail := range jails {
+		if err := fail2ban.ValidateJail(jail); err != nil {
+			return nil, err
+		}
+	}
+
 	return ProcessUnbanOperationParallelWithContext(ctx, client, ip, jails)
 }

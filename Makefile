@@ -53,8 +53,9 @@ dev-deps: ## Install development dependencies
 	# renovate: datasource=go depName=github.com/rhysd/actionlint/cmd/actionlint
 	@command -v goimports >/dev/null 2>&1 || { \
 		echo "Installing goimports..."; \
-		go install golang.org/x/tools/cmd/goimports@latest; \
+		go install golang.org/x/tools/cmd/goimports@v0.28.0; \
 	}
+	# renovate: datasource=go depName=golang.org/x/tools/cmd/goimports
 	@command -v editorconfig-checker >/dev/null 2>&1 || { \
 		echo "Installing editorconfig-checker..."; \
 		go install github.com/editorconfig-checker/editorconfig-checker/v3/cmd/editorconfig-checker@v3.4.0; \
@@ -130,8 +131,8 @@ test-coverage: ## Run tests with coverage report
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report saved to coverage.html"
 
-update-deps: ## Update all Go dependencies to latest versions
-	@echo "Updating Go dependencies..."
+update-deps: ## Update Go dependencies to latest patch versions
+	@echo "Updating Go dependencies (patch versions only)..."
 	go get -u=patch ./...
 	go mod tidy
 	go mod verify

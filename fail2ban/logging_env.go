@@ -19,19 +19,22 @@ func init() {
 	logger.Store(NewLogrusAdapter(logrus.StandardLogger()))
 }
 
-// LevelSetter interface for loggers that support setting log levels
-type LevelSetter interface {
-	SetLevel(level string)
-}
-
 // SetLogger allows the cmd package to set the logger instance (thread-safe)
 func SetLogger(l LoggerInterface) {
+	if l == nil {
+		return
+	}
 	logger.Store(l)
 }
 
 // getLogger returns the current logger instance (thread-safe)
 func getLogger() LoggerInterface {
-	return logger.Load().(LoggerInterface)
+	l, ok := logger.Load().(LoggerInterface)
+	if !ok {
+		// Fallback to default logger if type assertion fails
+		return NewLogrusAdapter(logrus.StandardLogger())
+	}
+	return l
 }
 
 // IsCI detects if we're running in a CI environment

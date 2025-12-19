@@ -136,7 +136,7 @@ func TestValidationCacheSize(t *testing.T) {
 	}
 
 	// Add something to cache
-	err := CachedValidateIP("192.168.1.1")
+	err := CachedValidateIP(context.Background(), "192.168.1.1")
 	if err != nil {
 		t.Fatalf("CachedValidateIP failed: %v", err)
 	}

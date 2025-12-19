@@ -4,6 +4,7 @@
 package fail2ban
 
 import (
+	"context"
 	"sync"
 
 	"github.com/ivuorinen/f2b/shared"
@@ -36,7 +37,13 @@ func (vc *ValidationCache) Get(key string) (bool, error) {
 
 // Set stores a validation result in the cache.
 // If the cache is at capacity, it automatically evicts a portion of entries.
+// Invalid keys (empty or too long) are silently ignored to prevent cache pollution.
 func (vc *ValidationCache) Set(key string, err error) {
+	// Validate key before locking to prevent cache pollution
+	if key == "" || len(key) > 512 {
+		return // Invalid key - skip caching
+	}
+
 	vc.mu.Lock()
 	defer vc.mu.Unlock()
 
@@ -114,13 +121,20 @@ func getMetricsRecorder() MetricsRecorder {
 	return metricsRecorder
 }
 
-// cachedValidate provides a generic caching wrapper for validation functions
+// cachedValidate provides a generic caching wrapper for validation functions.
+// Context parameter supports cancellation and timeout for validation operations.
 func cachedValidate(
+	ctx context.Context,
 	cache *ValidationCache,
 	keyPrefix string,
 	value string,
 	validator func(string) error,
 ) error {
+	// Check context cancellation before expensive operations
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
 	cacheKey := keyPrefix + ":" + value
 	if exists, result := cache.Get(cacheKey); exists {
 		// Record cache hit in metrics
@@ -135,29 +149,38 @@ func cachedValidate(
 		recorder.RecordValidationCacheMiss()
 	}
 
+	// Check context again before calling validator
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
 	err := validator(value)
 	cache.Set(cacheKey, err)
 	return err
 }
 
-// CachedValidateIP validates an IP address with caching
-func CachedValidateIP(ip string) error {
-	return cachedValidate(ipValidationCache, "ip", ip, ValidateIP)
+// CachedValidateIP validates an IP address with caching.
+// Context parameter supports cancellation and timeout for validation operations.
+func CachedValidateIP(ctx context.Context, ip string) error {
+	return cachedValidate(ctx, ipValidationCache, "ip", ip, ValidateIP)
 }
 
-// CachedValidateJail validates a jail name with caching
-func CachedValidateJail(jail string) error {
-	return cachedValidate(jailValidationCache, string(shared.ContextKeyJail), jail, ValidateJail)
+// CachedValidateJail validates a jail name with caching.
+// Context parameter supports cancellation and timeout for validation operations.
+func CachedValidateJail(ctx context.Context, jail string) error {
+	return cachedValidate(ctx, jailValidationCache, string(shared.ContextKeyJail), jail, ValidateJail)
 }
 
-// CachedValidateFilter validates a filter name with caching
-func CachedValidateFilter(filter string) error {
-	return cachedValidate(filterValidationCache, "filter", filter, ValidateFilter)
+// CachedValidateFilter validates a filter name with caching.
+// Context parameter supports cancellation and timeout for validation operations.
+func CachedValidateFilter(ctx context.Context, filter string) error {
+	return cachedValidate(ctx, filterValidationCache, "filter", filter, ValidateFilter)
 }
 
-// CachedValidateCommand validates a command with caching
-func CachedValidateCommand(command string) error {
-	return cachedValidate(commandValidationCache, string(shared.ContextKeyCommand), command, ValidateCommand)
+// CachedValidateCommand validates a command with caching.
+// Context parameter supports cancellation and timeout for validation operations.
+func CachedValidateCommand(ctx context.Context, command string) error {
+	return cachedValidate(ctx, commandValidationCache, string(shared.ContextKeyCommand), command, ValidateCommand)
 }
 
 // ClearValidationCaches clears all validation caches

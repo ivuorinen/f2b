@@ -28,7 +28,7 @@ func TestIntegrationFullLogProcessing(t *testing.T) {
 // testProcessFullLog tests processing of the entire log file
 func testProcessFullLog(t *testing.T) {
 	start := time.Now()
-	lines, err := GetLogLines("", "")
+	lines, err := GetLogLines(context.Background(), "", "")
 	duration := time.Since(start)
 
 	if err != nil {
@@ -50,7 +50,7 @@ func testProcessFullLog(t *testing.T) {
 
 // testExtractBanEvents tests extraction of ban/unban events
 func testExtractBanEvents(t *testing.T) {
-	lines, err := GetLogLines("sshd", "")
+	lines, err := GetLogLines(context.Background(), "sshd", "")
 	if err != nil {
 		t.Fatalf("Failed to get log lines: %v", err)
 	}
@@ -74,7 +74,7 @@ func testExtractBanEvents(t *testing.T) {
 // testTrackPersistentAttacker tests tracking a specific attacker across the log
 func testTrackPersistentAttacker(t *testing.T) {
 	// Track 192.168.1.100 (most frequent attacker)
-	lines, err := GetLogLines("", "192.168.1.100")
+	lines, err := GetLogLines(context.Background(), "", "192.168.1.100")
 	if err != nil {
 		t.Fatalf("Failed to filter by IP: %v", err)
 	}
@@ -157,7 +157,7 @@ func TestIntegrationConcurrentLogReading(t *testing.T) {
 				ip = "10.0.0.50"
 			}
 
-			lines, err := GetLogLines(jail, ip)
+			lines, err := GetLogLines(context.Background(), jail, ip)
 			if err != nil {
 				errors <- err
 				return
@@ -182,7 +182,10 @@ func TestIntegrationConcurrentLogReading(t *testing.T) {
 
 func TestIntegrationBanRecordParsing(t *testing.T) {
 	// Test parsing ban records with real patterns
-	parser := NewBanRecordParser()
+	parser, err := NewBanRecordParser()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Use dynamic dates relative to current time
 	now := time.Now()
@@ -304,7 +307,7 @@ func TestIntegrationParallelLogProcessing(t *testing.T) {
 
 	start := time.Now()
 	results, err := pool.Process(ctx, jails, func(_ context.Context, jail string) ([]string, error) {
-		return GetLogLines(jail, "")
+		return GetLogLines(context.Background(), jail, "")
 	})
 	duration := time.Since(start)
 
@@ -349,7 +352,7 @@ func TestIntegrationMemoryUsage(t *testing.T) {
 
 	// Process log multiple times to check for leaks
 	for i := 0; i < 10; i++ {
-		lines, err := GetLogLines("", "")
+		lines, err := GetLogLines(context.Background(), "", "")
 		if err != nil {
 			t.Fatalf("Iteration %d failed: %v", i, err)
 		}
@@ -425,7 +428,7 @@ func BenchmarkLogParsing(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := GetLogLines("sshd", "")
+		_, err := GetLogLines(context.Background(), "sshd", "")
 		if err != nil {
 			b.Fatalf("Benchmark failed: %v", err)
 		}
@@ -433,7 +436,10 @@ func BenchmarkLogParsing(b *testing.B) {
 }
 
 func BenchmarkBanRecordParsing(b *testing.B) {
-	parser := NewBanRecordParser()
+	parser, err := NewBanRecordParser()
+	if err != nil {
+		b.Fatal(err)
+	}
 
 	// Use dynamic dates for benchmark
 	now := time.Now()

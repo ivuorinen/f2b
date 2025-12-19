@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"sort"
@@ -28,12 +29,14 @@ including support for rotated and compressed logs.
 //
 // Returns a slice of matching log lines, or an error.
 // This function uses streaming to limit memory usage.
-func GetLogLines(jailFilter string, ipFilter string) ([]string, error) {
-	return GetLogLinesWithLimit(jailFilter, ipFilter, shared.DefaultLogLinesLimit) // Default limit for safety
+// Context parameter supports timeout and cancellation of file I/O operations.
+func GetLogLines(ctx context.Context, jailFilter string, ipFilter string) ([]string, error) {
+	return GetLogLinesWithLimit(ctx, jailFilter, ipFilter, shared.DefaultLogLinesLimit) // Default limit for safety
 }
 
 // GetLogLinesWithLimit returns log lines with configurable limits for memory management.
-func GetLogLinesWithLimit(jailFilter string, ipFilter string, maxLines int) ([]string, error) {
+// Context parameter supports timeout and cancellation of file I/O operations.
+func GetLogLinesWithLimit(ctx context.Context, jailFilter string, ipFilter string, maxLines int) ([]string, error) {
 	// Validate maxLines parameter
 	if maxLines < 0 {
 		return nil, fmt.Errorf(shared.ErrMaxLinesNegative, maxLines)
@@ -51,15 +54,29 @@ func GetLogLinesWithLimit(jailFilter string, ipFilter string, maxLines int) ([]s
 	jailFilter = strings.TrimSpace(jailFilter)
 	ipFilter = strings.TrimSpace(ipFilter)
 
+	// Validate jail filter
+	if jailFilter != "" {
+		if err := ValidateJail(jailFilter); err != nil {
+			return nil, fmt.Errorf("invalid jail filter: %w", err)
+		}
+	}
+
+	// Validate IP filter
+	if ipFilter != "" && ipFilter != "all" {
+		if net.ParseIP(ipFilter) == nil {
+			return nil, fmt.Errorf("invalid IP address: %s", ipFilter)
+		}
+	}
+
 	config := LogReadConfig{
 		MaxLines:    maxLines,
-		MaxFileSize: 100 * 1024 * 1024, // 100MB file size limit
+		MaxFileSize: shared.DefaultMaxFileSize,
 		JailFilter:  jailFilter,
 		IPFilter:    ipFilter,
 		BaseDir:     GetLogDir(),
 	}
 
-	return collectLogLines(context.Background(), GetLogDir(), config)
+	return collectLogLines(ctx, GetLogDir(), config)
 }
 
 // collectLogLines reads log files under the provided directory using the supplied configuration.
@@ -413,7 +430,7 @@ func (olp *OptimizedLogProcessor) GetLogLinesOptimized(jailFilter, ipFilter stri
 
 	config := LogReadConfig{
 		MaxLines:    maxLines,
-		MaxFileSize: 100 * 1024 * 1024,
+		MaxFileSize: shared.DefaultMaxFileSize,
 		JailFilter:  jailFilter,
 		IPFilter:    ipFilter,
 		BaseDir:     GetLogDir(),

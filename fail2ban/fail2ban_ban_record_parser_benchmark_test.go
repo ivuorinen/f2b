@@ -24,7 +24,10 @@ var benchmarkBanRecordOutput = strings.Join(benchmarkBanRecordData, "\n")
 
 // BenchmarkOriginalBanRecordParsing benchmarks the current implementation
 func BenchmarkOriginalBanRecordParsing(b *testing.B) {
-	parser := NewBanRecordParser()
+	parser, err := NewBanRecordParser()
+	if err != nil {
+		b.Fatal(err)
+	}
 
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -42,7 +45,10 @@ func BenchmarkBanRecordLineParsing(b *testing.B) {
 	testLine := "192.168.1.100 2025-07-20 14:30:39 + 2025-07-20 14:40:39 remaining"
 
 	b.Run("original", func(b *testing.B) {
-		parser := NewBanRecordParser()
+		parser, err := NewBanRecordParser()
+		if err != nil {
+			b.Fatal(err)
+		}
 		b.ResetTimer()
 		b.ReportAllocs()
 
@@ -60,7 +66,11 @@ func BenchmarkTimeParsingOptimization(b *testing.B) {
 	timeStr := "2025-07-20 14:30:39"
 
 	b.Run("original", func(b *testing.B) {
-		cache := NewTimeParsingCache("2006-01-02 15:04:05")
+		cache, err := NewTimeParsingCache("2006-01-02 15:04:05")
+		if err != nil {
+			b.Fatal(err)
+		}
+
 		b.ResetTimer()
 		b.ReportAllocs()
 
@@ -73,7 +83,11 @@ func BenchmarkTimeParsingOptimization(b *testing.B) {
 	})
 
 	b.Run("optimized", func(b *testing.B) {
-		cache := NewFastTimeCache("2006-01-02 15:04:05")
+		cache, err := NewFastTimeCache("2006-01-02 15:04:05")
+		if err != nil {
+			b.Fatal(err)
+		}
+
 		b.ResetTimer()
 		b.ReportAllocs()
 
@@ -92,7 +106,11 @@ func BenchmarkTimeStringBuilding(b *testing.B) {
 	timeStr := "14:30:39"
 
 	b.Run("original", func(b *testing.B) {
-		cache := NewTimeParsingCache("2006-01-02 15:04:05")
+		cache, err := NewTimeParsingCache("2006-01-02 15:04:05")
+		if err != nil {
+			b.Fatal(err)
+		}
+
 		b.ResetTimer()
 		b.ReportAllocs()
 
@@ -102,7 +120,11 @@ func BenchmarkTimeStringBuilding(b *testing.B) {
 	})
 
 	b.Run("optimized", func(b *testing.B) {
-		cache := NewFastTimeCache("2006-01-02 15:04:05")
+		cache, err := NewFastTimeCache("2006-01-02 15:04:05")
+		if err != nil {
+			b.Fatal(err)
+		}
+
 		b.ResetTimer()
 		b.ReportAllocs()
 
@@ -126,7 +148,10 @@ func BenchmarkLargeDataset(b *testing.B) {
 	largeOutput := strings.Join(largeData, "\n")
 
 	b.Run("large_dataset", func(b *testing.B) {
-		parser := NewBanRecordParser()
+		parser, err := NewBanRecordParser()
+		if err != nil {
+			b.Fatal(err)
+		}
 		b.ResetTimer()
 		b.ReportAllocs()
 
@@ -168,7 +193,10 @@ func BenchmarkDurationFormatting(b *testing.B) {
 
 // BenchmarkMemoryPooling tests the effectiveness of object pooling
 func BenchmarkMemoryPooling(b *testing.B) {
-	parser := NewBanRecordParser()
+	parser, err := NewBanRecordParser()
+	if err != nil {
+		b.Fatal(err)
+	}
 	testLine := "192.168.1.100 2025-07-20 14:30:39 + 2025-07-20 14:40:39 remaining"
 
 	b.ResetTimer()

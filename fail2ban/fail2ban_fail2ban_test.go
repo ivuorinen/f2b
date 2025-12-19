@@ -1,6 +1,7 @@
 package fail2ban
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -419,7 +420,7 @@ func TestGetLogLines(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			lines, err := GetLogLines(tt.jail, tt.ip)
+			lines, err := GetLogLines(context.Background(), tt.jail, tt.ip)
 			AssertError(t, err, false, "get log lines")
 
 			if len(lines) != tt.expectedLines {
@@ -449,7 +450,7 @@ func TestGetLogLinesWithLimitPrefersRecent(t *testing.T) {
 		t.Fatalf("failed to create current log: %v", err)
 	}
 
-	lines, err := GetLogLinesWithLimit("", "", 2)
+	lines, err := GetLogLinesWithLimit(context.Background(), "", "", 2)
 	if err != nil {
 		t.Fatalf("GetLogLinesWithLimit returned error: %v", err)
 	}

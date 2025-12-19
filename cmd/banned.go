@@ -33,7 +33,7 @@ func BannedCmd(client interface {
 
 			// Validate jail name (allow special "ALL" filter)
 			if target != shared.AllFilter {
-				if err := fail2ban.CachedValidateJail(target); err != nil {
+				if err := fail2ban.CachedValidateJail(context.Background(), target); err != nil {
 					return HandleValidationError(err)
 				}
 			}

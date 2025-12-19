@@ -34,7 +34,7 @@ func BenchmarkE2E_MainAPIs(b *testing.B) {
 	b.Run("GetLogLines", func(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			_, err := fail2ban.GetLogLines("sshd", "192.168.1.100")
+			_, err := fail2ban.GetLogLines(context.Background(), "sshd", "192.168.1.100")
 			if err != nil {
 				b.Fatalf("GetLogLines failed: %v", err)
 			}
@@ -44,7 +44,7 @@ func BenchmarkE2E_MainAPIs(b *testing.B) {
 	b.Run("GetLogLinesWithLimit", func(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			_, err := fail2ban.GetLogLinesWithLimit("sshd", "192.168.1.100", 100)
+			_, err := fail2ban.GetLogLinesWithLimit(context.Background(), "sshd", "192.168.1.100", 100)
 			if err != nil {
 				b.Fatalf("GetLogLinesWithLimit failed: %v", err)
 			}
@@ -105,7 +105,7 @@ func BenchmarkMemoryAllocation_Critical(b *testing.B) {
 	b.Run("LargeLogProcessing", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			_, err := fail2ban.GetLogLinesWithLimit("all", "all", 1000)
+			_, err := fail2ban.GetLogLinesWithLimit(context.Background(), "all", "all", 1000)
 			if err != nil {
 				b.Fatalf("Large log processing failed: %v", err)
 			}

@@ -64,7 +64,7 @@ func NewClientWithContext(ctx context.Context, logDir, filterDir string) (*RealC
 	// Validate filter directory using centralized helper with context
 	validatedFilterDir, err := ValidateClientFilterPath(ctx, filterDir)
 	if err != nil {
-		return nil, fmt.Errorf(shared.ErrInvalidFilterDirectory, err)
+		return nil, fmt.Errorf("%s: %w", shared.ErrInvalidFilterDirectory, err)
 	}
 
 	rc := &RealClient{

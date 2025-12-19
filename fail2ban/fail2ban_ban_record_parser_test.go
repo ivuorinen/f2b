@@ -8,7 +8,10 @@ import (
 )
 
 func TestBanRecordParser(t *testing.T) {
-	parser := NewBanRecordParser()
+	parser, err := NewBanRecordParser()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	tests := []struct {
 		name    string
@@ -89,7 +92,10 @@ func TestBanRecordParser(t *testing.T) {
 }
 
 func TestParseBanRecords(t *testing.T) {
-	parser := NewBanRecordParser()
+	parser, err := NewBanRecordParser()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	output := strings.Join([]string{
 		"192.168.1.100 2023-12-01 14:30:45 + 2023-12-02 14:30:45 remaining",
@@ -104,10 +110,10 @@ func TestParseBanRecords(t *testing.T) {
 		t.Fatalf("ParseBanRecords failed: %v", err)
 	}
 
-	expectedIPs := []string{"192.168.1.100", "192.168.1.101", "invalid", "192.168.1.102"}
-	// Note: empty line is skipped, but "invalid" is treated as simple format
-	if len(records) != 4 {
-		t.Fatalf("Expected 4 records (empty line skipped), got %d", len(records))
+	expectedIPs := []string{"192.168.1.100", "192.168.1.101", "192.168.1.102"}
+	// Note: empty line and invalid IP are both skipped due to validation
+	if len(records) != 3 {
+		t.Fatalf("Expected 3 records (empty line and invalid IP skipped), got %d", len(records))
 	}
 
 	for i, record := range records {
@@ -154,7 +160,10 @@ func TestParseBanRecordsOptimized(t *testing.T) {
 }
 
 func BenchmarkParseBanRecordLine(b *testing.B) {
-	parser := NewBanRecordParser()
+	parser, err := NewBanRecordParser()
+	if err != nil {
+		b.Fatal(err)
+	}
 	line := "192.168.1.100 2023-12-01 14:30:45 + 2023-12-02 14:30:45 remaining"
 
 	b.ResetTimer()
@@ -164,7 +173,10 @@ func BenchmarkParseBanRecordLine(b *testing.B) {
 }
 
 func BenchmarkParseBanRecords(b *testing.B) {
-	parser := NewBanRecordParser()
+	parser, err := NewBanRecordParser()
+	if err != nil {
+		b.Fatal(err)
+	}
 	output := strings.Repeat("192.168.1.100 2023-12-01 14:30:45 + 2023-12-02 14:30:45 remaining\n", 100)
 
 	b.ResetTimer()
@@ -175,7 +187,10 @@ func BenchmarkParseBanRecords(b *testing.B) {
 
 // Test error handling for invalid time formats
 func TestParseBanRecordInvalidTime(t *testing.T) {
-	parser := NewBanRecordParser()
+	parser, err := NewBanRecordParser()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Invalid ban time should be skipped (original behavior) - must have 8+ fields
 	line := "192.168.1.100 invalid-date 14:30:45 + 2023-12-02 14:30:45 remaining extra"
@@ -197,7 +212,10 @@ func TestParseBanRecordInvalidTime(t *testing.T) {
 
 // Test concurrent access to parser
 func TestBanRecordParserConcurrent(t *testing.T) {
-	parser := NewBanRecordParser()
+	parser, err := NewBanRecordParser()
+	if err != nil {
+		t.Fatal(err)
+	}
 	line := "192.168.1.100 2023-12-01 14:30:45 + 2023-12-02 14:30:45 remaining"
 
 	const numGoroutines = 10
@@ -227,7 +245,10 @@ func TestBanRecordParserConcurrent(t *testing.T) {
 
 // TestRealWorldBanRecordPatterns tests with actual patterns from production logs
 func TestRealWorldBanRecordPatterns(t *testing.T) {
-	parser := NewBanRecordParser()
+	parser, err := NewBanRecordParser()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Real patterns observed in production fail2ban
 	realWorldPatterns := []struct {
@@ -305,7 +326,10 @@ func TestRealWorldBanRecordPatterns(t *testing.T) {
 
 // TestProductionLogTimingPatterns verifies timing patterns from real logs
 func TestProductionLogTimingPatterns(t *testing.T) {
-	parser := NewBanRecordParser()
+	parser, err := NewBanRecordParser()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Test various real production patterns
 	tests := []struct {

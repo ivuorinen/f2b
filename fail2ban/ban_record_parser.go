@@ -2,6 +2,8 @@ package fail2ban
 
 import (
 	"errors"
+	"fmt"
+	"net"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,14 +36,14 @@ type BoundedTimeCache struct {
 }
 
 // NewBoundedTimeCache creates a new bounded time cache
-func NewBoundedTimeCache(maxSize int) *BoundedTimeCache {
+func NewBoundedTimeCache(maxSize int) (*BoundedTimeCache, error) {
 	if maxSize <= 0 {
-		panic("BoundedTimeCache maxSize must be positive")
+		return nil, fmt.Errorf("BoundedTimeCache maxSize must be positive, got %d", maxSize)
 	}
 	return &BoundedTimeCache{
 		cache:   make(map[string]time.Time),
 		maxSize: maxSize,
-	}
+	}, nil
 }
 
 // Load retrieves a cached time value
@@ -107,16 +109,20 @@ type BanRecordParser struct {
 
 // FastTimeCache provides ultra-fast time parsing with minimal allocations
 type FastTimeCache struct {
-	layout      string
-	layoutBytes []byte
-	parseCache  *BoundedTimeCache // Bounded cache with max 10k entries
-	stringPool  sync.Pool
+	layout     string
+	parseCache *BoundedTimeCache // Bounded cache with max 10k entries
+	stringPool sync.Pool
 }
 
 // NewBanRecordParser creates a new high-performance ban record parser
-func NewBanRecordParser() *BanRecordParser {
+func NewBanRecordParser() (*BanRecordParser, error) {
+	timeCache, err := NewFastTimeCache(shared.TimeFormat)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create parser: %w", err)
+	}
+
 	parser := &BanRecordParser{
-		timeCache: NewFastTimeCache(shared.TimeFormat),
+		timeCache: timeCache,
 	}
 
 	// String pool for reusing field slices
@@ -134,15 +140,19 @@ func NewBanRecordParser() *BanRecordParser {
 		},
 	}
 
-	return parser
+	return parser, nil
 }
 
 // NewFastTimeCache creates an optimized time cache
-func NewFastTimeCache(layout string) *FastTimeCache {
+func NewFastTimeCache(layout string) (*FastTimeCache, error) {
+	parseCache, err := NewBoundedTimeCache(shared.CacheMaxSize)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create time cache: %w", err)
+	}
+
 	cache := &FastTimeCache{
-		layout:      layout,
-		layoutBytes: []byte(layout),
-		parseCache:  NewBoundedTimeCache(shared.CacheMaxSize),
+		layout:     layout,
+		parseCache: parseCache,
 	}
 
 	cache.stringPool = sync.Pool{
@@ -152,7 +162,7 @@ func NewFastTimeCache(layout string) *FastTimeCache {
 		},
 	}
 
-	return cache
+	return cache, nil
 }
 
 // ParseTimeOptimized parses time with minimal allocations
@@ -221,6 +231,16 @@ func (brp *BanRecordParser) ParseBanRecordLine(line, jail string) (*BanRecord, e
 	fields = fastSplitFields(line, fields)
 	if len(fields) < 1 {
 		return nil, ErrInsufficientFields
+	}
+
+	// Validate jail name for path traversal
+	if jail == "" || strings.ContainsAny(jail, "/\\") || strings.Contains(jail, "..") {
+		return nil, fmt.Errorf("invalid jail name: contains unsafe characters")
+	}
+
+	// Validate IP address format
+	if fields[0] != "" && net.ParseIP(fields[0]) == nil {
+		return nil, fmt.Errorf("invalid IP address: %s", fields[0])
 	}
 
 	// Get pooled record
@@ -453,7 +473,16 @@ func formatDurationOptimized(sec int64) string {
 }
 
 // Global parser instance for reuse
-var defaultBanRecordParser = NewBanRecordParser()
+var defaultBanRecordParser = mustCreateParser()
+
+// mustCreateParser creates a parser or panics (used for global init only)
+func mustCreateParser() *BanRecordParser {
+	parser, err := NewBanRecordParser()
+	if err != nil {
+		panic(fmt.Sprintf("failed to create default ban record parser: %v", err))
+	}
+	return parser
+}
 
 // ParseBanRecordLineOptimized parses a ban record line using the default parser.
 func ParseBanRecordLineOptimized(line, jail string) (*BanRecord, error) {

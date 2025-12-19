@@ -1,6 +1,7 @@
 package fail2ban
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -245,7 +246,7 @@ func TestGetLogLinesWithRealTestData(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			lines, err := GetLogLines(tt.jail, tt.ip)
+			lines, err := GetLogLines(context.Background(), tt.jail, tt.ip)
 			if err != nil {
 				t.Fatalf("GetLogLines failed: %v", err)
 			}
@@ -272,7 +273,10 @@ func TestGetLogLinesWithRealTestData(t *testing.T) {
 
 func TestParseBanRecordsFromRealLogs(t *testing.T) {
 	// Test with real ban/unban patterns from production
-	parser := NewBanRecordParser()
+	parser, err := NewBanRecordParser()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	tests := []struct {
 		name      string
@@ -382,7 +386,7 @@ func TestMalformedLogHandling(t *testing.T) {
 	defer cleanup()
 
 	// Should handle malformed entries gracefully
-	lines, err := GetLogLines("", "")
+	lines, err := GetLogLines(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("GetLogLines should handle malformed entries: %v", err)
 	}
@@ -418,7 +422,7 @@ func TestMultiJailLogParsing(t *testing.T) {
 
 	for _, jail := range jails {
 		t.Run("jail_"+jail, func(t *testing.T) {
-			lines, err := GetLogLines(jail, "")
+			lines, err := GetLogLines(context.Background(), jail, "")
 			if err != nil {
 				t.Fatalf("GetLogLines failed for jail %s: %v", jail, err)
 			}

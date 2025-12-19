@@ -5,7 +5,8 @@ Use this guide to contribute effectively to f2b, the Go-based CLI for managing F
 ## Project Structure & Module Organization
 
 - `main.go` wires logging, sudo detection, and client startup.
-- `cmd/` contains Cobra commands and fluent command tests; mirror changes under `cmd/*_test.go` when adding scenarios.
+- `cmd/` contains Cobra commands and fluent command tests.
+  Mirror changes under `cmd/*_test.go` when adding scenarios.
 - `fail2ban/` hosts the client interfaces, runners, and mocks used across commands.
 - `docs/` centralizes architecture, testing, and security references; keep updates in sync with code changes.
 
@@ -14,7 +15,9 @@ Use this guide to contribute effectively to f2b, the Go-based CLI for managing F
 - Build the CLI with:
   `go build -ldflags "-X github.com/ivuorinen/f2b/cmd.version=1.2.3" -o f2b .`
   This embeds the release version string in the binary.
-- `go test -covermode=atomic -coverprofile=coverage.out ./...` runs the full suite with race-safe coverage metrics.
+- Run tests with coverage:
+  `go test -covermode=atomic -coverprofile=coverage.out ./...`
+  This generates a coverage profile with race-safe metrics.
 - `pre-commit run --all-files` applies formatting, linting, and link checks; run before every push.
 - `make update-deps` refreshes Go dependencies when coordinating dependency upgrades.
 
@@ -44,4 +47,5 @@ Use this guide to contribute effectively to f2b, the Go-based CLI for managing F
 
 - Validate all user inputs, especially jail names and filesystem paths, before invoking runners.
 - Respect privilege boundaries: prefer dependency injection so tests and CLI paths use mocks by default.
-- Configure logging through the `F2B_LOG_LEVEL` and `F2B_VERBOSE_TESTS` environment variables for deterministic output.
+- Configure logging through the `F2B_LOG_LEVEL` environment variable.
+  Use `F2B_VERBOSE_TESTS` to enable verbose test output.

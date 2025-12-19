@@ -98,13 +98,20 @@ func TestParserDeterminism(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Validates parser determinism by running twice with identical input
-			parser := NewBanRecordParser()
+			parser1, err := NewBanRecordParser()
+			if err != nil {
+				t.Fatal(err)
+			}
 
 			// First parse
-			firstRecords, firstErr := parser.ParseBanRecords(tc.input, tc.jail)
+			firstRecords, firstErr := parser1.ParseBanRecords(tc.input, tc.jail)
 
-			// Second parse (should produce identical results)
-			secondRecords, secondErr := parser.ParseBanRecords(tc.input, tc.jail)
+			// Second parse with fresh parser (should produce identical results)
+			parser2, err := NewBanRecordParser()
+			if err != nil {
+				t.Fatal(err)
+			}
+			secondRecords, secondErr := parser2.ParseBanRecords(tc.input, tc.jail)
 
 			compareParserResults(t, firstRecords, firstErr, secondRecords, secondErr)
 		})
@@ -195,13 +202,20 @@ func TestParserDeterminismLineByLine(t *testing.T) {
 	for _, tc := range testLines {
 		t.Run(tc.name, func(t *testing.T) {
 			// Validates parser determinism by running twice with identical input
-			parser := NewBanRecordParser()
+			parser1, err := NewBanRecordParser()
+			if err != nil {
+				t.Fatal(err)
+			}
 
 			// First parse
-			firstRecord, firstErr := parser.ParseBanRecordLine(tc.line, tc.jail)
+			firstRecord, firstErr := parser1.ParseBanRecordLine(tc.line, tc.jail)
 
-			// Second parse (should produce identical results)
-			secondRecord, secondErr := parser.ParseBanRecordLine(tc.line, tc.jail)
+			// Second parse with fresh parser (should produce identical results)
+			parser2, err := NewBanRecordParser()
+			if err != nil {
+				t.Fatal(err)
+			}
+			secondRecord, secondErr := parser2.ParseBanRecordLine(tc.line, tc.jail)
 
 			compareSingleRecords(t, firstRecord, firstErr, secondRecord, secondErr)
 		})
@@ -210,7 +224,10 @@ func TestParserDeterminismLineByLine(t *testing.T) {
 
 // TestParserStatistics tests the statistics functionality
 func TestParserStatistics(t *testing.T) {
-	parser := NewBanRecordParser()
+	parser, err := NewBanRecordParser()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Initial stats should be zero
 	parseCount, errorCount := parser.GetStats()
@@ -244,7 +261,10 @@ func TestParserStatistics(t *testing.T) {
 
 // TestTimeParsingOptimizations tests the optimized time parsing
 func TestTimeParsingOptimizations(t *testing.T) {
-	cache := NewFastTimeCache("2006-01-02 15:04:05")
+	cache, err := NewFastTimeCache("2006-01-02 15:04:05")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	testTimeStr := "2025-07-20 14:30:39"
 
@@ -272,7 +292,10 @@ func TestTimeParsingOptimizations(t *testing.T) {
 
 // TestStringBuildingOptimizations tests the optimized string building
 func TestStringBuildingOptimizations(t *testing.T) {
-	cache := NewFastTimeCache("2006-01-02 15:04:05")
+	cache, err := NewFastTimeCache("2006-01-02 15:04:05")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	dateStr := "2025-07-20"
 	timeStr := "14:30:39"
@@ -286,7 +309,10 @@ func TestStringBuildingOptimizations(t *testing.T) {
 
 // BenchmarkParserStatistics tests performance impact of statistics tracking
 func BenchmarkParserStatistics(b *testing.B) {
-	parser := NewBanRecordParser()
+	parser, err := NewBanRecordParser()
+	if err != nil {
+		b.Fatal(err)
+	}
 	testLine := "192.168.1.100 2025-07-20 14:30:39 + 2025-07-20 14:40:39 remaining"
 
 	b.ResetTimer()

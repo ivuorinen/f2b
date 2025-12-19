@@ -1,6 +1,7 @@
 package fail2ban
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -20,7 +21,7 @@ func BenchmarkOriginalLogParsing(b *testing.B) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		_, err := GetLogLinesWithLimit("sshd", "", 100)
+		_, err := GetLogLinesWithLimit(context.Background(), "sshd", "", 100)
 		if err != nil {
 			b.Fatal(err)
 		}
