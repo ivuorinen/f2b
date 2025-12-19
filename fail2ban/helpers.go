@@ -13,7 +13,8 @@ import (
 	"unicode"
 
 	"github.com/hashicorp/go-version"
-	"github.com/sirupsen/logrus"
+
+	"github.com/ivuorinen/f2b/shared"
 )
 
 func init() {
@@ -22,78 +23,6 @@ func init() {
 }
 
 // Validation constants
-const (
-	// MaxIPAddressLength is the maximum length for an IP address string (IPv6 with brackets and port)
-	MaxIPAddressLength = 45
-	// MaxJailNameLength is the maximum length for a jail name
-	MaxJailNameLength = 64
-	// MaxFilterNameLength is the maximum length for a filter name
-	MaxFilterNameLength = 255
-	// MaxArgumentLength is the maximum length for a command argument
-	MaxArgumentLength = 1024
-)
-
-// Time constants for duration calculations
-const (
-	// SecondsPerMinute is the number of seconds in a minute
-	SecondsPerMinute = 60
-	// SecondsPerHour is the number of seconds in an hour
-	SecondsPerHour = 3600
-	// SecondsPerDay is the number of seconds in a day
-	SecondsPerDay = 86400
-	// DefaultBanDuration is the default fallback duration for bans when parsing fails
-	DefaultBanDuration = 24 * time.Hour
-)
-
-// Fail2Ban status codes
-const (
-	// Fail2BanStatusSuccess indicates successful operation (ban/unban succeeded)
-	Fail2BanStatusSuccess = "0"
-	// Fail2BanStatusAlreadyProcessed indicates IP was already banned/unbanned
-	Fail2BanStatusAlreadyProcessed = "1"
-)
-
-// Fail2Ban command names
-const (
-	// Fail2BanClientCommand is the standard fail2ban client command
-	Fail2BanClientCommand = "fail2ban-client"
-	// Fail2BanRegexCommand is the fail2ban regex testing command
-	Fail2BanRegexCommand = "fail2ban-regex"
-	// Fail2BanServerCommand is the fail2ban server command
-	Fail2BanServerCommand = "fail2ban-server"
-)
-
-// File permission constants
-const (
-	// DefaultFilePermissions for log files and temporary files
-	DefaultFilePermissions = 0600
-	// DefaultDirectoryPermissions for created directories
-	DefaultDirectoryPermissions = 0750
-)
-
-// Timeout limit constants
-const (
-	// MaxCommandTimeout is the maximum allowed timeout for commands
-	MaxCommandTimeout = 10 * time.Minute
-	// MaxFileTimeout is the maximum allowed timeout for file operations
-	MaxFileTimeout = 5 * time.Minute
-	// MaxParallelTimeout is the maximum allowed timeout for parallel operations
-	MaxParallelTimeout = 30 * time.Minute
-)
-
-// Context key types for structured logging
-type contextKey string
-
-const (
-	// ContextKeyRequestID is the context key for request IDs
-	ContextKeyRequestID contextKey = "request_id"
-	// ContextKeyOperation is the context key for operation names
-	ContextKeyOperation contextKey = "operation"
-	// ContextKeyJail is the context key for jail names
-	ContextKeyJail contextKey = "jail"
-	// ContextKeyIP is the context key for IP addresses
-	ContextKeyIP contextKey = "ip"
-)
 
 // Validation helpers
 
@@ -106,7 +35,7 @@ func ValidateIP(ip string) error {
 	parsed := net.ParseIP(ip)
 	if parsed == nil {
 		// Don't include potentially malicious input in error message
-		if containsCommandInjectionPatterns(ip) || len(ip) > MaxIPAddressLength {
+		if containsCommandInjectionPatterns(ip) || len(ip) > shared.MaxIPAddressLength {
 			return fmt.Errorf("invalid IP address format")
 		}
 		return NewInvalidIPError(ip)
@@ -120,10 +49,10 @@ func ValidateJail(jail string) error {
 		return ErrJailRequiredError
 	}
 	// Jail names should be reasonable length
-	if len(jail) > MaxJailNameLength {
+	if len(jail) > shared.MaxJailNameLength {
 		// Don't include potentially malicious input in error message
 		if containsCommandInjectionPatterns(jail) {
-			return fmt.Errorf("invalid jail name format")
+			return fmt.Errorf(shared.ErrInvalidJailFormat)
 		}
 		return NewInvalidJailError(jail + " (too long)")
 	}
@@ -133,7 +62,7 @@ func ValidateJail(jail string) error {
 		if !unicode.IsLetter(first) && !unicode.IsDigit(first) {
 			// Don't include potentially malicious input in error message
 			if containsCommandInjectionPatterns(jail) {
-				return fmt.Errorf("invalid jail name format")
+				return fmt.Errorf(shared.ErrInvalidJailFormat)
 			}
 			return NewInvalidJailError(jail + " (invalid format)")
 		}
@@ -143,7 +72,7 @@ func ValidateJail(jail string) error {
 		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' && r != '.' {
 			// Don't include potentially malicious input in error message
 			if containsCommandInjectionPatterns(jail) {
-				return fmt.Errorf("invalid jail name format")
+				return fmt.Errorf(shared.ErrInvalidJailFormat)
 			}
 			return NewInvalidJailError(jail + " (invalid character)")
 		}
@@ -158,7 +87,7 @@ func ValidateFilter(filter string) error {
 	}
 
 	// Check length limits to prevent buffer overflow attacks
-	if len(filter) > MaxFilterNameLength {
+	if len(filter) > shared.MaxFilterNameLength {
 		return NewInvalidFilterError(filter + " (too long)")
 	}
 
@@ -214,13 +143,13 @@ func ParseJailList(output string) ([]string, error) {
 	// Optimized: Find "Jail list:" position directly instead of splitting all lines
 	jailListPos := strings.Index(output, "Jail list:")
 	if jailListPos == -1 {
-		return nil, fmt.Errorf("failed to parse jails")
+		return nil, fmt.Errorf(shared.ErrFailedToParseJails)
 	}
 
 	// Find the start of the jail list content (after "Jail list:")
 	colonPos := strings.Index(output[jailListPos:], ":")
 	if colonPos == -1 {
-		return nil, fmt.Errorf("failed to parse jails")
+		return nil, fmt.Errorf(shared.ErrFailedToParseJails)
 	}
 
 	// Find the end of the line
@@ -307,10 +236,10 @@ func ExtractFail2BanVersion(output string) (string, error) {
 
 // FormatDuration formats seconds into a human-readable duration string
 func FormatDuration(sec int64) string {
-	days := sec / SecondsPerDay
-	h := (sec % SecondsPerDay) / SecondsPerHour
-	m := (sec % SecondsPerHour) / SecondsPerMinute
-	s := sec % SecondsPerMinute
+	days := sec / shared.SecondsPerDay
+	h := (sec % shared.SecondsPerDay) / shared.SecondsPerHour
+	m := (sec % shared.SecondsPerHour) / shared.SecondsPerMinute
+	s := sec % shared.SecondsPerMinute
 	return fmt.Sprintf("%02d:%02d:%02d:%02d", days, h, m, s)
 }
 
@@ -318,12 +247,12 @@ func FormatDuration(sec int64) string {
 func ValidateCommand(command string) error {
 	// Allowlist of commands that f2b is permitted to execute
 	allowedCommands := map[string]bool{
-		Fail2BanClientCommand: true,
-		Fail2BanRegexCommand:  true,
-		Fail2BanServerCommand: true,
-		"service":             true,
-		"systemctl":           true,
-		"sudo":                true, // Only when used internally
+		shared.Fail2BanClientCommand: true,
+		shared.Fail2BanRegexCommand:  true,
+		shared.Fail2BanServerCommand: true,
+		"service":                    true,
+		"systemctl":                  true,
+		"sudo":                       true, // Only when used internally
 	}
 
 	if command == "" {
@@ -333,7 +262,7 @@ func ValidateCommand(command string) error {
 	// Check for null bytes (command injection attempt)
 	if strings.ContainsRune(command, '\x00') {
 		// Don't include potentially malicious input in error message
-		return fmt.Errorf("invalid command format")
+		return fmt.Errorf(shared.ErrInvalidCommandFormat)
 	}
 
 	// Check for dangerous patterns first (before including command in error messages)
@@ -342,7 +271,7 @@ func ValidateCommand(command string) error {
 	for _, pattern := range dangerousPatterns {
 		if strings.Contains(cmdLower, strings.ToLower(pattern)) {
 			// Don't include potentially dangerous command in error message
-			return fmt.Errorf("invalid command format")
+			return fmt.Errorf(shared.ErrInvalidCommandFormat)
 		}
 	}
 
@@ -355,12 +284,12 @@ func ValidateCommand(command string) error {
 	// Additional security checks for command injection patterns
 	if containsCommandInjectionPatterns(command) {
 		// Don't include potentially malicious input in error message
-		return fmt.Errorf("invalid command format")
+		return fmt.Errorf(shared.ErrInvalidCommandFormat)
 	}
 
 	// Command must be a bare executable name (no paths or whitespace)
 	if strings.ContainsAny(command, "/\\ \t") {
-		return fmt.Errorf("invalid command format")
+		return fmt.Errorf(shared.ErrInvalidCommandFormat)
 	}
 
 	// Validate against allowlist (safe to include command name for allowed commands)
@@ -389,7 +318,7 @@ func validateSingleArgument(arg string, _ int) error {
 	}
 
 	// Check length to prevent buffer overflow
-	if len(arg) > MaxArgumentLength {
+	if len(arg) > shared.MaxArgumentLength {
 		return NewInvalidArgumentError(fmt.Sprintf("%s (too long: %d chars)", arg, len(arg)))
 	}
 
@@ -481,7 +410,7 @@ func NewTimedOperation(name, command string, args ...string) *TimedOperation {
 func (t *TimedOperation) Finish(err error) {
 	duration := time.Since(t.StartTime)
 
-	fields := logrus.Fields{
+	fields := Fields{
 		"operation": t.Name,
 		"command":   t.Command,
 		"duration":  duration,
@@ -489,14 +418,16 @@ func (t *TimedOperation) Finish(err error) {
 	}
 
 	if err != nil {
-		getLogger().WithFields(fields).WithField("error", err.Error()).Warnf("Operation failed after %v", duration)
+		getLogger().WithFields(fields).
+			WithField(shared.LogFieldError, err.Error()).
+			Warnf(shared.ErrOperationFailed, duration)
 	} else {
 		if duration > time.Second {
 			// Log slow operations as warnings for visibility
-			getLogger().WithFields(fields).Warnf("Slow operation completed in %v", duration)
+			getLogger().WithFields(fields).Warnf(shared.ErrSlowOperation, duration)
 		} else {
 			// Log fast operations at debug level to reduce noise
-			getLogger().WithFields(fields).Debugf("Operation completed in %v", duration)
+			getLogger().WithFields(fields).Debugf(shared.MsgOperationCompleted, duration)
 		}
 	}
 }
@@ -509,7 +440,7 @@ func (t *TimedOperation) FinishWithContext(ctx context.Context, err error) {
 	logger := LoggerFromContext(ctx)
 
 	// Add timing-specific fields
-	fields := logrus.Fields{
+	fields := Fields{
 		"operation": t.Name,
 		"command":   t.Command,
 		"duration":  duration,
@@ -518,14 +449,14 @@ func (t *TimedOperation) FinishWithContext(ctx context.Context, err error) {
 	logger = logger.WithFields(fields)
 
 	if err != nil {
-		logger.WithField("error", err.Error()).Warnf("Operation failed after %v", duration)
+		logger.WithField(shared.LogFieldError, err.Error()).Warnf(shared.ErrOperationFailed, duration)
 	} else {
 		if duration > time.Second {
 			// Log slow operations as warnings for visibility
-			logger.Warnf("Slow operation completed in %v", duration)
+			logger.Warnf(shared.ErrSlowOperation, duration)
 		} else {
 			// Log fast operations at debug level to reduce noise
-			logger.Debugf("Operation completed in %v", duration)
+			logger.Debugf(shared.MsgOperationCompleted, duration)
 		}
 	}
 }
@@ -737,7 +668,7 @@ func handleSymlinks(path string, config PathSecurityConfig) (string, error) {
 			if config.ResolveSymlinks {
 				resolved, err := filepath.EvalSymlinks(path)
 				if err != nil {
-					return "", fmt.Errorf("failed to resolve symlink: %w", err)
+					return "", fmt.Errorf(shared.ErrFailedToResolveSymlink, err)
 				}
 				return resolved, nil
 			}
@@ -774,7 +705,7 @@ func resolveAncestorSymlinks(path string, allowSymlinks bool) (string, error) {
 		}
 		resolved, err := filepath.EvalSymlinks(dir)
 		if err != nil {
-			return "", fmt.Errorf("failed to resolve symlink: %w", err)
+			return "", fmt.Errorf(shared.ErrFailedToResolveSymlink, err)
 		}
 		return filepath.Join(append([]string{resolved}, tail...)...), nil
 	}
@@ -839,19 +770,50 @@ func validateFileType(path string) error {
 }
 
 // ValidateLogPath validates and sanitizes a log file path using standard log directory config
-func ValidateLogPath(path string, logDir string) (string, error) {
+// with context support for timeout/cancellation
+func ValidateLogPath(_ context.Context, path string, logDir string) (string, error) {
 	config := CreateSingleDirPathConfig(logDir)
 	return ValidatePathWithSecurity(path, config)
 }
 
 // ValidateClientLogPath validates log directory path for client initialization
-func ValidateClientLogPath(logDir string) (string, error) {
+// with context support for timeout/cancellation
+func ValidateClientLogPath(_ context.Context, logDir string) (string, error) {
 	config := CreateLogPathConfig()
 	return ValidatePathWithSecurity(logDir, config)
 }
 
 // ValidateClientFilterPath validates filter directory path for client initialization
-func ValidateClientFilterPath(filterDir string) (string, error) {
+// with context support for timeout/cancellation
+func ValidateClientFilterPath(_ context.Context, filterDir string) (string, error) {
 	config := CreateFilterPathConfig()
 	return ValidatePathWithSecurity(filterDir, config)
+}
+
+// ValidateFilterName validates a filter name for path traversal prevention.
+// Rejects: "..", "/", "\", absolute paths, drive letters
+// Allows: letters, digits, dash, underscore only
+func ValidateFilterName(filter string) error {
+	filter = strings.TrimSpace(filter)
+
+	if filter == "" {
+		return fmt.Errorf("filter name cannot be empty")
+	}
+
+	// Check for path traversal
+	if ContainsPathTraversal(filter) {
+		return fmt.Errorf("filter name contains path traversal")
+	}
+
+	// Check for absolute paths
+	if filepath.IsAbs(filter) {
+		return fmt.Errorf("filter name cannot be an absolute path")
+	}
+
+	// Only allow safe characters (alphanumeric, dash, underscore)
+	if !regexp.MustCompile(`^[a-zA-Z0-9_-]+$`).MatchString(filter) {
+		return fmt.Errorf("filter name contains invalid characters")
+	}
+
+	return nil
 }

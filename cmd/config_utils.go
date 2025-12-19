@@ -15,15 +15,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/ivuorinen/f2b/fail2ban"
-)
-
-const (
-	// DefaultCommandTimeout is the default timeout for individual fail2ban commands
-	DefaultCommandTimeout = 30 * time.Second
-	// DefaultFileTimeout is the default timeout for file operations
-	DefaultFileTimeout = 10 * time.Second
-	// DefaultParallelTimeout is the default timeout for parallel operations
-	DefaultParallelTimeout = 60 * time.Second
+	"github.com/ivuorinen/f2b/shared"
 )
 
 // containsPathTraversal performs comprehensive path traversal detection
@@ -177,9 +169,9 @@ func isReasonableSystemPath(path, pathType string) bool {
 	// Allow common system directories based on path type
 	var allowedPrefixes []string
 	switch pathType {
-	case "log":
+	case shared.PathTypeLog:
 		allowedPrefixes = fail2ban.GetLogAllowedPaths()
-	case "filter":
+	case shared.PathTypeFilter:
 		allowedPrefixes = fail2ban.GetFilterAllowedPaths()
 	default:
 		return false
@@ -201,33 +193,35 @@ func NewConfigFromEnv() Config {
 	// Get and validate log directory
 	logDir := os.Getenv("F2B_LOG_DIR")
 	if logDir == "" {
-		logDir = "/var/log"
+		logDir = shared.DefaultLogDir
 	}
 
-	validatedLogDir, err := validateConfigPath(logDir, "log")
+	validatedLogDir, err := validateConfigPath(logDir, shared.PathTypeLog)
 	if err != nil {
-		Logger.WithError(err).WithField("path", logDir).Error("Invalid log directory from environment")
-		validatedLogDir = "/var/log" // Fallback to safe default
+		Logger.WithError(err).WithField(shared.LogFieldPath, logDir).Error("Invalid log directory from environment")
+		validatedLogDir = shared.DefaultLogDir // Fallback to safe default
 	}
 	cfg.LogDir = validatedLogDir
 
 	// Get and validate filter directory
 	filterDir := os.Getenv("F2B_FILTER_DIR")
 	if filterDir == "" {
-		filterDir = "/etc/fail2ban/filter.d"
+		filterDir = shared.DefaultFilterDir
 	}
 
-	validatedFilterDir, err := validateConfigPath(filterDir, "filter")
+	validatedFilterDir, err := validateConfigPath(filterDir, shared.PathTypeFilter)
 	if err != nil {
-		Logger.WithError(err).WithField("path", filterDir).Error("Invalid filter directory from environment")
-		validatedFilterDir = "/etc/fail2ban/filter.d" // Fallback to safe default
+		Logger.WithError(err).
+			WithField(shared.LogFieldPath, filterDir).
+			Error("Invalid filter directory from environment")
+		validatedFilterDir = shared.DefaultFilterDir // Fallback to safe default
 	}
 	cfg.FilterDir = validatedFilterDir
 
 	// Configure timeouts from environment variables
-	cfg.CommandTimeout = parseTimeoutFromEnv("F2B_COMMAND_TIMEOUT", DefaultCommandTimeout)
-	cfg.FileTimeout = parseTimeoutFromEnv("F2B_FILE_TIMEOUT", DefaultFileTimeout)
-	cfg.ParallelTimeout = parseTimeoutFromEnv("F2B_PARALLEL_TIMEOUT", DefaultParallelTimeout)
+	cfg.CommandTimeout = parseTimeoutFromEnv("F2B_COMMAND_TIMEOUT", shared.DefaultCommandTimeout)
+	cfg.FileTimeout = parseTimeoutFromEnv("F2B_FILE_TIMEOUT", shared.DefaultFileTimeout)
+	cfg.ParallelTimeout = parseTimeoutFromEnv("F2B_PARALLEL_TIMEOUT", shared.DefaultParallelTimeout)
 
 	cfg.Format = PlainFormat
 	return cfg
@@ -243,8 +237,8 @@ func parseTimeoutFromEnv(envVar string, defaultTimeout time.Duration) time.Durat
 	// Try parsing as duration first (e.g., "30s", "1m30s")
 	if duration, err := time.ParseDuration(envValue); err == nil {
 		if duration <= 0 {
-			Logger.WithField("env_var", envVar).WithField("value", envValue).
-				Warn("Invalid timeout value, using default")
+			Logger.WithField(shared.LogFieldEnvVar, envVar).WithField(shared.LogFieldValue, envValue).
+				Warn(shared.MsgInvalidTimeout)
 			return defaultTimeout
 		}
 		return duration
@@ -253,14 +247,14 @@ func parseTimeoutFromEnv(envVar string, defaultTimeout time.Duration) time.Durat
 	// Try parsing as seconds (for backward compatibility)
 	if seconds, err := strconv.Atoi(envValue); err == nil {
 		if seconds <= 0 {
-			Logger.WithField("env_var", envVar).WithField("value", envValue).
-				Warn("Invalid timeout value, using default")
+			Logger.WithField(shared.LogFieldEnvVar, envVar).WithField(shared.LogFieldValue, envValue).
+				Warn(shared.MsgInvalidTimeout)
 			return defaultTimeout
 		}
 		return time.Duration(seconds) * time.Second
 	}
 
-	Logger.WithField("env_var", envVar).WithField("value", envValue).
+	Logger.WithField(shared.LogFieldEnvVar, envVar).WithField(shared.LogFieldValue, envValue).
 		Warn("Failed to parse timeout value, using default")
 	return defaultTimeout
 }
@@ -272,14 +266,14 @@ func (c *Config) ValidateConfig() error {
 	// Validate LogDir
 	if c.LogDir == "" {
 		errors = append(errors, "log directory cannot be empty")
-	} else if _, err := validateConfigPath(c.LogDir, "log"); err != nil {
+	} else if _, err := validateConfigPath(c.LogDir, shared.PathTypeLog); err != nil {
 		errors = append(errors, fmt.Sprintf("invalid log directory: %v", err))
 	}
 
 	// Validate FilterDir
 	if c.FilterDir == "" {
 		errors = append(errors, "filter directory cannot be empty")
-	} else if _, err := validateConfigPath(c.FilterDir, "filter"); err != nil {
+	} else if _, err := validateConfigPath(c.FilterDir, shared.PathTypeFilter); err != nil {
 		errors = append(errors, fmt.Sprintf("invalid filter directory: %v", err))
 	}
 
@@ -292,19 +286,19 @@ func (c *Config) ValidateConfig() error {
 	// Validate Timeouts
 	if c.CommandTimeout <= 0 {
 		errors = append(errors, "command timeout must be positive")
-	} else if c.CommandTimeout > fail2ban.MaxCommandTimeout {
+	} else if c.CommandTimeout > shared.MaxCommandTimeout {
 		errors = append(errors, "command timeout too large (max 10 minutes)")
 	}
 
 	if c.FileTimeout <= 0 {
 		errors = append(errors, "file timeout must be positive")
-	} else if c.FileTimeout > fail2ban.MaxFileTimeout {
+	} else if c.FileTimeout > shared.MaxFileTimeout {
 		errors = append(errors, "file timeout too large (max 5 minutes)")
 	}
 
 	if c.ParallelTimeout <= 0 {
 		errors = append(errors, "parallel timeout must be positive")
-	} else if c.ParallelTimeout > fail2ban.MaxParallelTimeout {
+	} else if c.ParallelTimeout > shared.MaxParallelTimeout {
 		errors = append(errors, "parallel timeout too large (max 30 minutes)")
 	}
 

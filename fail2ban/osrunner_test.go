@@ -43,16 +43,16 @@ func TestGetLogLinesMethod(t *testing.T) {
 }
 
 func TestParseUltraOptimized(_ *testing.T) {
-	// Test ParseBanRecordLineUltraOptimized with simple input
+	// Test ultra-optimized parsing functions (both singular and plural variants)
 	line := "192.168.1.1 2025-07-20 12:30:45 2025-07-20 13:30:45"
 	jail := "sshd"
 
-	// Call the function - may fail, that's ok for coverage
+	// Test ParseBanRecordsUltraOptimized (plural)
 	_, _ = ParseBanRecordsUltraOptimized(line, jail)
 
 	// Test with empty line
 	_, _ = ParseBanRecordsUltraOptimized("", jail)
 
-	// Test with malformed line
+	// Test ParseBanRecordLineUltraOptimized (singular) with malformed line
 	_, _ = ParseBanRecordLineUltraOptimized("invalid line", jail)
 }

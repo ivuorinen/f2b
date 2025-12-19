@@ -5,8 +5,6 @@ package fail2ban
 
 import (
 	"time"
-
-	"github.com/sirupsen/logrus"
 )
 
 // BanRecord represents a single ban entry with jail, IP, ban time, and remaining duration.
@@ -17,11 +15,29 @@ type BanRecord struct {
 	Remaining string
 }
 
-// LoggerInterface defines the logging interface we need
+// Fields represents a map of structured log fields (decoupled from logrus)
+type Fields map[string]interface{}
+
+// LoggerEntry represents a structured logging entry that can be chained
+type LoggerEntry interface {
+	WithField(key string, value interface{}) LoggerEntry
+	WithFields(fields Fields) LoggerEntry
+	WithError(err error) LoggerEntry
+	Debug(args ...interface{})
+	Info(args ...interface{})
+	Warn(args ...interface{})
+	Error(args ...interface{})
+	Debugf(format string, args ...interface{})
+	Infof(format string, args ...interface{})
+	Warnf(format string, args ...interface{})
+	Errorf(format string, args ...interface{})
+}
+
+// LoggerInterface defines the top-level logging interface (decoupled from logrus)
 type LoggerInterface interface {
-	WithField(key string, value interface{}) *logrus.Entry
-	WithFields(fields logrus.Fields) *logrus.Entry
-	WithError(err error) *logrus.Entry
+	WithField(key string, value interface{}) LoggerEntry
+	WithFields(fields Fields) LoggerEntry
+	WithError(err error) LoggerEntry
 	Debug(args ...interface{})
 	Info(args ...interface{})
 	Warn(args ...interface{})

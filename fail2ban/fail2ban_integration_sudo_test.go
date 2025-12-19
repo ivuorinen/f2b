@@ -3,6 +3,8 @@ package fail2ban
 import (
 	"strings"
 	"testing"
+
+	"github.com/ivuorinen/f2b/shared"
 )
 
 // setupMockRunnerForPrivilegedTest configures mock responses for privileged tests
@@ -67,7 +69,7 @@ func TestSudoIntegrationWithClient(t *testing.T) {
 		setupMockRunnerForPrivilegedTest(mockRunner)
 
 		// Test client creation
-		client, err := NewClient(DefaultLogDir, DefaultFilterDir)
+		client, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
 		if err != nil {
 			t.Fatalf("unexpected client creation error: %v", err)
 		}
@@ -356,11 +358,8 @@ func TestSudoWithDifferentCommands(t *testing.T) {
 				t.Errorf("RequiresSudo(%s, %v) = %v, want %v", tt.command, tt.args, requiresSudo, tt.expectsSudo)
 			}
 
-			// Reset to clean mock environment for this test iteration
-			_, cleanup := SetupMockEnvironment(t)
-			defer cleanup()
-
 			// Configure the mock runner with expected response
+			// Note: Reusing outer mock environment to avoid nested cleanup issues
 			mockRunner := GetRunner().(*MockRunner)
 			expectedCall := tt.expectedPrefix + " " + strings.Join(tt.args, " ")
 			mockRunner.SetResponse(expectedCall, []byte("mock response"))

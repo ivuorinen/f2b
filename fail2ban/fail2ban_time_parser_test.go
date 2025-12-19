@@ -1,8 +1,14 @@
 package fail2ban
 
 import (
+	"fmt"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/ivuorinen/f2b/shared"
 )
 
 func TestTimeParsingCache(t *testing.T) {
@@ -99,4 +105,30 @@ func BenchmarkBuildTimeStringNaive(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = "2023-12-01" + " " + "14:30:45"
 	}
+}
+
+// TestTimeParsingCache_BoundedEviction verifies that the cache doesn't grow unbounded
+func TestTimeParsingCache_BoundedEviction(t *testing.T) {
+	cache := NewTimeParsingCache("2006-01-02 15:04:05")
+
+	// Fill cache beyond threshold to trigger eviction
+	maxSize := int(float64(shared.CacheMaxSize)*shared.CacheEvictionThreshold) + 100
+
+	for i := 0; i < maxSize; i++ {
+		// Generate unique time strings
+		timeStr := fmt.Sprintf("2024-01-01 %02d:%02d:%02d",
+			i%24, (i/24)%60, (i/1440)%60)
+		_, err := cache.ParseTime(timeStr)
+		require.NoError(t, err)
+	}
+
+	// Verify cache was evicted and didn't grow unbounded
+	size := cache.parseCache.Size()
+	assert.Less(t, size, shared.CacheMaxSize,
+		"Cache should have evicted entries to stay under max size")
+	assert.Greater(t, size, 0,
+		"Cache should still contain entries after eviction")
+
+	t.Logf("Cache size after filling with %d entries: %d (max: %d)",
+		maxSize, size, shared.CacheMaxSize)
 }

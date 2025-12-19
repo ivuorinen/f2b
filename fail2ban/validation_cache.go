@@ -3,21 +3,10 @@
 // operations, with metrics support and thread-safe cache management.
 package fail2ban
 
-import "sync"
+import (
+	"sync"
 
-const (
-	// maxCacheSize limits the number of entries in each validation cache.
-	// When the cache reaches this size, older entries are evicted to prevent
-	// unbounded memory growth in long-running processes.
-	maxCacheSize = 10000
-
-	// evictionThreshold determines when to trigger eviction.
-	// When cache size reaches this percentage of maxCacheSize, we evict entries.
-	evictionThreshold = 0.9 // 90% full
-
-	// evictionRate determines how much of the cache to clear during eviction.
-	// We evict this percentage of entries to avoid frequent evictions.
-	evictionRate = 0.25 // Remove 25% of entries
+	"github.com/ivuorinen/f2b/shared"
 )
 
 // ValidationCache provides thread-safe caching for validation results with bounded size.
@@ -28,8 +17,8 @@ type ValidationCache struct {
 }
 
 // NewValidationCache creates a new bounded validation cache.
-// The cache will automatically evict 25% of entries when it reaches 90% of maxCacheSize (10000).
-// This prevents unbounded memory growth in long-running processes.
+// The cache will automatically evict entries when it reaches capacity to prevent
+// unbounded memory growth in long-running processes. See constants.go for cache limits.
 func NewValidationCache() *ValidationCache {
 	return &ValidationCache{
 		cache: make(map[string]error),
@@ -51,8 +40,8 @@ func (vc *ValidationCache) Set(key string, err error) {
 	vc.mu.Lock()
 	defer vc.mu.Unlock()
 
-	// Check if eviction is needed (at 90% capacity)
-	if len(vc.cache) >= int(float64(maxCacheSize)*evictionThreshold) {
+	// Check if eviction is needed (at configured threshold)
+	if len(vc.cache) >= int(float64(shared.CacheMaxSize)*shared.CacheEvictionThreshold) {
 		vc.evictEntries()
 	}
 
@@ -61,9 +50,9 @@ func (vc *ValidationCache) Set(key string, err error) {
 
 // evictEntries removes a portion of cache entries to free up space.
 // Must be called with vc.mu held (Lock, not RLock).
-// Evicts approximately evictionRate (25%) of entries using random iteration.
+// Evicts entries based on shared.CacheEvictionRate using random iteration.
 func (vc *ValidationCache) evictEntries() {
-	targetSize := int(float64(len(vc.cache)) * (1.0 - evictionRate))
+	targetSize := int(float64(len(vc.cache)) * (1.0 - shared.CacheEvictionRate))
 	count := 0
 
 	// Go map iteration is random, so this effectively evicts random entries
@@ -125,10 +114,15 @@ func getMetricsRecorder() MetricsRecorder {
 	return metricsRecorder
 }
 
-// CachedValidateIP validates an IP address with caching
-func CachedValidateIP(ip string) error {
-	cacheKey := "ip:" + ip
-	if exists, result := ipValidationCache.Get(cacheKey); exists {
+// cachedValidate provides a generic caching wrapper for validation functions
+func cachedValidate(
+	cache *ValidationCache,
+	keyPrefix string,
+	value string,
+	validator func(string) error,
+) error {
+	cacheKey := keyPrefix + ":" + value
+	if exists, result := cache.Get(cacheKey); exists {
 		// Record cache hit in metrics
 		if recorder := getMetricsRecorder(); recorder != nil {
 			recorder.RecordValidationCacheHit()
@@ -141,72 +135,29 @@ func CachedValidateIP(ip string) error {
 		recorder.RecordValidationCacheMiss()
 	}
 
-	err := ValidateIP(ip)
-	ipValidationCache.Set(cacheKey, err)
+	err := validator(value)
+	cache.Set(cacheKey, err)
 	return err
+}
+
+// CachedValidateIP validates an IP address with caching
+func CachedValidateIP(ip string) error {
+	return cachedValidate(ipValidationCache, "ip", ip, ValidateIP)
 }
 
 // CachedValidateJail validates a jail name with caching
 func CachedValidateJail(jail string) error {
-	cacheKey := "jail:" + jail
-	if exists, result := jailValidationCache.Get(cacheKey); exists {
-		// Record cache hit in metrics
-		if recorder := getMetricsRecorder(); recorder != nil {
-			recorder.RecordValidationCacheHit()
-		}
-		return result
-	}
-
-	// Record cache miss in metrics
-	if recorder := getMetricsRecorder(); recorder != nil {
-		recorder.RecordValidationCacheMiss()
-	}
-
-	err := ValidateJail(jail)
-	jailValidationCache.Set(cacheKey, err)
-	return err
+	return cachedValidate(jailValidationCache, string(shared.ContextKeyJail), jail, ValidateJail)
 }
 
 // CachedValidateFilter validates a filter name with caching
 func CachedValidateFilter(filter string) error {
-	cacheKey := "filter:" + filter
-	if exists, result := filterValidationCache.Get(cacheKey); exists {
-		// Record cache hit in metrics
-		if recorder := getMetricsRecorder(); recorder != nil {
-			recorder.RecordValidationCacheHit()
-		}
-		return result
-	}
-
-	// Record cache miss in metrics
-	if recorder := getMetricsRecorder(); recorder != nil {
-		recorder.RecordValidationCacheMiss()
-	}
-
-	err := ValidateFilter(filter)
-	filterValidationCache.Set(cacheKey, err)
-	return err
+	return cachedValidate(filterValidationCache, "filter", filter, ValidateFilter)
 }
 
 // CachedValidateCommand validates a command with caching
 func CachedValidateCommand(command string) error {
-	cacheKey := "command:" + command
-	if exists, result := commandValidationCache.Get(cacheKey); exists {
-		// Record cache hit in metrics
-		if recorder := getMetricsRecorder(); recorder != nil {
-			recorder.RecordValidationCacheHit()
-		}
-		return result
-	}
-
-	// Record cache miss in metrics
-	if recorder := getMetricsRecorder(); recorder != nil {
-		recorder.RecordValidationCacheMiss()
-	}
-
-	err := ValidateCommand(command)
-	commandValidationCache.Set(cacheKey, err)
-	return err
+	return cachedValidate(commandValidationCache, string(shared.ContextKeyCommand), command, ValidateCommand)
 }
 
 // ClearValidationCaches clears all validation caches

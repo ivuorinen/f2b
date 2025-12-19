@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/shared"
 )
 
 // ParallelOperationProcessor handles parallel ban/unban operations across multiple jails
@@ -42,7 +43,7 @@ func (pop *ParallelOperationProcessor) ProcessBanOperationParallel(
 		func(ctx context.Context, client fail2ban.Client, ip, jail string) (int, error) {
 			return client.BanIPWithContext(ctx, ip, jail)
 		},
-		"ban",
+		shared.MetricsBan,
 	)
 }
 
@@ -67,7 +68,7 @@ func (pop *ParallelOperationProcessor) ProcessBanOperationParallelWithContext(
 		func(opCtx context.Context, client fail2ban.Client, ip, jail string) (int, error) {
 			return client.BanIPWithContext(opCtx, ip, jail)
 		},
-		"ban",
+		shared.MetricsBan,
 	)
 }
 
@@ -90,7 +91,7 @@ func (pop *ParallelOperationProcessor) ProcessUnbanOperationParallel(
 		func(ctx context.Context, client fail2ban.Client, ip, jail string) (int, error) {
 			return client.UnbanIPWithContext(ctx, ip, jail)
 		},
-		"unban",
+		shared.MetricsUnban,
 	)
 }
 
@@ -115,7 +116,7 @@ func (pop *ParallelOperationProcessor) ProcessUnbanOperationParallelWithContext(
 		func(opCtx context.Context, client fail2ban.Client, ip, jail string) (int, error) {
 			return client.UnbanIPWithContext(opCtx, ip, jail)
 		},
-		"unban",
+		shared.MetricsUnban,
 	)
 }
 

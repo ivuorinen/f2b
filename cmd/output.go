@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/shared"
 )
 
 const (
@@ -55,10 +56,10 @@ func PrintOutput(data interface{}, format string) {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(data); err != nil {
-			Logger.WithError(err).Error("Failed to encode JSON output")
+			Logger.WithError(err).Error(shared.MsgFailedToEncodeJSON)
 			// Fallback to plain text output
 			if _, printErr := fmt.Fprintln(os.Stdout, data); printErr != nil {
-				Logger.WithError(printErr).Error("Failed to write fallback output")
+				Logger.WithError(printErr).Error(shared.MsgFailedToWriteOutput)
 			}
 		}
 	default:
@@ -73,10 +74,10 @@ func PrintOutputTo(w io.Writer, data interface{}, format string) {
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(data); err != nil {
-			Logger.WithError(err).Error("Failed to encode JSON output")
+			Logger.WithError(err).Error(shared.MsgFailedToEncodeJSON)
 			// Fallback to plain text output
 			if _, printErr := fmt.Fprintln(w, data); printErr != nil {
-				Logger.WithError(printErr).Error("Failed to write fallback output")
+				Logger.WithError(printErr).Error(shared.MsgFailedToWriteOutput)
 			}
 		}
 	default:
@@ -98,15 +99,15 @@ func PrintError(err error) {
 		Logger.WithFields(map[string]interface{}{
 			"error":    err.Error(),
 			"category": string(contextErr.GetCategory()),
-		}).Error("Command failed")
+		}).Error(shared.MsgCommandFailed)
 
-		fmt.Fprintln(os.Stderr, "Error:", err)
+		fmt.Fprintln(os.Stderr, shared.ErrorPrefix, err)
 		if remediation := contextErr.GetRemediation(); remediation != "" {
 			fmt.Fprintln(os.Stderr, "Hint:", remediation)
 		}
 	} else {
-		Logger.WithError(err).Error("Command failed")
-		fmt.Fprintln(os.Stderr, "Error:", err)
+		Logger.WithError(err).Error(shared.MsgCommandFailed)
+		fmt.Fprintln(os.Stderr, shared.ErrorPrefix, err)
 	}
 }
 
@@ -114,7 +115,7 @@ func PrintError(err error) {
 func PrintErrorf(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
 	Logger.Error(msg)
-	fmt.Fprintln(os.Stderr, "Error:", msg)
+	fmt.Fprintln(os.Stderr, shared.ErrorPrefix, msg)
 }
 
 // GetCmdOutput returns the command's output writer if available, otherwise os.Stdout

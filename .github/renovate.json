@@ -6,7 +6,7 @@
       "customType": "regex",
       "fileMatch": ["^Makefile$", "\\.mk$"],
       "matchStrings": [
-        "@go install (?<depName>\\S+)@(?<currentValue>v?\\d+\\.\\d+\\.\\d+);\\s*#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=\\S+"
+        "@go install (?<depName>\\S+)@(?<currentValue>v?\\d+\\.\\d+\\.\\d+)[\\s\\S]*?renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=\\S+"
       ],
       "versioningTemplate": "semver"
     }

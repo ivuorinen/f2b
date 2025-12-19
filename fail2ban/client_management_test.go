@@ -3,6 +3,8 @@ package fail2ban
 import (
 	"strings"
 	"testing"
+
+	"github.com/ivuorinen/f2b/shared"
 )
 
 func TestNewClient(t *testing.T) {
@@ -12,7 +14,7 @@ func TestNewClient(t *testing.T) {
 		_, cleanup := SetupMockEnvironmentWithStandardResponses(t)
 		defer cleanup()
 
-		client, err := NewClient(DefaultLogDir, DefaultFilterDir)
+		client, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}

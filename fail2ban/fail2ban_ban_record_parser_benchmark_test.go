@@ -37,39 +37,11 @@ func BenchmarkOriginalBanRecordParsing(b *testing.B) {
 	}
 }
 
-// BenchmarkOptimizedBanRecordParsing benchmarks the new optimized implementation
-func BenchmarkOptimizedBanRecordParsing(b *testing.B) {
-	parser := NewBanRecordParser()
-
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for i := 0; i < b.N; i++ {
-		_, err := parser.ParseBanRecords(benchmarkBanRecordOutput, "sshd")
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
 // BenchmarkBanRecordLineParsing compares single line parsing
 func BenchmarkBanRecordLineParsing(b *testing.B) {
 	testLine := "192.168.1.100 2025-07-20 14:30:39 + 2025-07-20 14:40:39 remaining"
 
 	b.Run("original", func(b *testing.B) {
-		parser := NewBanRecordParser()
-		b.ResetTimer()
-		b.ReportAllocs()
-
-		for i := 0; i < b.N; i++ {
-			_, err := parser.ParseBanRecordLine(testLine, "sshd")
-			if err != nil {
-				b.Fatal(err)
-			}
-		}
-	})
-
-	b.Run("optimized", func(b *testing.B) {
 		parser := NewBanRecordParser()
 		b.ResetTimer()
 		b.ReportAllocs()

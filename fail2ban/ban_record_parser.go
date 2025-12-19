@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/ivuorinen/f2b/shared"
 )
 
 // Sentinel errors for parser
@@ -17,6 +17,70 @@ var (
 	ErrInsufficientFields = errors.New("insufficient fields")
 	ErrInvalidBanTime     = errors.New("invalid ban time")
 )
+
+// BoundedTimeCache provides a concurrent-safe bounded cache for parsed times
+type BoundedTimeCache struct {
+	mu      sync.RWMutex
+	cache   map[string]time.Time
+	maxSize int
+}
+
+// NewBoundedTimeCache creates a new bounded time cache
+func NewBoundedTimeCache(maxSize int) *BoundedTimeCache {
+	return &BoundedTimeCache{
+		cache:   make(map[string]time.Time),
+		maxSize: maxSize,
+	}
+}
+
+// Load retrieves a cached time value
+func (btc *BoundedTimeCache) Load(key string) (time.Time, bool) {
+	btc.mu.RLock()
+	t, ok := btc.cache[key]
+	btc.mu.RUnlock()
+	return t, ok
+}
+
+// Store caches a time value with automatic eviction when threshold is reached
+func (btc *BoundedTimeCache) Store(key string, value time.Time) {
+	btc.mu.Lock()
+	defer btc.mu.Unlock()
+
+	// Check if we need to evict before adding
+	if len(btc.cache) >= int(float64(btc.maxSize)*shared.CacheEvictionThreshold) {
+		btc.evictEntries()
+	}
+
+	btc.cache[key] = value
+}
+
+// evictEntries removes entries to bring cache back to target size
+// Caller must hold btc.mu lock
+func (btc *BoundedTimeCache) evictEntries() {
+	targetSize := int(float64(len(btc.cache)) * (1.0 - shared.CacheEvictionRate))
+	count := 0
+
+	for key := range btc.cache {
+		if len(btc.cache) <= targetSize {
+			break
+		}
+		delete(btc.cache, key)
+		count++
+	}
+
+	getLogger().WithFields(Fields{
+		"evicted":   count,
+		"remaining": len(btc.cache),
+		"max_size":  btc.maxSize,
+	}).Debug("Evicted time cache entries")
+}
+
+// Size returns the current number of entries in the cache
+func (btc *BoundedTimeCache) Size() int {
+	btc.mu.RLock()
+	defer btc.mu.RUnlock()
+	return len(btc.cache)
+}
 
 // BanRecordParser provides high-performance parsing of ban records
 type BanRecordParser struct {
@@ -34,14 +98,14 @@ type BanRecordParser struct {
 type FastTimeCache struct {
 	layout      string
 	layoutBytes []byte
-	parseCache  sync.Map
+	parseCache  *BoundedTimeCache // Bounded cache with max 10k entries
 	stringPool  sync.Pool
 }
 
 // NewBanRecordParser creates a new high-performance ban record parser
 func NewBanRecordParser() *BanRecordParser {
 	parser := &BanRecordParser{
-		timeCache: NewFastTimeCache("2006-01-02 15:04:05"),
+		timeCache: NewFastTimeCache(shared.TimeFormat),
 	}
 
 	// String pool for reusing field slices
@@ -67,6 +131,7 @@ func NewFastTimeCache(layout string) *FastTimeCache {
 	cache := &FastTimeCache{
 		layout:      layout,
 		layoutBytes: []byte(layout),
+		parseCache:  NewBoundedTimeCache(shared.CacheMaxSize),
 	}
 
 	cache.stringPool = sync.Pool{
@@ -83,7 +148,7 @@ func NewFastTimeCache(layout string) *FastTimeCache {
 func (ftc *FastTimeCache) ParseTimeOptimized(timeStr string) (time.Time, error) {
 	// Fast path: check cache
 	if cached, ok := ftc.parseCache.Load(timeStr); ok {
-		return cached.(time.Time), nil
+		return cached, nil
 	}
 
 	// Parse and cache - only cache successful parses
@@ -164,7 +229,7 @@ func (brp *BanRecordParser) ParseBanRecordLine(line, jail string) (*BanRecord, e
 
 	// Fallback for simple format
 	record.BannedAt = time.Now()
-	record.Remaining = "unknown"
+	record.Remaining = shared.UnknownValue
 
 	// Return a copy since we're pooling the original
 	result := &BanRecord{
@@ -186,7 +251,7 @@ func (brp *BanRecordParser) parseFullFormat(fields []string, record *BanRecord) 
 	// Parse ban time
 	tBan, err := brp.timeCache.ParseTimeOptimized(bannedStr)
 	if err != nil {
-		getLogger().WithFields(logrus.Fields{
+		getLogger().WithFields(Fields{
 			"jail":      record.Jail,
 			"ip":        record.IP,
 			"bannedStr": bannedStr,
@@ -197,12 +262,12 @@ func (brp *BanRecordParser) parseFullFormat(fields []string, record *BanRecord) 
 	// Parse unban time with fallback
 	tUnban, err := brp.timeCache.ParseTimeOptimized(unbanStr)
 	if err != nil {
-		getLogger().WithFields(logrus.Fields{
+		getLogger().WithFields(Fields{
 			"jail":     record.Jail,
 			"ip":       record.IP,
 			"unbanStr": unbanStr,
 		}).Warnf("Failed to parse unban time: %v", err)
-		tUnban = time.Now().Add(DefaultBanDuration) // 24h fallback
+		tUnban = time.Now().Add(shared.DefaultBanDuration) // 24h fallback
 	}
 
 	// Calculate remaining time efficiently
@@ -333,10 +398,10 @@ func fastSplitLines(s string) []string {
 
 // formatDurationOptimized formats duration efficiently in DD:HH:MM:SS format to match original
 func formatDurationOptimized(sec int64) string {
-	days := sec / SecondsPerDay
-	h := (sec % SecondsPerDay) / SecondsPerHour
-	m := (sec % SecondsPerHour) / SecondsPerMinute
-	s := sec % SecondsPerMinute
+	days := sec / shared.SecondsPerDay
+	h := (sec % shared.SecondsPerDay) / shared.SecondsPerHour
+	m := (sec % shared.SecondsPerHour) / shared.SecondsPerMinute
+	s := sec % shared.SecondsPerMinute
 
 	// Pre-allocate buffer for DD:HH:MM:SS format (11 chars)
 	buf := make([]byte, 0, 11)

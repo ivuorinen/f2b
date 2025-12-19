@@ -11,7 +11,12 @@ import (
 )
 
 // logger holds the current logger instance - will be set by cmd package
-var logger LoggerInterface = logrus.StandardLogger()
+var logger = NewLogrusAdapter(logrus.StandardLogger())
+
+// LevelSetter interface for loggers that support setting log levels
+type LevelSetter interface {
+	SetLevel(level string)
+}
 
 // SetLogger allows the cmd package to set the logger instance
 func SetLogger(l LoggerInterface) {
@@ -21,11 +26,6 @@ func SetLogger(l LoggerInterface) {
 // getLogger returns the current logger instance
 func getLogger() LoggerInterface {
 	return logger
-}
-
-func init() {
-	// Configure logging for CI/test environments to reduce noise
-	configureCITestLogging()
 }
 
 // IsCI detects if we're running in a CI environment
@@ -43,8 +43,9 @@ func IsCI() bool {
 	return false
 }
 
-// configureCITestLogging reduces log verbosity in CI and test environments
-func configureCITestLogging() {
+// ConfigureCITestLogging reduces log verbosity in CI and test environments
+// This should be called explicitly during application initialization
+func ConfigureCITestLogging() {
 	if IsCI() || IsTestEnvironment() {
 		// Try interface-based assertion first to support custom loggers
 		if l, ok := logger.(interface{ SetLevel(logrus.Level) }); ok {

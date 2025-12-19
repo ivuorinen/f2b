@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/shared"
 )
 
 // IPOperationProcessor defines the interface for processing IP-based operations
@@ -30,6 +31,52 @@ type IPCommandConfig struct {
 	Processor     IPOperationProcessor
 }
 
+// resolveOutputFormat determines the final output format from config and command flags
+func resolveOutputFormat(config *Config, cmd *cobra.Command) string {
+	finalFormat := ""
+	if config != nil {
+		finalFormat = config.Format
+	}
+	format, _ := cmd.Flags().GetString(shared.FlagFormat)
+	if format != "" {
+		finalFormat = format
+	}
+	return finalFormat
+}
+
+// outputOperationResults outputs the operation results in the specified format
+func outputOperationResults(cmd *cobra.Command, results []OperationResult, config *Config, format string) error {
+	if format == JSONFormat {
+		OutputResults(cmd, results, config)
+		return nil
+	}
+
+	for _, r := range results {
+		if _, err := fmt.Fprintf(GetCmdOutput(cmd), "%s %s in %s\n", r.Status, r.IP, r.Jail); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// processIPOperation handles the parallel vs single processing logic
+func processIPOperation(
+	ctx context.Context,
+	config *Config,
+	processor IPOperationProcessor,
+	client fail2ban.Client,
+	ip string,
+	jails []string,
+) ([]OperationResult, error) {
+	if len(jails) > 1 {
+		// Use parallel timeout for multi-jail operations
+		parallelCtx, parallelCancel := context.WithTimeout(ctx, config.ParallelTimeout)
+		defer parallelCancel()
+		return processor.ProcessParallel(parallelCtx, client, ip, jails)
+	}
+	return processor.ProcessSingle(ctx, client, ip, jails)
+}
+
 // ExecuteIPCommand provides a unified execution pattern for IP-based commands
 func ExecuteIPCommand(
 	client fail2ban.Client,
@@ -40,8 +87,14 @@ func ExecuteIPCommand(
 		// Get the contextual logger
 		logger := GetContextualLogger()
 
+		// Safe timeout handling with nil check
+		timeout := shared.DefaultCommandTimeout
+		if config != nil && config.CommandTimeout > 0 {
+			timeout = config.CommandTimeout
+		}
+
 		// Create timeout context for the entire operation
-		ctx, cancel := context.WithTimeout(context.Background(), config.CommandTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 
 		// Add command context
@@ -64,41 +117,15 @@ func ExecuteIPCommand(
 				return HandleClientError(err)
 			}
 
-			// Process operation with timeout context (use parallel processing for multiple jails)
-			var results []OperationResult
-			if len(jails) > 1 {
-				// Use parallel timeout for multi-jail operations
-				parallelCtx, parallelCancel := context.WithTimeout(ctx, config.ParallelTimeout)
-				defer parallelCancel()
-				results, err = cmdConfig.Processor.ProcessParallel(parallelCtx, client, ip, jails)
-			} else {
-				results, err = cmdConfig.Processor.ProcessSingle(ctx, client, ip, jails)
-			}
+			// Process operation with timeout context
+			results, err := processIPOperation(ctx, config, cmdConfig.Processor, client, ip, jails)
 			if err != nil {
 				return HandleClientError(err)
 			}
 
-			// Compute final format without modifying shared config
-			finalFormat := ""
-			if config != nil {
-				finalFormat = config.Format
-			}
-			format, _ := cmd.Flags().GetString("format")
-			if format != "" {
-				finalFormat = format
-			}
-
-			// Output results
-			if finalFormat == JSONFormat {
-				OutputResults(cmd, results, config)
-			} else {
-				for _, r := range results {
-					if _, err := fmt.Fprintf(GetCmdOutput(cmd), "%s %s in %s\n", r.Status, r.IP, r.Jail); err != nil {
-						return err
-					}
-				}
-			}
-			return nil
+			// Output results in the appropriate format
+			finalFormat := resolveOutputFormat(config, cmd)
+			return outputOperationResults(cmd, results, config, finalFormat)
 		})
 	}
 }

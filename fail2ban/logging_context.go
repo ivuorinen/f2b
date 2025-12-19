@@ -6,48 +6,67 @@ package fail2ban
 import (
 	"context"
 	"fmt"
+	"net"
+	"strings"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/ivuorinen/f2b/shared"
 )
 
 // WithRequestID adds a request ID to the context
 func WithRequestID(ctx context.Context, requestID string) context.Context {
-	return context.WithValue(ctx, ContextKeyRequestID, requestID)
+	return context.WithValue(ctx, shared.ContextKeyRequestID, requestID)
 }
 
 // WithOperation adds an operation name to the context
 func WithOperation(ctx context.Context, operation string) context.Context {
-	return context.WithValue(ctx, ContextKeyOperation, operation)
+	return context.WithValue(ctx, shared.ContextKeyOperation, operation)
 }
 
-// WithJail adds a jail name to the context
+// WithJail adds a validated jail name to the context
 func WithJail(ctx context.Context, jail string) context.Context {
-	return context.WithValue(ctx, ContextKeyJail, jail)
+	jail = strings.TrimSpace(jail)
+
+	// Validate jail name before storing
+	if err := ValidateJail(jail); err != nil {
+		// Don't store invalid jail names in context
+		getLogger().WithError(err).Warn("Invalid jail name not stored in context")
+		return ctx
+	}
+
+	return context.WithValue(ctx, shared.ContextKeyJail, jail)
 }
 
-// WithIP adds an IP address to the context
+// WithIP adds a validated IP address to the context
 func WithIP(ctx context.Context, ip string) context.Context {
-	return context.WithValue(ctx, ContextKeyIP, ip)
+	ip = strings.TrimSpace(ip)
+
+	// Validate IP before storing
+	if net.ParseIP(ip) == nil {
+		getLogger().WithField("ip", ip).Warn("Invalid IP not stored in context")
+		return ctx
+	}
+
+	return context.WithValue(ctx, shared.ContextKeyIP, ip)
 }
 
-// LoggerFromContext creates a logrus Entry with fields from context
-func LoggerFromContext(ctx context.Context) *logrus.Entry {
-	fields := logrus.Fields{}
+// LoggerFromContext creates a logger entry with fields from context
+func LoggerFromContext(ctx context.Context) LoggerEntry {
+	fields := Fields{}
 
-	if requestID, ok := ctx.Value(ContextKeyRequestID).(string); ok && requestID != "" {
+	if requestID, ok := ctx.Value(shared.ContextKeyRequestID).(string); ok && requestID != "" {
 		fields["request_id"] = requestID
 	}
 
-	if operation, ok := ctx.Value(ContextKeyOperation).(string); ok && operation != "" {
+	if operation, ok := ctx.Value(shared.ContextKeyOperation).(string); ok && operation != "" {
 		fields["operation"] = operation
 	}
 
-	if jail, ok := ctx.Value(ContextKeyJail).(string); ok && jail != "" {
+	if jail, ok := ctx.Value(shared.ContextKeyJail).(string); ok && jail != "" {
 		fields["jail"] = jail
 	}
 
-	if ip, ok := ctx.Value(ContextKeyIP).(string); ok && ip != "" {
+	if ip, ok := ctx.Value(shared.ContextKeyIP).(string); ok && ip != "" {
 		fields["ip"] = ip
 	}
 

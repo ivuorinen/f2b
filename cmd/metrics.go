@@ -8,6 +8,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/ivuorinen/f2b/shared"
 )
 
 // Metrics collector for performance monitoring and observability
@@ -82,12 +84,12 @@ func (m *Metrics) RecordCommandExecution(command string, duration time.Duration,
 // RecordBanOperation records metrics for ban operations
 func (m *Metrics) RecordBanOperation(operation string, _ time.Duration, success bool) {
 	switch operation {
-	case "ban":
+	case shared.MetricsBan:
 		atomic.AddInt64(&m.BanOperations, 1)
 		if !success {
 			atomic.AddInt64(&m.BanFailures, 1)
 		}
-	case "unban":
+	case shared.MetricsUnban:
 		atomic.AddInt64(&m.UnbanOperations, 1)
 		if !success {
 			atomic.AddInt64(&m.UnbanFailures, 1)
@@ -323,7 +325,7 @@ func (t *TimedOperation) Finish(success bool) {
 		t.metrics.RecordCommandExecution(t.operation, duration, success)
 	case "client":
 		t.metrics.RecordClientOperation(t.operation, duration, success)
-	case "ban":
+	case shared.MetricsBan:
 		t.metrics.RecordBanOperation(t.operation, duration, success)
 	}
 

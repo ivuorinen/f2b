@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ivuorinen/f2b/shared"
 )
 
 func TestListJails(t *testing.T) {
@@ -61,12 +63,12 @@ func TestListJails(t *testing.T) {
 
 			if tt.expectError {
 				// For error cases, we expect NewClient to fail
-				_, err := NewClient(DefaultLogDir, DefaultFilterDir)
+				_, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
 				AssertError(t, err, true, tt.name)
 				return
 			}
 
-			client, err := NewClient(DefaultLogDir, DefaultFilterDir)
+			client, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
 			AssertError(t, err, false, "create client")
 
 			jails, err := client.ListJails()
@@ -96,7 +98,7 @@ func TestStatusAll(t *testing.T) {
 	mock.SetResponse("fail2ban-client status", []byte(expectedOutput))
 	mock.SetResponse("sudo fail2ban-client status", []byte(expectedOutput))
 
-	client, err := NewClient(DefaultLogDir, DefaultFilterDir)
+	client, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
 	AssertError(t, err, false, "create client")
 
 	output, err := client.StatusAll()
@@ -119,7 +121,7 @@ func TestStatusJail(t *testing.T) {
 	mock.SetResponse("fail2ban-client status sshd", []byte(expectedOutput))
 	mock.SetResponse("sudo fail2ban-client status sshd", []byte(expectedOutput))
 
-	client, err := NewClient(DefaultLogDir, DefaultFilterDir)
+	client, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
 	AssertError(t, err, false, "create client")
 
 	output, err := client.StatusJail("sshd")
@@ -182,7 +184,7 @@ func TestBanIP(t *testing.T) {
 				mock.SetResponse(fmt.Sprintf("sudo fail2ban-client set %s banip %s", tt.jail, tt.ip), []byte(tt.mockResponse))
 			}
 
-			client, err := NewClient(DefaultLogDir, DefaultFilterDir)
+			client, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
 			AssertError(t, err, false, "create client")
 
 			code, err := client.BanIP(tt.ip, tt.jail)
@@ -239,7 +241,7 @@ func TestUnbanIP(t *testing.T) {
 				[]byte(tt.mockResponse),
 			)
 
-			client, err := NewClient(DefaultLogDir, DefaultFilterDir)
+			client, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
 			AssertError(t, err, false, "create client")
 
 			code, err := client.UnbanIP(tt.ip, tt.jail)
@@ -305,7 +307,7 @@ func TestBannedIn(t *testing.T) {
 			mock.SetResponse(fmt.Sprintf("fail2ban-client banned %s", tt.ip), []byte(tt.mockResponse))
 			mock.SetResponse(fmt.Sprintf("sudo fail2ban-client banned %s", tt.ip), []byte(tt.mockResponse))
 
-			client, err := NewClient(DefaultLogDir, DefaultFilterDir)
+			client, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
 			AssertError(t, err, false, "create client")
 
 			jails, err := client.BannedIn(tt.ip)
@@ -343,7 +345,7 @@ func TestGetBanRecords(t *testing.T) {
 		unbanTime.Format("2006-01-02 15:04:05"))
 	mock.SetResponse("sudo fail2ban-client get sshd banip --with-time", []byte(mockBanOutput))
 
-	client, err := NewClient(DefaultLogDir, DefaultFilterDir)
+	client, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
 	AssertError(t, err, false, "create client")
 
 	records, err := client.GetBanRecords([]string{"sshd"})
@@ -497,7 +499,7 @@ func TestListFilters(t *testing.T) {
 	SetRunner(mock)
 
 	// Create client with the temporary filter directory
-	client, err := NewClient(DefaultLogDir, filterDir)
+	client, err := NewClient(shared.DefaultLogDir, filterDir)
 	AssertError(t, err, false, "create client")
 
 	// Test ListFilters with the temporary directory
@@ -553,7 +555,7 @@ logpath = /var/log/auth.log`
 	mock.SetResponse("sudo fail2ban-regex /var/log/auth.log "+filterPath, []byte(expectedOutput))
 
 	// Create client with the temp directory as the filter directory
-	client, err := NewClient(DefaultLogDir, tempDir)
+	client, err := NewClient(shared.DefaultLogDir, tempDir)
 	AssertError(t, err, false, "create client")
 
 	// Test the actual created filter
@@ -619,7 +621,7 @@ func TestVersionComparison(t *testing.T) {
 				mock.SetResponse("sudo fail2ban-client status", statusOutput)
 			}
 
-			_, err := NewClient(DefaultLogDir, DefaultFilterDir)
+			_, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
 
 			AssertError(t, err, tt.expectError, tt.name)
 			if tt.expectError && tt.errorSubstring != "" {

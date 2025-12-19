@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/ivuorinen/f2b/shared"
 )
 
 // RealClient is the default implementation of Client, using the local fail2ban-client binary.
@@ -37,32 +39,32 @@ func NewClientWithContext(ctx context.Context, logDir, filterDir string) (*RealC
 	}
 
 	// Resolve the absolute path to prevent PATH hijacking
-	resolvedPath, err := exec.LookPath(Fail2BanClientCommand)
+	resolvedPath, err := exec.LookPath(shared.Fail2BanClientCommand)
 	if err != nil {
 		if _, ok := GetRunner().(*MockRunner); !ok {
-			return nil, fmt.Errorf("%s not found in PATH", Fail2BanClientCommand)
+			return nil, fmt.Errorf("%s not found in PATH", shared.Fail2BanClientCommand)
 		}
 		// For mock runner, use the plain command name
-		resolvedPath = Fail2BanClientCommand
+		resolvedPath = shared.Fail2BanClientCommand
 	}
 
 	if logDir == "" {
-		logDir = DefaultLogDir
+		logDir = shared.DefaultLogDir
 	}
 	if filterDir == "" {
-		filterDir = DefaultFilterDir
+		filterDir = shared.DefaultFilterDir
 	}
 
-	// Validate log directory using centralized helper
-	validatedLogDir, err := ValidateClientLogPath(logDir)
+	// Validate log directory using centralized helper with context
+	validatedLogDir, err := ValidateClientLogPath(ctx, logDir)
 	if err != nil {
 		return nil, fmt.Errorf("invalid log directory: %w", err)
 	}
 
-	// Validate filter directory using centralized helper
-	validatedFilterDir, err := ValidateClientFilterPath(filterDir)
+	// Validate filter directory using centralized helper with context
+	validatedFilterDir, err := ValidateClientFilterPath(ctx, filterDir)
 	if err != nil {
-		return nil, fmt.Errorf("invalid filter directory: %w", err)
+		return nil, fmt.Errorf(shared.ErrInvalidFilterDirectory, err)
 	}
 
 	rc := &RealClient{

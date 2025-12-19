@@ -3,6 +3,8 @@ package fail2ban
 import (
 	"strings"
 	"testing"
+
+	"github.com/ivuorinen/f2b/shared"
 )
 
 func TestNewClientPathTraversalProtection(t *testing.T) {
@@ -167,17 +169,22 @@ func TestNewClientDefaultPathValidation(t *testing.T) {
 	}
 
 	// Verify defaults were applied
-	if client.LogDir != DefaultLogDir {
-		t.Errorf("expected LogDir to be %s, got %s", DefaultLogDir, client.LogDir)
+	if client.LogDir != shared.DefaultLogDir {
+		t.Errorf("expected LogDir to be %s, got %s", shared.DefaultLogDir, client.LogDir)
 	}
 
-	if client.FilterDir != DefaultFilterDir {
-		if resolved, err := resolveAncestorSymlinks(DefaultFilterDir, true); err == nil {
+	if client.FilterDir != shared.DefaultFilterDir {
+		if resolved, err := resolveAncestorSymlinks(shared.DefaultFilterDir, true); err == nil {
 			if client.FilterDir != resolved {
-				t.Errorf("expected FilterDir to be %s or %s, got %s", DefaultFilterDir, resolved, client.FilterDir)
+				t.Errorf(
+					"expected FilterDir to be %s or %s, got %s",
+					shared.DefaultFilterDir,
+					resolved,
+					client.FilterDir,
+				)
 			}
 		} else {
-			t.Errorf("expected FilterDir to be %s, got %s", DefaultFilterDir, client.FilterDir)
+			t.Errorf("expected FilterDir to be %s, got %s", shared.DefaultFilterDir, client.FilterDir)
 		}
 	}
 }

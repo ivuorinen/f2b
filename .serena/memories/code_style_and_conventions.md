@@ -2,7 +2,7 @@
 
 ## EditorConfig Rules (.editorconfig)
 
-- **General**: 2 spaces indentation, max line length 120 characters
+- **General**: 2 spaces indentation, max line length 200 characters (120 for Markdown)
 - **Go files**: Tab indentation with width 2
 - **Makefiles**: Tab indentation
 - **All files**: Insert final newline, trim trailing whitespace
@@ -20,7 +20,7 @@
 **Key settings:**
 
 - Cyclomatic complexity limit: 20
-- Line length: 120 characters
+- Line length: 200 characters for code files (120 characters for Markdown)
 - US English spelling
 - Local import prefixes for project packages
 

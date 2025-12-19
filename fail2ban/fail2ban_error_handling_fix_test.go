@@ -163,15 +163,15 @@ func TestGetLogLinesWithLimitErrorHandling(t *testing.T) {
 			t.Fatalf("Failed to create test log file: %v", err)
 		}
 
-		// Test with negative limit (should be treated as unlimited)
-		lines, err := GetLogLinesWithLimit("sshd", "", -1)
-		if err != nil {
-			t.Errorf("GetLogLinesWithLimit should not error with negative limit: %v", err)
+		// Test with negative limit (should be rejected with validation error)
+		_, err = GetLogLinesWithLimit("sshd", "", -1)
+		if err == nil {
+			t.Error("GetLogLinesWithLimit should error with negative limit")
 		}
 
-		// Should return available lines
-		if len(lines) == 0 {
-			t.Error("Expected lines with negative limit (unlimited)")
+		// Error should indicate validation failure
+		if !strings.Contains(err.Error(), "must be non-negative") {
+			t.Errorf("Expected validation error for negative limit, got: %v", err)
 		}
 	})
 

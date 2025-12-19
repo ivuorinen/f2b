@@ -81,11 +81,11 @@
   - Contributing patterns and examples
   - Code review checklist
 
-## ✅ COMPLETED RECENTLY (2025-09-13)
+## ✅ COMPLETED RECENTLY
 
 ### Dependency & Version Management
 
-- ✅ **Updated to latest stable Go** (Go 1.25.0)
+- ✅ **Updated to latest stable Go** (see .go-version)
 - ✅ **Updated all dependencies** to latest stable versions
 - ✅ **Added `make update-deps` command** for easy dependency management
 - ✅ **Fixed security test** for dangerous command pattern detection
@@ -123,8 +123,7 @@ excellent production-ready state.
 
 ## 🎯 Current Success Status - ALL COMPLETED ✅
 
-- ✅ All documentation dates reflect 2025-09-13
-- ✅ All Go version references show Go 1.25.0 (latest stable)
+- ✅ Documentation dates and Go versions derive from authoritative sources (.go-version, go.mod)
 - ✅ All test coverage numbers match reality (comprehensive coverage)
 - ✅ All linting issues resolved (0 issues)
 - ✅ New `make update-deps` command documented in AGENTS.md

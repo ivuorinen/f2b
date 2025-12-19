@@ -34,6 +34,11 @@ func TestFilterCmd(client fail2ban.Client, config *Config) *cobra.Command {
 				return HandleValidationError(err)
 			}
 
+			// Validate filter name for path traversal
+			if err := fail2ban.ValidateFilterName(filterName); err != nil {
+				return HandleValidationError(err)
+			}
+
 			out, err := client.TestFilterWithContext(ctx, filterName)
 			if err != nil {
 				return HandleClientError(err)

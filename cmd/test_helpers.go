@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/shared"
 )
 
 // MockClient is a type alias for the enhanced MockClient from fail2ban package
@@ -57,7 +58,7 @@ func executeCommand(client fail2ban.Client, args ...string) (string, error) {
 	config := Config{Format: PlainFormat}
 
 	// Set up persistent flags like in the real root command
-	rootCmd.PersistentFlags().StringVar(&config.Format, "format", config.Format, "Output format: plain or json")
+	rootCmd.PersistentFlags().StringVar(&config.Format, shared.FlagFormat, config.Format, shared.FlagDescFormat)
 
 	rootCmd.AddCommand(ListJailsCmd(client, &config))
 	rootCmd.AddCommand(StatusCmd(client, &config))
@@ -98,10 +99,10 @@ func AssertError(t interface {
 }, err error, expectError bool, testName string) {
 	t.Helper()
 	if expectError && err == nil {
-		t.Fatalf("%s: expected error but got none", testName)
+		t.Fatalf(shared.ErrTestExpectedError, testName)
 	}
 	if !expectError && err != nil {
-		t.Fatalf("%s: unexpected error: %v", testName, err)
+		t.Fatalf(shared.ErrTestUnexpected, testName, err)
 	}
 }
 

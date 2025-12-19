@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ivuorinen/f2b/shared"
 )
 
 // parseTimestamp extracts and parses timestamp from log line
@@ -342,7 +344,7 @@ func TestLogFileRotationPatterns(t *testing.T) {
 
 	for _, file := range testFiles {
 		path := filepath.Join(tempDir, file)
-		if strings.HasSuffix(file, ".gz") {
+		if strings.HasSuffix(file, shared.GzipExtension) {
 			// Create compressed file
 			content := []byte("test log content")
 			createTestGzipFile(t, path, content)

@@ -97,15 +97,17 @@ func TestParserCompatibility(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Parse with original parser
-			originalParser := NewBanRecordParser()
-			originalRecords, originalErr := originalParser.ParseBanRecords(tc.input, tc.jail)
+			// Note: After optimization consolidation, this test validates parser consistency
+			// by running the same parser twice to ensure deterministic behavior
+			parser := NewBanRecordParser()
 
-			// Parse with optimized parser
-			optimizedParser := NewBanRecordParser()
-			optimizedRecords, optimizedErr := optimizedParser.ParseBanRecords(tc.input, tc.jail)
+			// First parse
+			firstRecords, firstErr := parser.ParseBanRecords(tc.input, tc.jail)
 
-			compareParserResults(t, originalRecords, originalErr, optimizedRecords, optimizedErr)
+			// Second parse (should produce identical results)
+			secondRecords, secondErr := parser.ParseBanRecords(tc.input, tc.jail)
+
+			compareParserResults(t, firstRecords, firstErr, secondRecords, secondErr)
 		})
 	}
 }
@@ -193,15 +195,17 @@ func TestParserCompatibilityLineByLine(t *testing.T) {
 
 	for _, tc := range testLines {
 		t.Run(tc.name, func(t *testing.T) {
-			// Parse with original parser
-			originalParser := NewBanRecordParser()
-			originalRecord, originalErr := originalParser.ParseBanRecordLine(tc.line, tc.jail)
+			// Note: After optimization consolidation, this test validates parser consistency
+			// by running the same parser twice to ensure deterministic behavior
+			parser := NewBanRecordParser()
 
-			// Parse with optimized parser
-			optimizedParser := NewBanRecordParser()
-			optimizedRecord, optimizedErr := optimizedParser.ParseBanRecordLine(tc.line, tc.jail)
+			// First parse
+			firstRecord, firstErr := parser.ParseBanRecordLine(tc.line, tc.jail)
 
-			compareSingleRecords(t, originalRecord, originalErr, optimizedRecord, optimizedErr)
+			// Second parse (should produce identical results)
+			secondRecord, secondErr := parser.ParseBanRecordLine(tc.line, tc.jail)
+
+			compareSingleRecords(t, firstRecord, firstErr, secondRecord, secondErr)
 		})
 	}
 }

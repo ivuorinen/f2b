@@ -14,6 +14,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ivuorinen/f2b/shared"
+
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
@@ -71,12 +73,15 @@ func Execute(client fail2ban.Client, config Config) error {
 }
 
 func init() {
+	// Initialize logging configuration
+	initLogging()
+
 	// Set defaults from env
 	cfg = NewConfigFromEnv()
 
 	rootCmd.PersistentFlags().StringVar(&cfg.LogDir, "log-dir", cfg.LogDir, "Fail2Ban log directory")
 	rootCmd.PersistentFlags().StringVar(&cfg.FilterDir, "filter-dir", cfg.FilterDir, "Fail2Ban filter directory")
-	rootCmd.PersistentFlags().StringVar(&cfg.Format, "format", cfg.Format, "Output format: plain or json")
+	rootCmd.PersistentFlags().StringVar(&cfg.Format, shared.FlagFormat, cfg.Format, shared.FlagDescFormat)
 	rootCmd.PersistentFlags().
 		DurationVar(&cfg.CommandTimeout, "command-timeout", cfg.CommandTimeout, "Timeout for individual fail2ban commands")
 	rootCmd.PersistentFlags().
@@ -85,18 +90,18 @@ func init() {
 		DurationVar(&cfg.ParallelTimeout, "parallel-timeout", cfg.ParallelTimeout, "Timeout for parallel operations")
 
 	// Log level configuration
-	logLevel := os.Getenv("F2B_LOG_LEVEL")
+	logLevel := os.Getenv(shared.EnvLogLevel)
 	if logLevel == "" {
-		logLevel = "info"
+		logLevel = shared.DefaultLogLevel
 	}
 
 	// Log file support
 	logFile := os.Getenv("F2B_LOG_FILE")
-	rootCmd.PersistentFlags().String("log-file", logFile, "Path to log file for f2b logs (optional)")
-	rootCmd.PersistentFlags().String("log-level", logLevel, "Log level (debug, info, warn, error)")
+	rootCmd.PersistentFlags().String(shared.FlagLogFile, logFile, "Path to log file for f2b logs (optional)")
+	rootCmd.PersistentFlags().String(shared.FlagLogLevel, logLevel, "Log level (debug, info, warn, error)")
 
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, _ []string) {
-		logFileFlag, _ := cmd.Flags().GetString("log-file")
+		logFileFlag, _ := cmd.Flags().GetString(shared.FlagLogFile)
 		if logFileFlag != "" {
 			// Validate log file path for security
 			cleanPath, err := filepath.Abs(filepath.Clean(logFileFlag))
@@ -112,7 +117,7 @@ func init() {
 			}
 
 			// #nosec G304 - Path is validated and sanitized above
-			f, err := os.OpenFile(cleanPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, fail2ban.DefaultFilePermissions)
+			f, err := os.OpenFile(cleanPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, shared.DefaultFilePermissions)
 			if err == nil {
 				Logger.SetOutput(f)
 				// Register cleanup for graceful shutdown
@@ -121,7 +126,7 @@ func init() {
 				fmt.Fprintf(os.Stderr, "Failed to open log file %s: %v\n", cleanPath, err)
 			}
 		}
-		level, _ := cmd.Flags().GetString("log-level")
+		level, _ := cmd.Flags().GetString(shared.FlagLogLevel)
 		Logger.SetLevel(parseLogLevel(level))
 	}
 }
@@ -164,7 +169,7 @@ func parseLogLevel(level string) logrus.Level {
 	switch level {
 	case "debug":
 		return logrus.DebugLevel
-	case "info":
+	case shared.DefaultLogLevel:
 		return logrus.InfoLevel
 	case "warn", "warning":
 		return logrus.WarnLevel

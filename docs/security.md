@@ -2,9 +2,10 @@
 
 ## Security Model
 
-f2b is designed with security as a fundamental principle. The tool handles privileged operations safely while
-maintaining usability and providing clear security boundaries. Enhanced with context-aware timeout handling,
-comprehensive path traversal protection, and advanced security testing with extensive sophisticated attack vectors.
+f2b is designed with security as a fundamental principle. The tool handles privileged operations safely
+while maintaining usability and providing clear security boundaries. Enhanced with context-aware timeout
+handling, comprehensive path traversal protection, and advanced security testing with extensive
+sophisticated attack vectors.
 
 ### Threat Model
 

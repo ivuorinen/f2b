@@ -7,7 +7,8 @@ version: "2"
 run:
   timeout: 5m
   modules-download-mode: readonly
-  concurrency: 1
+  concurrency: 1 # Serial execution for deterministic results
+  go: "1.25"
 
 linters:
   enable:

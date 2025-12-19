@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/ivuorinen/f2b/shared"
 )
 
 // GzipDetector provides utilities for detecting and handling gzip-compressed files
@@ -21,7 +23,7 @@ func NewGzipDetector() *GzipDetector {
 // then falling back to magic byte detection for better performance
 func (gd *GzipDetector) IsGzipFile(path string) (bool, error) {
 	// Fast path: check file extension first
-	if strings.HasSuffix(strings.ToLower(path), ".gz") {
+	if strings.HasSuffix(strings.ToLower(path), shared.GzipExtension) {
 		return true, nil
 	}
 
@@ -69,7 +71,9 @@ func (gd *GzipDetector) OpenGzipAwareReader(path string) (io.ReadCloser, error) 
 	isGzip, err := gd.IsGzipFile(path)
 	if err != nil {
 		if closeErr := f.Close(); closeErr != nil {
-			getLogger().WithError(closeErr).WithField("file", path).Warn("Failed to close file during error handling")
+			getLogger().WithError(closeErr).
+				WithField(shared.LogFieldFile, path).
+				Warn("Failed to close file during error handling")
 		}
 		return nil, err
 	}
@@ -80,7 +84,7 @@ func (gd *GzipDetector) OpenGzipAwareReader(path string) (io.ReadCloser, error) 
 		if err != nil {
 			if closeErr := f.Close(); closeErr != nil {
 				getLogger().WithError(closeErr).
-					WithField("file", path).
+					WithField(shared.LogFieldFile, path).
 					Warn("Failed to close file during seek error handling")
 			}
 			return nil, err
@@ -90,7 +94,7 @@ func (gd *GzipDetector) OpenGzipAwareReader(path string) (io.ReadCloser, error) 
 		if err != nil {
 			if closeErr := f.Close(); closeErr != nil {
 				getLogger().WithError(closeErr).
-					WithField("file", path).
+					WithField(shared.LogFieldFile, path).
 					Warn("Failed to close file during gzip reader error handling")
 			}
 			return nil, err
@@ -125,7 +129,9 @@ func (gd *GzipDetector) CreateGzipAwareScannerWithBuffer(path string, maxLineSiz
 
 	cleanup := func() {
 		if err := reader.Close(); err != nil {
-			getLogger().WithError(err).WithField("file", path).Warn("Failed to close reader during cleanup")
+			getLogger().WithError(err).
+				WithField(shared.LogFieldFile, path).
+				Warn("Failed to close reader during cleanup")
 		}
 	}
 

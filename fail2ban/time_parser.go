@@ -4,19 +4,22 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ivuorinen/f2b/shared"
 )
 
-// TimeParsingCache provides cached and optimized time parsing functionality
+// TimeParsingCache provides cached and optimized time parsing functionality with bounded cache
 type TimeParsingCache struct {
 	layout        string
-	parseCache    sync.Map // string -> time.Time
+	parseCache    *BoundedTimeCache // Bounded cache prevents unbounded memory growth
 	stringBuilder sync.Pool
 }
 
 // NewTimeParsingCache creates a new time parsing cache with the specified layout
 func NewTimeParsingCache(layout string) *TimeParsingCache {
 	return &TimeParsingCache{
-		layout: layout,
+		layout:     layout,
+		parseCache: NewBoundedTimeCache(shared.CacheMaxSize), // Bounded at 10k entries
 		stringBuilder: sync.Pool{
 			New: func() interface{} {
 				return &strings.Builder{}
@@ -25,11 +28,11 @@ func NewTimeParsingCache(layout string) *TimeParsingCache {
 	}
 }
 
-// ParseTime parses a time string with caching for performance
+// ParseTime parses a time string with bounded caching for performance
 func (tpc *TimeParsingCache) ParseTime(timeStr string) (time.Time, error) {
 	// Check cache first
 	if cached, ok := tpc.parseCache.Load(timeStr); ok {
-		return cached.(time.Time), nil
+		return cached, nil
 	}
 
 	// Parse and cache
@@ -57,7 +60,7 @@ var (
 	defaultTimeCache = NewTimeParsingCache("2006-01-02 15:04:05")
 )
 
-// ParseBanTime parses ban time using the default cache
+// ParseBanTime parses ban time using the default bounded cache
 func ParseBanTime(timeStr string) (time.Time, error) {
 	return defaultTimeCache.ParseTime(timeStr)
 }

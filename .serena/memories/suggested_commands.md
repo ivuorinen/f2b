@@ -134,7 +134,7 @@ ls -la                         # List files with details
 pwd                           # Current directory
 
 # Development tools
-which go                      # Go binary location (should show 1.25.0)
+go version                   # Shows Go version (e.g., go version go1.25.0 darwin/arm64)
 which golangci-lint          # Linter location
 which pre-commit             # Pre-commit location
 ```

@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/shared"
 )
 
 // ServiceCmd returns the service command with injected config
@@ -23,7 +24,7 @@ func ServiceCmd(config *Config) *cobra.Command {
 				return HandleValidationError(err)
 			}
 
-			out, err := fail2ban.RunnerCombinedOutputWithSudo("service", "fail2ban", action)
+			out, err := fail2ban.RunnerCombinedOutputWithSudo(shared.ServiceCommand, shared.ServiceFail2ban, action)
 			if err != nil {
 				return HandleSystemError(err)
 			}

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/ivuorinen/f2b/shared"
 )
 
 // TestingInterface represents the common interface between testing.T and testing.B
@@ -23,14 +25,14 @@ func setupTestLogEnvironment(t *testing.T, testDataFile string) (cleanup func())
 	// Validate test data file exists and is safe to read
 	absTestLogFile, err := filepath.Abs(testDataFile)
 	if err != nil {
-		t.Fatalf("Failed to get absolute path: %v", err)
+		t.Fatalf(shared.ErrFailedToGetAbsPath, err)
 	}
 	if _, err := os.Stat(absTestLogFile); os.IsNotExist(err) {
-		t.Skipf("Test data file not found: %s", absTestLogFile)
+		t.Skipf(shared.ErrTestDataNotFound, absTestLogFile)
 	}
 
 	// Ensure the file is within testdata directory for security
-	if !strings.Contains(absTestLogFile, "testdata") {
+	if !strings.Contains(absTestLogFile, shared.TestDataDir) {
 		t.Fatalf("Test file must be in testdata directory: %s", absTestLogFile)
 	}
 
@@ -43,7 +45,7 @@ func setupTestLogEnvironment(t *testing.T, testDataFile string) (cleanup func())
 	if err != nil {
 		t.Fatalf("Failed to read test file: %v", err)
 	}
-	if err := os.WriteFile(mainLog, data, 0600); err != nil {
+	if err := os.WriteFile(mainLog, data, shared.DefaultFilePermissions); err != nil {
 		t.Fatalf("Failed to create test log: %v", err)
 	}
 
@@ -76,21 +78,18 @@ func SetupMockEnvironment(t TestingInterface) (client *MockClient, cleanup func(
 	SetRunner(mockRunner)
 
 	// Configure comprehensive mock responses
-	mockRunner.SetResponse("fail2ban-client -V", []byte("fail2ban-client v0.11.2"))
-	mockRunner.SetResponse(
-		"fail2ban-client status",
-		[]byte("Status\n|- Number of jail:\t2\n`- Jail list:\tsshd, apache"),
-	)
-	mockRunner.SetResponse("fail2ban-client ping", []byte("pong"))
+	mockRunner.SetResponse(shared.MockCommandVersion, []byte(shared.VersionOutput))
+	mockRunner.SetResponse(shared.MockCommandStatus, []byte(shared.StatusOutput))
+	mockRunner.SetResponse(shared.MockCommandPing, []byte(shared.PingOutput))
 
 	// Standard jail responses
-	mockRunner.SetResponse("fail2ban-client status sshd", []byte("Status for the jail: sshd"))
-	mockRunner.SetResponse("fail2ban-client status apache", []byte("Status for the jail: apache"))
+	mockRunner.SetResponse(shared.MockCommandStatusSSHD, []byte("Status for the jail: sshd"))
+	mockRunner.SetResponse(shared.MockCommandStatusApache, []byte("Status for the jail: apache"))
 
 	// Standard ban responses
-	mockRunner.SetResponse("fail2ban-client set sshd banip 192.168.1.100", []byte("0"))
-	mockRunner.SetResponse("fail2ban-client set sshd unbanip 192.168.1.100", []byte("0"))
-	mockRunner.SetResponse("fail2ban-client banned 192.168.1.100", []byte("[]"))
+	mockRunner.SetResponse(shared.MockCommandBanIP, []byte(shared.Fail2BanStatusSuccess))
+	mockRunner.SetResponse(shared.MockCommandUnbanIP, []byte(shared.Fail2BanStatusSuccess))
+	mockRunner.SetResponse(shared.MockCommandBanned, []byte(shared.MockBannedOutput))
 
 	cleanup = func() {
 		SetSudoChecker(originalChecker)
@@ -121,12 +120,9 @@ func SetupMockEnvironmentWithSudo(t TestingInterface, hasSudo bool) (client *Moc
 
 	// Configure mock responses based on sudo availability
 	if hasSudo {
-		mockRunner.SetResponse("fail2ban-client -V", []byte("fail2ban-client v0.11.2"))
-		mockRunner.SetResponse("fail2ban-client ping", []byte("pong"))
-		mockRunner.SetResponse(
-			"fail2ban-client status",
-			[]byte("Status\n|- Number of jail:\t2\n`- Jail list:\tsshd, apache"),
-		)
+		mockRunner.SetResponse(shared.MockCommandVersion, []byte(shared.VersionOutput))
+		mockRunner.SetResponse(shared.MockCommandPing, []byte(shared.PingOutput))
+		mockRunner.SetResponse(shared.MockCommandStatus, []byte(shared.StatusOutput))
 	}
 
 	cleanup = func() {
@@ -151,10 +147,10 @@ func SetupBasicMockClient() *MockClient {
 func AssertError(t TestingInterface, err error, expectError bool, testName string) {
 	t.Helper()
 	if expectError && err == nil {
-		t.Fatalf("%s: expected error but got none", testName)
+		t.Fatalf(shared.ErrTestExpectedError, testName)
 	}
 	if !expectError && err != nil {
-		t.Fatalf("%s: unexpected error: %v", testName, err)
+		t.Fatalf(shared.ErrTestUnexpected, testName, err)
 	}
 }
 
@@ -173,10 +169,10 @@ func AssertErrorContains(t TestingInterface, err error, expectedSubstring string
 func AssertCommandSuccess(t TestingInterface, err error, output, expectedOutput, testName string) {
 	t.Helper()
 	if err != nil {
-		t.Fatalf("%s: unexpected error: %v, output: %s", testName, err, output)
+		t.Fatalf(shared.ErrTestUnexpectedWithOutput, testName, err, output)
 	}
 	if expectedOutput != "" && !strings.Contains(output, expectedOutput) {
-		t.Fatalf("%s: expected output to contain %q, got: %s", testName, expectedOutput, output)
+		t.Fatalf(shared.ErrTestExpectedOutput, testName, expectedOutput, output)
 	}
 }
 
@@ -194,7 +190,7 @@ func AssertCommandError(t TestingInterface, err error, output, expectedError, te
 // createTestGzipFile creates a gzip file with given content for testing
 func createTestGzipFile(t TestingInterface, path string, content []byte) {
 	// Validate path is safe for test file creation
-	if !strings.Contains(path, os.TempDir()) && !strings.Contains(path, "testdata") {
+	if !strings.Contains(path, os.TempDir()) && !strings.Contains(path, shared.TestDataDir) {
 		t.Fatalf("Test file path must be in temp directory or testdata: %s", path)
 	}
 
@@ -226,7 +222,7 @@ func setupTempDirWithFiles(t TestingInterface, files map[string][]byte) string {
 
 	for filename, content := range files {
 		path := filepath.Join(tempDir, filename)
-		if err := os.WriteFile(path, content, 0600); err != nil {
+		if err := os.WriteFile(path, content, shared.DefaultFilePermissions); err != nil {
 			t.Fatalf("Failed to create file %s: %v", filename, err)
 		}
 	}
@@ -239,10 +235,10 @@ func validateTestDataFile(t *testing.T, testDataFile string) string {
 	t.Helper()
 	absTestLogFile, err := filepath.Abs(testDataFile)
 	if err != nil {
-		t.Fatalf("Failed to get absolute path: %v", err)
+		t.Fatalf(shared.ErrFailedToGetAbsPath, err)
 	}
 	if _, err := os.Stat(absTestLogFile); os.IsNotExist(err) {
-		t.Skipf("Test data file not found: %s", absTestLogFile)
+		t.Skipf(shared.ErrTestDataNotFound, absTestLogFile)
 	}
 	return absTestLogFile
 }
@@ -270,12 +266,12 @@ func assertContainsText(t *testing.T, lines []string, text string) {
 // This eliminates the need for repetitive SetResponse calls in individual tests
 func StandardMockSetup(mockRunner *MockRunner) {
 	// Version responses
-	mockRunner.SetResponse("fail2ban-client -V", []byte("Fail2Ban v0.11.2"))
-	mockRunner.SetResponse("sudo fail2ban-client -V", []byte("Fail2Ban v0.11.2"))
+	mockRunner.SetResponse("fail2ban-client -V", []byte(shared.MockVersion))
+	mockRunner.SetResponse("sudo fail2ban-client -V", []byte(shared.MockVersion))
 
 	// Ping responses
-	mockRunner.SetResponse("fail2ban-client ping", []byte("pong"))
-	mockRunner.SetResponse("sudo fail2ban-client ping", []byte("pong"))
+	mockRunner.SetResponse("fail2ban-client ping", []byte(shared.PingOutput))
+	mockRunner.SetResponse("sudo fail2ban-client ping", []byte(shared.PingOutput))
 
 	// Status responses
 	statusResponse := "Status\n|- Number of jail:      2\n`- Jail list:   sshd, apache"
@@ -287,30 +283,33 @@ func StandardMockSetup(mockRunner *MockRunner) {
 		"|- Total failed:\t5\n|  `- File list:\t/var/log/auth.log\n`- Actions\n   " +
 		"|- Currently banned:\t1\n   |- Total banned:\t2\n   `- Banned IP list:\t192.168.1.100"
 
-	mockRunner.SetResponse("fail2ban-client status sshd", []byte(sshdStatus))
-	mockRunner.SetResponse("sudo fail2ban-client status sshd", []byte(sshdStatus))
+	mockRunner.SetResponse(shared.MockCommandStatusSSHD, []byte(sshdStatus))
+	mockRunner.SetResponse("sudo "+shared.MockCommandStatusSSHD, []byte(sshdStatus))
 
 	apacheStatus := "Status for the jail: apache\n|- Filter\n|  |- Currently failed:\t0\n|  " +
 		"|- Total failed:\t3\n|  `- File list:\t/var/log/apache2/error.log\n`- Actions\n   " +
 		"|- Currently banned:\t0\n   |- Total banned:\t1\n   `- Banned IP list:\t"
 
-	mockRunner.SetResponse("fail2ban-client status apache", []byte(apacheStatus))
-	mockRunner.SetResponse("sudo fail2ban-client status apache", []byte(apacheStatus))
+	mockRunner.SetResponse(shared.MockCommandStatusApache, []byte(apacheStatus))
+	mockRunner.SetResponse("sudo "+shared.MockCommandStatusApache, []byte(apacheStatus))
 
 	// Ban/unban responses
-	mockRunner.SetResponse("fail2ban-client set sshd banip 192.168.1.100", []byte("0"))
-	mockRunner.SetResponse("sudo fail2ban-client set sshd banip 192.168.1.100", []byte("0"))
-	mockRunner.SetResponse("fail2ban-client set sshd unbanip 192.168.1.100", []byte("0"))
-	mockRunner.SetResponse("sudo fail2ban-client set sshd unbanip 192.168.1.100", []byte("0"))
+	mockRunner.SetResponse(shared.MockCommandBanIP, []byte(shared.Fail2BanStatusSuccess))
+	mockRunner.SetResponse("sudo "+shared.MockCommandBanIP, []byte(shared.Fail2BanStatusSuccess))
+	mockRunner.SetResponse(shared.MockCommandUnbanIP, []byte(shared.Fail2BanStatusSuccess))
+	mockRunner.SetResponse("sudo "+shared.MockCommandUnbanIP, []byte(shared.Fail2BanStatusSuccess))
 
-	mockRunner.SetResponse("fail2ban-client set apache banip 192.168.1.101", []byte("0"))
-	mockRunner.SetResponse("sudo fail2ban-client set apache banip 192.168.1.101", []byte("0"))
-	mockRunner.SetResponse("fail2ban-client set apache unbanip 192.168.1.101", []byte("0"))
-	mockRunner.SetResponse("sudo fail2ban-client set apache unbanip 192.168.1.101", []byte("0"))
+	mockRunner.SetResponse("fail2ban-client set apache banip 192.168.1.101", []byte(shared.Fail2BanStatusSuccess))
+	mockRunner.SetResponse("sudo fail2ban-client set apache banip 192.168.1.101", []byte(shared.Fail2BanStatusSuccess))
+	mockRunner.SetResponse("fail2ban-client set apache unbanip 192.168.1.101", []byte(shared.Fail2BanStatusSuccess))
+	mockRunner.SetResponse(
+		"sudo fail2ban-client set apache unbanip 192.168.1.101",
+		[]byte(shared.Fail2BanStatusSuccess),
+	)
 
 	// Banned IP responses
-	mockRunner.SetResponse("fail2ban-client banned 192.168.1.100", []byte("[\"sshd\"]"))
-	mockRunner.SetResponse("sudo fail2ban-client banned 192.168.1.100", []byte("[\"sshd\"]"))
+	mockRunner.SetResponse("fail2ban-client banned 192.168.1.100", []byte(shared.MockBannedOutput))
+	mockRunner.SetResponse("sudo fail2ban-client banned 192.168.1.100", []byte(shared.MockBannedOutput))
 	mockRunner.SetResponse("fail2ban-client banned 192.168.1.101", []byte("[]"))
 	mockRunner.SetResponse("sudo fail2ban-client banned 192.168.1.101", []byte("[]"))
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/shared"
 )
 
 // MetricsCmd returns the metrics command with injected client and config
@@ -56,11 +57,11 @@ func printMetricsPlain(output io.Writer, snapshot MetricsSnapshot) error {
 
 	// Command metrics
 	sb.WriteString("Commands:\n")
-	sb.WriteString(fmt.Sprintf("  Total Executions: %d\n", snapshot.CommandExecutions))
-	sb.WriteString(fmt.Sprintf("  Total Failures: %d\n", snapshot.CommandFailures))
+	sb.WriteString(fmt.Sprintf(shared.MetricsFmtTotalExecutions, snapshot.CommandExecutions))
+	sb.WriteString(fmt.Sprintf(shared.MetricsFmtTotalFailures, snapshot.CommandFailures))
 	if snapshot.CommandExecutions > 0 {
 		avgLatency := float64(snapshot.CommandTotalDuration) / float64(snapshot.CommandExecutions)
-		sb.WriteString(fmt.Sprintf("  Average Latency: %.2f ms\n", avgLatency))
+		sb.WriteString(fmt.Sprintf(shared.MetricsFmtAverageLatencyTop, avgLatency))
 	}
 	sb.WriteString("\n")
 
@@ -74,11 +75,11 @@ func printMetricsPlain(output io.Writer, snapshot MetricsSnapshot) error {
 
 	// Client metrics
 	sb.WriteString("Client Operations:\n")
-	sb.WriteString(fmt.Sprintf("  Total Operations: %d\n", snapshot.ClientOperations))
-	sb.WriteString(fmt.Sprintf("  Total Failures: %d\n", snapshot.ClientFailures))
+	sb.WriteString(fmt.Sprintf(shared.MetricsFmtTotalOperations, snapshot.ClientOperations))
+	sb.WriteString(fmt.Sprintf(shared.MetricsFmtTotalFailures, snapshot.ClientFailures))
 	if snapshot.ClientOperations > 0 {
 		avgLatency := float64(snapshot.ClientTotalDuration) / float64(snapshot.ClientOperations)
-		sb.WriteString(fmt.Sprintf("  Average Latency: %.2f ms\n", avgLatency))
+		sb.WriteString(fmt.Sprintf(shared.MetricsFmtAverageLatencyTop, avgLatency))
 	}
 	sb.WriteString("\n")
 
@@ -97,14 +98,14 @@ func printMetricsPlain(output io.Writer, snapshot MetricsSnapshot) error {
 	if len(snapshot.CommandLatencyBuckets) > 0 {
 		sb.WriteString("Command Latency Distribution:\n")
 		for cmd, bucket := range snapshot.CommandLatencyBuckets {
-			sb.WriteString(fmt.Sprintf("  %s:\n", cmd))
-			sb.WriteString(fmt.Sprintf("    < 1ms: %d\n", bucket.Under1ms))
-			sb.WriteString(fmt.Sprintf("    < 10ms: %d\n", bucket.Under10ms))
-			sb.WriteString(fmt.Sprintf("    < 100ms: %d\n", bucket.Under100ms))
-			sb.WriteString(fmt.Sprintf("    < 1s: %d\n", bucket.Under1s))
-			sb.WriteString(fmt.Sprintf("    < 10s: %d\n", bucket.Under10s))
-			sb.WriteString(fmt.Sprintf("    > 10s: %d\n", bucket.Over10s))
-			sb.WriteString(fmt.Sprintf("    Average: %.2f ms\n", bucket.GetAverageLatency()))
+			sb.WriteString(fmt.Sprintf(shared.MetricsFmtOperationHeader, cmd))
+			sb.WriteString(fmt.Sprintf(shared.MetricsFmtLatencyUnder1ms, bucket.Under1ms))
+			sb.WriteString(fmt.Sprintf(shared.MetricsFmtLatencyUnder10ms, bucket.Under10ms))
+			sb.WriteString(fmt.Sprintf(shared.MetricsFmtLatencyUnder100ms, bucket.Under100ms))
+			sb.WriteString(fmt.Sprintf(shared.MetricsFmtLatencyUnder1s, bucket.Under1s))
+			sb.WriteString(fmt.Sprintf(shared.MetricsFmtLatencyUnder10s, bucket.Under10s))
+			sb.WriteString(fmt.Sprintf(shared.MetricsFmtLatencyOver10s, bucket.Over10s))
+			sb.WriteString(fmt.Sprintf(shared.MetricsFmtAverageLatency, bucket.GetAverageLatency()))
 		}
 		sb.WriteString("\n")
 	}
@@ -113,14 +114,14 @@ func printMetricsPlain(output io.Writer, snapshot MetricsSnapshot) error {
 	if len(snapshot.ClientLatencyBuckets) > 0 {
 		sb.WriteString("Client Operation Latency Distribution:\n")
 		for op, bucket := range snapshot.ClientLatencyBuckets {
-			sb.WriteString(fmt.Sprintf("  %s:\n", op))
-			sb.WriteString(fmt.Sprintf("    < 1ms: %d\n", bucket.Under1ms))
-			sb.WriteString(fmt.Sprintf("    < 10ms: %d\n", bucket.Under10ms))
-			sb.WriteString(fmt.Sprintf("    < 100ms: %d\n", bucket.Under100ms))
-			sb.WriteString(fmt.Sprintf("    < 1s: %d\n", bucket.Under1s))
-			sb.WriteString(fmt.Sprintf("    < 10s: %d\n", bucket.Under10s))
-			sb.WriteString(fmt.Sprintf("    > 10s: %d\n", bucket.Over10s))
-			sb.WriteString(fmt.Sprintf("    Average: %.2f ms\n", bucket.GetAverageLatency()))
+			sb.WriteString(fmt.Sprintf(shared.MetricsFmtOperationHeader, op))
+			sb.WriteString(fmt.Sprintf(shared.MetricsFmtLatencyUnder1ms, bucket.Under1ms))
+			sb.WriteString(fmt.Sprintf(shared.MetricsFmtLatencyUnder10ms, bucket.Under10ms))
+			sb.WriteString(fmt.Sprintf(shared.MetricsFmtLatencyUnder100ms, bucket.Under100ms))
+			sb.WriteString(fmt.Sprintf(shared.MetricsFmtLatencyUnder1s, bucket.Under1s))
+			sb.WriteString(fmt.Sprintf(shared.MetricsFmtLatencyUnder10s, bucket.Under10s))
+			sb.WriteString(fmt.Sprintf(shared.MetricsFmtLatencyOver10s, bucket.Over10s))
+			sb.WriteString(fmt.Sprintf(shared.MetricsFmtAverageLatency, bucket.GetAverageLatency()))
 		}
 	}
 
