@@ -3,24 +3,14 @@ package fail2ban
 import (
 	"strings"
 	"testing"
+
+	"github.com/ivuorinen/f2b/shared"
 )
 
 func TestNewClientPathTraversalProtection(t *testing.T) {
-	// Enable test mode
-	t.Setenv("F2B_TEST_SUDO", "true")
-
-	// Set up mock environment
-	_, cleanup := SetupMockEnvironment(t)
+	// Set up mock environment with standard responses
+	_, cleanup := SetupMockEnvironmentWithStandardResponses(t)
 	defer cleanup()
-
-	// Get the mock runner and configure additional responses
-	mock := GetRunner().(*MockRunner)
-	mock.SetResponse("fail2ban-client -V", []byte("Fail2Ban v0.11.2"))
-	mock.SetResponse("sudo fail2ban-client -V", []byte("Fail2Ban v0.11.2"))
-	mock.SetResponse("fail2ban-client ping", []byte("pong"))
-	mock.SetResponse("sudo fail2ban-client ping", []byte("pong"))
-	mock.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail:      1\n`- Jail list:   sshd"))
-	mock.SetResponse("sudo fail2ban-client status", []byte("Status\n|- Number of jail:      1\n`- Jail list:   sshd"))
 
 	tests := []struct {
 		name          string
@@ -168,21 +158,9 @@ func TestNewClientPathTraversalProtection(t *testing.T) {
 }
 
 func TestNewClientDefaultPathValidation(t *testing.T) {
-	// Enable test mode
-	t.Setenv("F2B_TEST_SUDO", "true")
-
-	// Set up mock environment
-	_, cleanup := SetupMockEnvironment(t)
+	// Set up mock environment with standard responses
+	_, cleanup := SetupMockEnvironmentWithStandardResponses(t)
 	defer cleanup()
-
-	// Get the mock runner and configure additional responses
-	mock := GetRunner().(*MockRunner)
-	mock.SetResponse("fail2ban-client -V", []byte("Fail2Ban v0.11.2"))
-	mock.SetResponse("sudo fail2ban-client -V", []byte("Fail2Ban v0.11.2"))
-	mock.SetResponse("fail2ban-client ping", []byte("pong"))
-	mock.SetResponse("sudo fail2ban-client ping", []byte("pong"))
-	mock.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail:      1\n`- Jail list:   sshd"))
-	mock.SetResponse("sudo fail2ban-client status", []byte("Status\n|- Number of jail:      1\n`- Jail list:   sshd"))
 
 	// Test with empty paths (should use defaults and validate them)
 	client, err := NewClient("", "")
@@ -191,12 +169,23 @@ func TestNewClientDefaultPathValidation(t *testing.T) {
 	}
 
 	// Verify defaults were applied
-	if client.LogDir != DefaultLogDir {
-		t.Errorf("expected LogDir to be %s, got %s", DefaultLogDir, client.LogDir)
+	if client.LogDir != shared.DefaultLogDir {
+		t.Errorf("expected LogDir to be %s, got %s", shared.DefaultLogDir, client.LogDir)
 	}
 
-	if client.FilterDir != DefaultFilterDir {
-		t.Errorf("expected FilterDir to be %s, got %s", DefaultFilterDir, client.FilterDir)
+	if client.FilterDir != shared.DefaultFilterDir {
+		if resolved, err := resolveAncestorSymlinks(shared.DefaultFilterDir, true); err == nil {
+			if client.FilterDir != resolved {
+				t.Errorf(
+					"expected FilterDir to be %s or %s, got %s",
+					shared.DefaultFilterDir,
+					resolved,
+					client.FilterDir,
+				)
+			}
+		} else {
+			t.Errorf("expected FilterDir to be %s, got %s", shared.DefaultFilterDir, client.FilterDir)
+		}
 	}
 }
 

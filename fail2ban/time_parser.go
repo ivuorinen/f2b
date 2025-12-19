@@ -1,35 +1,44 @@
 package fail2ban
 
 import (
+	"fmt"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ivuorinen/f2b/shared"
 )
 
-// TimeParsingCache provides cached and optimized time parsing functionality
+// TimeParsingCache provides cached and optimized time parsing functionality with bounded cache
 type TimeParsingCache struct {
 	layout        string
-	parseCache    sync.Map // string -> time.Time
+	parseCache    *BoundedTimeCache // Bounded cache prevents unbounded memory growth
 	stringBuilder sync.Pool
 }
 
 // NewTimeParsingCache creates a new time parsing cache with the specified layout
-func NewTimeParsingCache(layout string) *TimeParsingCache {
+func NewTimeParsingCache(layout string) (*TimeParsingCache, error) {
+	parseCache, err := NewBoundedTimeCache(shared.CacheMaxSize)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create time parsing cache: %w", err)
+	}
+
 	return &TimeParsingCache{
-		layout: layout,
+		layout:     layout,
+		parseCache: parseCache, // Bounded at 10k entries
 		stringBuilder: sync.Pool{
 			New: func() interface{} {
 				return &strings.Builder{}
 			},
 		},
-	}
+	}, nil
 }
 
-// ParseTime parses a time string with caching for performance
+// ParseTime parses a time string with bounded caching for performance
 func (tpc *TimeParsingCache) ParseTime(timeStr string) (time.Time, error) {
 	// Check cache first
 	if cached, ok := tpc.parseCache.Load(timeStr); ok {
-		return cached.(time.Time), nil
+		return cached, nil
 	}
 
 	// Parse and cache
@@ -54,10 +63,19 @@ func (tpc *TimeParsingCache) BuildTimeString(dateStr, timeStr string) string {
 
 // Global cache instances for common time formats
 var (
-	defaultTimeCache = NewTimeParsingCache("2006-01-02 15:04:05")
+	defaultTimeCache = mustCreateTimeCache()
 )
 
-// ParseBanTime parses ban time using the default cache
+// mustCreateTimeCache creates the default time cache or panics (init time only)
+func mustCreateTimeCache() *TimeParsingCache {
+	cache, err := NewTimeParsingCache("2006-01-02 15:04:05")
+	if err != nil {
+		panic(fmt.Sprintf("failed to create default time cache: %v", err))
+	}
+	return cache
+}
+
+// ParseBanTime parses ban time using the default bounded cache
 func ParseBanTime(timeStr string) (time.Time, error) {
 	return defaultTimeCache.ParseTime(timeStr)
 }

@@ -12,24 +12,13 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/ivuorinen/f2b/shared"
 )
 
-const (
-	// DefaultLogDir is the default directory for fail2ban logs
-	DefaultLogDir = "/var/log"
-	// DefaultFilterDir is the default directory for fail2ban filters
-	DefaultFilterDir = "/etc/fail2ban/filter.d"
-	// AllFilter represents all jails/IPs filter
-	AllFilter = "all"
-	// DefaultMaxFileSize is the default maximum file size for log reading (100MB)
-	DefaultMaxFileSize = 100 * 1024 * 1024
-	// DefaultLogLinesLimit is the default limit for log lines returned
-	DefaultLogLinesLimit = 1000
-)
-
-var logDir = DefaultLogDir // base directory for fail2ban logs
-var logDirMu sync.RWMutex  // protects logDir from concurrent access
-var filterDir = DefaultFilterDir
+var logDir = shared.DefaultLogDir // base directory for fail2ban logs
+var logDirMu sync.RWMutex         // protects logDir from concurrent access
+var filterDir = shared.DefaultFilterDir
 var filterDirMu sync.RWMutex // protects filterDir from concurrent access
 
 // GetFilterDir returns the current filter directory path.
@@ -60,84 +49,41 @@ func SetFilterDir(dir string) {
 	filterDir = dir
 }
 
-// Runner executes system commands.
-// Implementations may use sudo or other mechanisms as needed.
-type Runner interface {
-	CombinedOutput(name string, args ...string) ([]byte, error)
-	CombinedOutputWithSudo(name string, args ...string) ([]byte, error)
-	// Context-aware versions for timeout and cancellation support
-	CombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error)
-	CombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error)
-}
-
 // OSRunner runs commands locally.
 type OSRunner struct{}
 
 // CombinedOutput executes a command without sudo.
 func (r *OSRunner) CombinedOutput(name string, args ...string) ([]byte, error) {
-	// Validate command for security
-	if err := CachedValidateCommand(name); err != nil {
-		return nil, fmt.Errorf("command validation failed: %w", err)
-	}
-	// Validate arguments for security
-	if err := ValidateArguments(args); err != nil {
-		return nil, fmt.Errorf("argument validation failed: %w", err)
-	}
-	return exec.Command(name, args...).CombinedOutput()
+	return r.CombinedOutputWithContext(context.Background(), name, args...)
 }
 
 // CombinedOutputWithContext executes a command without sudo with context support.
 func (r *OSRunner) CombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error) {
 	// Validate command for security
-	if err := CachedValidateCommand(name); err != nil {
-		return nil, fmt.Errorf("command validation failed: %w", err)
+	if err := CachedValidateCommand(ctx, name); err != nil {
+		return nil, fmt.Errorf(shared.ErrCommandValidationFailed, err)
 	}
 	// Validate arguments for security
-	if err := ValidateArguments(args); err != nil {
-		return nil, fmt.Errorf("argument validation failed: %w", err)
+	if err := ValidateArgumentsWithContext(ctx, args); err != nil {
+		return nil, fmt.Errorf(shared.ErrArgumentValidationFailed, err)
 	}
 	return exec.CommandContext(ctx, name, args...).CombinedOutput()
 }
 
 // CombinedOutputWithSudo executes a command with sudo if needed.
 func (r *OSRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte, error) {
-	// Validate command for security
-	if err := CachedValidateCommand(name); err != nil {
-		return nil, fmt.Errorf("command validation failed: %w", err)
-	}
-	// Validate arguments for security
-	if err := ValidateArguments(args); err != nil {
-		return nil, fmt.Errorf("argument validation failed: %w", err)
-	}
-
-	checker := GetSudoChecker()
-
-	// If already root, no need for sudo
-	if checker.IsRoot() {
-		return exec.Command(name, args...).CombinedOutput()
-	}
-
-	// If command requires sudo and user has privileges, use sudo
-	if RequiresSudo(name, args...) && checker.HasSudoPrivileges() {
-		sudoArgs := append([]string{name}, args...)
-		// #nosec G204 - This is a legitimate use case for executing fail2ban-client with sudo
-		// The command name and arguments are validated by ValidateCommand() and RequiresSudo()
-		return exec.Command("sudo", sudoArgs...).CombinedOutput()
-	}
-
-	// Otherwise run without sudo
-	return exec.Command(name, args...).CombinedOutput()
+	return r.CombinedOutputWithSudoContext(context.Background(), name, args...)
 }
 
 // CombinedOutputWithSudoContext executes a command with sudo if needed, with context support.
 func (r *OSRunner) CombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error) {
 	// Validate command for security
-	if err := CachedValidateCommand(name); err != nil {
-		return nil, fmt.Errorf("command validation failed: %w", err)
+	if err := CachedValidateCommand(ctx, name); err != nil {
+		return nil, fmt.Errorf(shared.ErrCommandValidationFailed, err)
 	}
 	// Validate arguments for security
-	if err := ValidateArguments(args); err != nil {
-		return nil, fmt.Errorf("argument validation failed: %w", err)
+	if err := ValidateArgumentsWithContext(ctx, args); err != nil {
+		return nil, fmt.Errorf(shared.ErrArgumentValidationFailed, err)
 	}
 
 	checker := GetSudoChecker()
@@ -152,7 +98,7 @@ func (r *OSRunner) CombinedOutputWithSudoContext(ctx context.Context, name strin
 		sudoArgs := append([]string{name}, args...)
 		// #nosec G204 - This is a legitimate use case for executing fail2ban-client with sudo
 		// The command name and arguments are validated by ValidateCommand() and RequiresSudo()
-		return exec.CommandContext(ctx, "sudo", sudoArgs...).CombinedOutput()
+		return exec.CommandContext(ctx, shared.SudoCommand, sudoArgs...).CombinedOutput()
 	}
 
 	// Otherwise run without sudo
@@ -191,9 +137,7 @@ func GetRunner() Runner {
 func RunnerCombinedOutput(name string, args ...string) ([]byte, error) {
 	timer := NewTimedOperation("RunnerCombinedOutput", name, args...)
 
-	globalRunnerManager.mu.RLock()
-	runner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
+	runner := GetRunner()
 
 	output, err := runner.CombinedOutput(name, args...)
 	timer.Finish(err)
@@ -206,9 +150,7 @@ func RunnerCombinedOutput(name string, args ...string) ([]byte, error) {
 func RunnerCombinedOutputWithSudo(name string, args ...string) ([]byte, error) {
 	timer := NewTimedOperation("RunnerCombinedOutputWithSudo", name, args...)
 
-	globalRunnerManager.mu.RLock()
-	runner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
+	runner := GetRunner()
 
 	output, err := runner.CombinedOutputWithSudo(name, args...)
 	timer.Finish(err)
@@ -221,9 +163,7 @@ func RunnerCombinedOutputWithSudo(name string, args ...string) ([]byte, error) {
 func RunnerCombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error) {
 	timer := NewTimedOperation("RunnerCombinedOutputWithContext", name, args...)
 
-	globalRunnerManager.mu.RLock()
-	runner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
+	runner := GetRunner()
 
 	output, err := runner.CombinedOutputWithContext(ctx, name, args...)
 	timer.FinishWithContext(ctx, err)
@@ -236,9 +176,7 @@ func RunnerCombinedOutputWithContext(ctx context.Context, name string, args ...s
 func RunnerCombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error) {
 	timer := NewTimedOperation("RunnerCombinedOutputWithSudoContext", name, args...)
 
-	globalRunnerManager.mu.RLock()
-	runner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
+	runner := GetRunner()
 
 	output, err := runner.CombinedOutputWithSudoContext(ctx, name, args...)
 	timer.FinishWithContext(ctx, err)
@@ -266,15 +204,27 @@ func NewMockRunner() *MockRunner {
 
 // CombinedOutput returns a mocked response or error for a command.
 func (m *MockRunner) CombinedOutput(name string, args ...string) ([]byte, error) {
-	// Prevent actual sudo execution in tests
-	if name == "sudo" {
+	key := name + " " + strings.Join(args, " ")
+	if name == shared.SudoCommand {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+
+		m.CallLog = append(m.CallLog, key)
+
+		if err, exists := m.Errors[key]; exists {
+			return nil, err
+		}
+
+		if response, exists := m.Responses[key]; exists {
+			return response, nil
+		}
+
 		return nil, fmt.Errorf("sudo should not be called directly in tests")
 	}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	key := name + " " + strings.Join(args, " ")
 	m.CallLog = append(m.CallLog, key)
 
 	if err, exists := m.Errors[key]; exists {
@@ -376,7 +326,7 @@ func (m *MockRunner) CombinedOutputWithSudoContext(ctx context.Context, name str
 
 func (c *RealClient) fetchJailsWithContext(ctx context.Context) ([]string, error) {
 	currentRunner := GetRunner()
-	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, c.Path, "status")
+	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, c.Path, shared.CommandArgStatus)
 	if err != nil {
 		return nil, err
 	}
@@ -386,87 +336,30 @@ func (c *RealClient) fetchJailsWithContext(ctx context.Context) ([]string, error
 // StatusAll returns the status of all fail2ban jails.
 func (c *RealClient) StatusAll() (string, error) {
 	currentRunner := GetRunner()
-	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "status")
+	out, err := currentRunner.CombinedOutputWithSudo(c.Path, shared.CommandArgStatus)
 	return string(out), err
 }
 
 // StatusJail returns the status of a specific fail2ban jail.
 func (c *RealClient) StatusJail(j string) (string, error) {
 	currentRunner := GetRunner()
-	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "status", j)
+	out, err := currentRunner.CombinedOutputWithSudo(c.Path, shared.CommandArgStatus, j)
 	return string(out), err
 }
 
 // BanIP bans an IP address in the specified jail and returns the ban status code.
 func (c *RealClient) BanIP(ip, jail string) (int, error) {
-	if err := CachedValidateIP(ip); err != nil {
-		return 0, err
-	}
-	if err := CachedValidateJail(jail); err != nil {
-		return 0, err
-	}
-
-	// Check if jail exists
-	if err := ValidateJailExists(jail, c.Jails); err != nil {
-		return 0, err
-	}
-
-	currentRunner := GetRunner()
-	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "set", jail, "banip", ip)
-	if err != nil {
-		return 0, fmt.Errorf("failed to ban IP %s in jail %s: %w", ip, jail, err)
-	}
-	code := strings.TrimSpace(string(out))
-	if code == Fail2BanStatusSuccess {
-		return 0, nil
-	}
-	if code == Fail2BanStatusAlreadyProcessed {
-		return 1, nil
-	}
-	return 0, fmt.Errorf("unexpected output from fail2ban-client: %s", code)
+	return c.BanIPWithContext(context.Background(), ip, jail)
 }
 
 // UnbanIP unbans an IP address from the specified jail and returns the unban status code.
 func (c *RealClient) UnbanIP(ip, jail string) (int, error) {
-	if err := CachedValidateIP(ip); err != nil {
-		return 0, err
-	}
-	if err := CachedValidateJail(jail); err != nil {
-		return 0, err
-	}
-
-	// Check if jail exists
-	if err := ValidateJailExists(jail, c.Jails); err != nil {
-		return 0, err
-	}
-
-	currentRunner := GetRunner()
-	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "set", jail, "unbanip", ip)
-	if err != nil {
-		return 0, fmt.Errorf("failed to unban IP %s in jail %s: %w", ip, jail, err)
-	}
-	code := strings.TrimSpace(string(out))
-	if code == Fail2BanStatusSuccess {
-		return 0, nil
-	}
-	if code == Fail2BanStatusAlreadyProcessed {
-		return 1, nil
-	}
-	return 0, fmt.Errorf("unexpected output from fail2ban-client: %s", code)
+	return c.UnbanIPWithContext(context.Background(), ip, jail)
 }
 
 // BannedIn returns a list of jails where the specified IP address is currently banned.
 func (c *RealClient) BannedIn(ip string) ([]string, error) {
-	if err := CachedValidateIP(ip); err != nil {
-		return nil, err
-	}
-
-	currentRunner := GetRunner()
-	out, err := currentRunner.CombinedOutputWithSudo(c.Path, "banned", ip)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check if IP %s is banned: %w", ip, err)
-	}
-	return ParseBracketedList(string(out)), nil
+	return c.BannedInWithContext(context.Background(), ip)
 }
 
 // GetBanRecords retrieves ban records for the specified jails.
@@ -477,15 +370,13 @@ func (c *RealClient) GetBanRecords(jails []string) ([]BanRecord, error) {
 // getBanRecordsInternal is the internal implementation with context support
 func (c *RealClient) getBanRecordsInternal(ctx context.Context, jails []string) ([]BanRecord, error) {
 	var toQuery []string
-	if len(jails) == 1 && (jails[0] == AllFilter || jails[0] == "") {
+	if len(jails) == 1 && (jails[0] == shared.AllFilter || jails[0] == "") {
 		toQuery = c.Jails
 	} else {
 		toQuery = jails
 	}
 
-	globalRunnerManager.mu.RLock()
-	currentRunner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
+	currentRunner := GetRunner()
 
 	// Use parallel processing for multiple jails
 	allRecords, err := ProcessJailsParallel(
@@ -495,14 +386,14 @@ func (c *RealClient) getBanRecordsInternal(ctx context.Context, jails []string) 
 			out, err := currentRunner.CombinedOutputWithSudoContext(
 				operationCtx,
 				c.Path,
-				"get",
+				shared.ActionGet,
 				jail,
-				"banip",
+				shared.ActionBanIP,
 				"--with-time",
 			)
 			if err != nil {
 				// Log error but continue processing (backward compatibility)
-				getLogger().WithError(err).WithField("jail", jail).
+				getLogger().WithError(err).WithField(string(shared.ContextKeyJail), jail).
 					Warn("Failed to get ban records for jail")
 				return []BanRecord{}, nil // Return empty slice instead of error (original behavior)
 			}
@@ -532,60 +423,29 @@ func (c *RealClient) getBanRecordsInternal(ctx context.Context, jails []string) 
 
 // GetLogLines retrieves log lines related to an IP address from the specified jail.
 func (c *RealClient) GetLogLines(jail, ip string) ([]string, error) {
-	return c.GetLogLinesWithLimit(jail, ip, DefaultLogLinesLimit)
+	return c.GetLogLinesWithLimit(jail, ip, shared.DefaultLogLinesLimit)
 }
 
 // GetLogLinesWithLimit returns log lines with configurable limits for memory management.
 func (c *RealClient) GetLogLinesWithLimit(jail, ip string, maxLines int) ([]string, error) {
-	pattern := filepath.Join(c.LogDir, "fail2ban.log*")
-	files, err := filepath.Glob(pattern)
-	if err != nil {
-		return nil, err
-	}
+	return c.GetLogLinesWithLimitContext(context.Background(), jail, ip, maxLines)
+}
 
-	if len(files) == 0 {
+// GetLogLinesWithLimitContext returns log lines with configurable limits and context support.
+func (c *RealClient) GetLogLinesWithLimitContext(ctx context.Context, jail, ip string, maxLines int) ([]string, error) {
+	if maxLines == 0 {
 		return []string{}, nil
 	}
 
-	// Sort files to read in order (current log first, then rotated logs newest to oldest)
-	sort.Strings(files)
-
-	// Use streaming approach with memory limits
 	config := LogReadConfig{
 		MaxLines:    maxLines,
-		MaxFileSize: DefaultMaxFileSize,
+		MaxFileSize: shared.DefaultMaxFileSize,
 		JailFilter:  jail,
 		IPFilter:    ip,
+		BaseDir:     c.LogDir,
 	}
 
-	var allLines []string
-	totalLines := 0
-
-	for _, fpath := range files {
-		if config.MaxLines > 0 && totalLines >= config.MaxLines {
-			break
-		}
-
-		// Adjust remaining lines limit
-		remainingLines := config.MaxLines - totalLines
-		if remainingLines <= 0 {
-			break
-		}
-
-		fileConfig := config
-		fileConfig.MaxLines = remainingLines
-
-		lines, err := streamLogFile(fpath, fileConfig)
-		if err != nil {
-			getLogger().WithError(err).WithField("file", fpath).Error("Failed to read log file")
-			continue
-		}
-
-		allLines = append(allLines, lines...)
-		totalLines += len(lines)
-	}
-
-	return allLines, nil
+	return collectLogLines(ctx, c.LogDir, config)
 }
 
 // ListFilters returns a list of available fail2ban filter files.
@@ -597,8 +457,8 @@ func (c *RealClient) ListFilters() ([]string, error) {
 	filters := []string{}
 	for _, entry := range entries {
 		name := entry.Name()
-		if strings.HasSuffix(name, ".conf") {
-			filters = append(filters, strings.TrimSuffix(name, ".conf"))
+		if strings.HasSuffix(name, shared.ConfExtension) {
+			filters = append(filters, strings.TrimSuffix(name, shared.ConfExtension))
 		}
 	}
 	return filters, nil
@@ -613,89 +473,86 @@ func (c *RealClient) ListJailsWithContext(ctx context.Context) ([]string, error)
 
 // StatusAllWithContext returns the status of all fail2ban jails with context support.
 func (c *RealClient) StatusAllWithContext(ctx context.Context) (string, error) {
-	globalRunnerManager.mu.RLock()
-	currentRunner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
+	currentRunner := GetRunner()
 
-	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, c.Path, "status")
+	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, c.Path, shared.CommandArgStatus)
 	return string(out), err
 }
 
 // StatusJailWithContext returns the status of a specific fail2ban jail with context support.
 func (c *RealClient) StatusJailWithContext(ctx context.Context, jail string) (string, error) {
-	globalRunnerManager.mu.RLock()
-	currentRunner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
+	currentRunner := GetRunner()
 
-	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, c.Path, "status", jail)
+	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, c.Path, shared.CommandArgStatus, jail)
 	return string(out), err
 }
 
 // BanIPWithContext bans an IP address in the specified jail with context support.
 func (c *RealClient) BanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
-	if err := CachedValidateIP(ip); err != nil {
+	if err := CachedValidateIP(ctx, ip); err != nil {
 		return 0, err
 	}
-	if err := CachedValidateJail(jail); err != nil {
+	if err := CachedValidateJail(ctx, jail); err != nil {
 		return 0, err
 	}
 
-	globalRunnerManager.mu.RLock()
-	currentRunner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
+	currentRunner := GetRunner()
 
-	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, c.Path, "set", jail, "banip", ip)
+	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, c.Path, shared.ActionSet, jail, shared.ActionBanIP, ip)
 	if err != nil {
-		return 0, fmt.Errorf("failed to ban IP %s in jail %s: %w", ip, jail, err)
+		return 0, fmt.Errorf(shared.ErrFailedToBanIP, ip, jail, err)
 	}
 	code := strings.TrimSpace(string(out))
-	if code == Fail2BanStatusSuccess {
+	if code == shared.Fail2BanStatusSuccess {
 		return 0, nil
 	}
-	if code == Fail2BanStatusAlreadyProcessed {
+	if code == shared.Fail2BanStatusAlreadyProcessed {
 		return 1, nil
 	}
-	return 0, fmt.Errorf("unexpected output from fail2ban-client: %s", code)
+	return 0, fmt.Errorf(shared.ErrUnexpectedOutput, code)
 }
 
 // UnbanIPWithContext unbans an IP address from the specified jail with context support.
 func (c *RealClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
-	if err := CachedValidateIP(ip); err != nil {
+	if err := CachedValidateIP(ctx, ip); err != nil {
 		return 0, err
 	}
-	if err := CachedValidateJail(jail); err != nil {
+	if err := CachedValidateJail(ctx, jail); err != nil {
 		return 0, err
 	}
 
-	globalRunnerManager.mu.RLock()
-	currentRunner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
+	currentRunner := GetRunner()
 
-	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, c.Path, "set", jail, "unbanip", ip)
+	out, err := currentRunner.CombinedOutputWithSudoContext(
+		ctx,
+		c.Path,
+		shared.ActionSet,
+		jail,
+		shared.ActionUnbanIP,
+		ip,
+	)
 	if err != nil {
-		return 0, fmt.Errorf("failed to unban IP %s in jail %s: %w", ip, jail, err)
+		return 0, fmt.Errorf(shared.ErrFailedToUnbanIP, ip, jail, err)
 	}
 	code := strings.TrimSpace(string(out))
-	if code == Fail2BanStatusSuccess {
+	if code == shared.Fail2BanStatusSuccess {
 		return 0, nil
 	}
-	if code == Fail2BanStatusAlreadyProcessed {
+	if code == shared.Fail2BanStatusAlreadyProcessed {
 		return 1, nil
 	}
-	return 0, fmt.Errorf("unexpected output from fail2ban-client: %s", code)
+	return 0, fmt.Errorf(shared.ErrUnexpectedOutput, code)
 }
 
 // BannedInWithContext returns a list of jails where the specified IP address is currently banned with context support.
 func (c *RealClient) BannedInWithContext(ctx context.Context, ip string) ([]string, error) {
-	if err := CachedValidateIP(ip); err != nil {
+	if err := CachedValidateIP(ctx, ip); err != nil {
 		return nil, err
 	}
 
-	globalRunnerManager.mu.RLock()
-	currentRunner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
+	currentRunner := GetRunner()
 
-	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, c.Path, "banned", ip)
+	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, c.Path, shared.ActionBanned, ip)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get banned status for IP %s: %w", ip, err)
 	}
@@ -709,7 +566,7 @@ func (c *RealClient) GetBanRecordsWithContext(ctx context.Context, jails []strin
 
 // GetLogLinesWithContext retrieves log lines related to an IP address from the specified jail with context support.
 func (c *RealClient) GetLogLinesWithContext(ctx context.Context, jail, ip string) ([]string, error) {
-	return c.GetLogLinesWithLimitAndContext(ctx, jail, ip, DefaultLogLinesLimit)
+	return c.GetLogLinesWithLimitAndContext(ctx, jail, ip, shared.DefaultLogLinesLimit)
 }
 
 // GetLogLinesWithLimitAndContext returns log lines with configurable limits
@@ -719,72 +576,23 @@ func (c *RealClient) GetLogLinesWithLimitAndContext(
 	jail, ip string,
 	maxLines int,
 ) ([]string, error) {
-	// Check context before starting
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	default:
-	}
-
-	pattern := filepath.Join(c.LogDir, "fail2ban.log*")
-	files, err := filepath.Glob(pattern)
-	if err != nil {
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 
-	if len(files) == 0 {
+	if maxLines == 0 {
 		return []string{}, nil
 	}
 
-	// Sort files to read in order (current log first, then rotated logs newest to oldest)
-	sort.Strings(files)
-
-	// Use streaming approach with memory limits and context support
 	config := LogReadConfig{
 		MaxLines:    maxLines,
-		MaxFileSize: DefaultMaxFileSize,
+		MaxFileSize: shared.DefaultMaxFileSize,
 		JailFilter:  jail,
 		IPFilter:    ip,
+		BaseDir:     c.LogDir,
 	}
 
-	var allLines []string
-	totalLines := 0
-
-	for _, fpath := range files {
-		// Check context before processing each file
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-		}
-
-		if config.MaxLines > 0 && totalLines >= config.MaxLines {
-			break
-		}
-
-		// Adjust remaining lines limit
-		remainingLines := config.MaxLines - totalLines
-		if remainingLines <= 0 {
-			break
-		}
-
-		fileConfig := config
-		fileConfig.MaxLines = remainingLines
-
-		lines, err := streamLogFileWithContext(ctx, fpath, fileConfig)
-		if err != nil {
-			if errors.Is(err, ctx.Err()) {
-				return nil, err // Return context error immediately
-			}
-			getLogger().WithError(err).WithField("file", fpath).Error("Failed to read log file")
-			continue
-		}
-
-		allLines = append(allLines, lines...)
-		totalLines += len(lines)
-	}
-
-	return allLines, nil
+	return collectLogLines(ctx, c.LogDir, config)
 }
 
 // ListFiltersWithContext returns a list of available fail2ban filter files with context support.
@@ -793,8 +601,8 @@ func (c *RealClient) ListFiltersWithContext(ctx context.Context) ([]string, erro
 }
 
 // validateFilterPath validates filter name and returns secure path and log path
-func (c *RealClient) validateFilterPath(filter string) (string, string, error) {
-	if err := CachedValidateFilter(filter); err != nil {
+func (c *RealClient) validateFilterPath(ctx context.Context, filter string) (string, string, error) {
+	if err := CachedValidateFilter(ctx, filter); err != nil {
 		return "", "", err
 	}
 	path := filepath.Join(c.FilterDir, filter+".conf")
@@ -807,7 +615,7 @@ func (c *RealClient) validateFilterPath(filter string) (string, string, error) {
 
 	cleanFilterDir, err := filepath.Abs(filepath.Clean(c.FilterDir))
 	if err != nil {
-		return "", "", fmt.Errorf("invalid filter directory: %w", err)
+		return "", "", fmt.Errorf(shared.ErrInvalidFilterDirectory, err)
 	}
 
 	// Ensure the resolved path is within the filter directory
@@ -843,30 +651,18 @@ func (c *RealClient) validateFilterPath(filter string) (string, string, error) {
 
 // TestFilterWithContext tests a fail2ban filter against its configured log files with context support.
 func (c *RealClient) TestFilterWithContext(ctx context.Context, filter string) (string, error) {
-	cleanPath, logPath, err := c.validateFilterPath(filter)
+	cleanPath, logPath, err := c.validateFilterPath(ctx, filter)
 	if err != nil {
 		return "", err
 	}
 
-	globalRunnerManager.mu.RLock()
-	currentRunner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
+	currentRunner := GetRunner()
 
-	output, err := currentRunner.CombinedOutputWithSudoContext(ctx, Fail2BanRegexCommand, logPath, cleanPath)
+	output, err := currentRunner.CombinedOutputWithSudoContext(ctx, shared.Fail2BanRegexCommand, logPath, cleanPath)
 	return string(output), err
 }
 
 // TestFilter tests a fail2ban filter against its configured log files and returns the test output.
 func (c *RealClient) TestFilter(filter string) (string, error) {
-	cleanPath, logPath, err := c.validateFilterPath(filter)
-	if err != nil {
-		return "", err
-	}
-
-	globalRunnerManager.mu.RLock()
-	currentRunner := globalRunnerManager.runner
-	globalRunnerManager.mu.RUnlock()
-
-	output, err := currentRunner.CombinedOutputWithSudo(Fail2BanRegexCommand, logPath, cleanPath)
-	return string(output), err
+	return c.TestFilterWithContext(context.Background(), filter)
 }

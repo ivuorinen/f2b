@@ -1,23 +1,27 @@
+// Package cmd provides output formatting and display utilities for the f2b CLI.
+// This package handles structured output in both plain text and JSON formats,
+// supporting consistent CLI output patterns across all commands.
 package cmd
 
 import (
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/shared"
 )
 
 const (
 	// JSONFormat represents the JSON output format
 	JSONFormat = "json"
+	// PlainFormat represents the plain text output format
+	PlainFormat = "plain"
 )
 
 // Logger is the global logger for the CLI.
@@ -37,49 +41,25 @@ func init() {
 // configureCIFriendlyLogging sets appropriate log levels for CI/test environments
 func configureCIFriendlyLogging() {
 	// Detect CI environments by checking common CI environment variables
-	ciEnvVars := []string{
-		"CI",             // Generic CI indicator
-		"GITHUB_ACTIONS", // GitHub Actions
-		"TRAVIS",         // Travis CI
-		"CIRCLECI",       // Circle CI
-		"JENKINS_URL",    // Jenkins
-		"BUILDKITE",      // Buildkite
-		"TF_BUILD",       // Azure DevOps
-		"GITLAB_CI",      // GitLab CI
-	}
-
-	isCI := false
-	for _, envVar := range ciEnvVars {
-		if os.Getenv(envVar) != "" {
-			isCI = true
-			break
-		}
-	}
-
-	// Also check if we're in test mode
-	isTest := strings.Contains(os.Args[0], ".test") ||
-		os.Getenv("GO_TEST") == "true" ||
-		flag.Lookup("test.v") != nil
-
 	// If in CI or test environment, reduce logging noise unless explicitly overridden
-	if (isCI || isTest) && os.Getenv("F2B_LOG_LEVEL") == "" && os.Getenv("F2B_VERBOSE_TESTS") == "" {
+	if (IsCI() || IsTestEnvironment()) && os.Getenv("F2B_LOG_LEVEL") == "" && os.Getenv("F2B_VERBOSE_TESTS") == "" {
 		// Set both the cmd.Logger and global logrus to error level
 		Logger.SetLevel(logrus.ErrorLevel)
 		logrus.SetLevel(logrus.ErrorLevel)
 	}
 }
 
-// PrintOutput prints data to stdout in the specified format ("plain" or "json").
+// PrintOutput prints data to stdout in the specified format (PlainFormat or JSONFormat).
 func PrintOutput(data interface{}, format string) {
 	switch format {
 	case JSONFormat:
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(data); err != nil {
-			Logger.WithError(err).Error("Failed to encode JSON output")
+			Logger.WithError(err).Error(shared.MsgFailedToEncodeJSON)
 			// Fallback to plain text output
 			if _, printErr := fmt.Fprintln(os.Stdout, data); printErr != nil {
-				Logger.WithError(printErr).Error("Failed to write fallback output")
+				Logger.WithError(printErr).Error(shared.MsgFailedToWriteOutput)
 			}
 		}
 	default:
@@ -94,10 +74,10 @@ func PrintOutputTo(w io.Writer, data interface{}, format string) {
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(data); err != nil {
-			Logger.WithError(err).Error("Failed to encode JSON output")
+			Logger.WithError(err).Error(shared.MsgFailedToEncodeJSON)
 			// Fallback to plain text output
 			if _, printErr := fmt.Fprintln(w, data); printErr != nil {
-				Logger.WithError(printErr).Error("Failed to write fallback output")
+				Logger.WithError(printErr).Error(shared.MsgFailedToWriteOutput)
 			}
 		}
 	default:
@@ -119,15 +99,15 @@ func PrintError(err error) {
 		Logger.WithFields(map[string]interface{}{
 			"error":    err.Error(),
 			"category": string(contextErr.GetCategory()),
-		}).Error("Command failed")
+		}).Error(shared.MsgCommandFailed)
 
-		fmt.Fprintln(os.Stderr, "Error:", err)
+		fmt.Fprintln(os.Stderr, shared.ErrorPrefix, err)
 		if remediation := contextErr.GetRemediation(); remediation != "" {
 			fmt.Fprintln(os.Stderr, "Hint:", remediation)
 		}
 	} else {
-		Logger.WithError(err).Error("Command failed")
-		fmt.Fprintln(os.Stderr, "Error:", err)
+		Logger.WithError(err).Error(shared.MsgCommandFailed)
+		fmt.Fprintln(os.Stderr, shared.ErrorPrefix, err)
 	}
 }
 
@@ -135,7 +115,7 @@ func PrintError(err error) {
 func PrintErrorf(format string, args ...interface{}) {
 	msg := fmt.Sprintf(format, args...)
 	Logger.Error(msg)
-	fmt.Fprintln(os.Stderr, "Error:", msg)
+	fmt.Fprintln(os.Stderr, shared.ErrorPrefix, msg)
 }
 
 // GetCmdOutput returns the command's output writer if available, otherwise os.Stdout

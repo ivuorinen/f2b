@@ -36,7 +36,7 @@ func TestPathTraversalDetection(t *testing.T) {
 
 	for _, maliciousPath := range maliciousPaths {
 		t.Run("malicious_path", func(t *testing.T) {
-			_, err := validatePathWithSecurity(maliciousPath, config)
+			_, err := ValidatePathWithSecurity(maliciousPath, config)
 			if err == nil {
 				t.Errorf("expected error for malicious path %q, but validation passed", maliciousPath)
 			}
@@ -71,7 +71,7 @@ func TestValidPaths(t *testing.T) {
 
 	for _, validPath := range validPaths {
 		t.Run("valid_path", func(t *testing.T) {
-			result, err := validatePathWithSecurity(validPath, config)
+			result, err := ValidatePathWithSecurity(validPath, config)
 			if err != nil {
 				t.Errorf("expected valid path %q to pass validation, got error: %v", validPath, err)
 			}
@@ -112,7 +112,7 @@ func TestSymlinkHandling(t *testing.T) {
 		ResolveSymlinks:  true,
 	}
 
-	_, err := validatePathWithSecurity(symlinkPath, configNoSymlinks)
+	_, err := ValidatePathWithSecurity(symlinkPath, configNoSymlinks)
 	if err == nil {
 		t.Error("expected error for symlink when symlinks are disabled")
 	}
@@ -125,7 +125,7 @@ func TestSymlinkHandling(t *testing.T) {
 		ResolveSymlinks:  true,
 	}
 
-	_, err = validatePathWithSecurity(symlinkPath, configWithSymlinks)
+	_, err = ValidatePathWithSecurity(symlinkPath, configWithSymlinks)
 	if err == nil {
 		t.Error("expected error for symlink pointing outside allowed directory")
 	}
@@ -227,7 +227,7 @@ func TestPathLengthLimits(t *testing.T) {
 		ResolveSymlinks:  true,
 	}
 
-	_, err := validatePathWithSecurity(normalPath, config)
+	_, err := ValidatePathWithSecurity(normalPath, config)
 	if err != nil {
 		t.Errorf("normal length path should pass: %v", err)
 	}
@@ -236,7 +236,7 @@ func TestPathLengthLimits(t *testing.T) {
 	longName := strings.Repeat("a", 5000)
 	longPath := filepath.Join(tempDir, longName)
 
-	_, err = validatePathWithSecurity(longPath, config)
+	_, err = ValidatePathWithSecurity(longPath, config)
 	if err == nil {
 		t.Error("extremely long path should fail validation")
 	}
@@ -342,7 +342,7 @@ func BenchmarkPathValidation(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, err := validatePathWithSecurity(testPath, config)
+		_, err := ValidatePathWithSecurity(testPath, config)
 		if err != nil {
 			b.Fatalf("unexpected error: %v", err)
 		}

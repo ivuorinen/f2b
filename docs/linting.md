@@ -10,7 +10,7 @@ CI, and pre-commit hooks.
 ### Supported Tools
 
 - **Go**: `gofmt`, `go-build-mod`, `go-mod-tidy`, `golangci-lint`
-- **Markdown**: `markdownlint-cli2`
+- **Markdown**: `markdownlint`
 - **YAML**: `yamlfmt` (Google's YAML formatter)
 - **GitHub Actions**: `actionlint`
 - **EditorConfig**: `editorconfig-checker`
@@ -54,7 +54,7 @@ make lint-fix
 # Run specific hook
 pre-commit run yamlfmt --all-files
 pre-commit run golangci-lint --all-files
-pre-commit run markdownlint-cli2 --all-files
+pre-commit run markdownlint --all-files
 pre-commit run checkmake --all-files
 ```
 
@@ -108,14 +108,14 @@ make lint-make         # Makefile only
 
 ### Markdown Linting
 
-#### markdownlint-cli2 (local hook)
+#### markdownlint (local hook)
 
 - **Purpose**: Markdown formatting and style consistency
 - **Configuration**: `.markdownlint.json`
 - **Key rules**:
   - Line length limit: 120 characters
   - Disabled: HTML tags, bare URLs, first-line heading requirement
-- **Hook**: `markdownlint-cli2`
+- **Hook**: `markdownlint`
 
 ### YAML Linting
 

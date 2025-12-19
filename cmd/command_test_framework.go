@@ -1,3 +1,6 @@
+// Package cmd provides a comprehensive testing framework for CLI commands.
+// This package offers fluent testing utilities, mock builders, and standardized
+// test patterns to ensure robust testing of f2b command functionality.
 package cmd
 
 import (
@@ -10,6 +13,8 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"github.com/ivuorinen/f2b/shared"
 
 	"github.com/ivuorinen/f2b/fail2ban"
 )
@@ -73,12 +78,9 @@ func (env *TestEnvironment) WithMockRunner() *TestEnvironment {
 	env.originalRunner = fail2ban.GetRunner()
 	mockRunner := fail2ban.NewMockRunner()
 	// Set up common responses
-	mockRunner.SetResponse("fail2ban-client -V", []byte("fail2ban-client v0.11.2"))
-	mockRunner.SetResponse("fail2ban-client ping", []byte("pong"))
-	mockRunner.SetResponse(
-		"fail2ban-client status",
-		[]byte("Status\n|- Number of jail:\t2\n`- Jail list:\tsshd, apache"),
-	)
+	mockRunner.SetResponse(shared.MockCommandVersion, []byte(shared.VersionOutput))
+	mockRunner.SetResponse(shared.MockCommandPing, []byte(shared.PingOutput))
+	mockRunner.SetResponse(shared.MockCommandStatus, []byte(shared.StatusOutput))
 	mockRunner.SetResponse("sudo service fail2ban status", []byte("● fail2ban.service - Fail2Ban Service"))
 	fail2ban.SetRunner(mockRunner)
 
@@ -146,7 +148,11 @@ func NewCommandTest(t *testing.T, commandName string) *CommandTestBuilder {
 		name:    commandName,
 		command: commandName,
 		args:    make([]string, 0),
-		config:  &Config{Format: "plain"},
+		config: &Config{
+			Format:         PlainFormat,
+			CommandTimeout: shared.DefaultCommandTimeout,
+			FileTimeout:    shared.DefaultFileTimeout,
+		},
 	}
 }
 
@@ -285,7 +291,7 @@ func (ctb *CommandTestBuilder) executeCommand() (string, error) {
 		cmd = UnbanCmd(ctb.mockClient, ctb.config)
 	case "status":
 		cmd = StatusCmd(ctb.mockClient, ctb.config)
-	case "list-jails":
+	case shared.CLICmdListJails:
 		cmd = ListJailsCmd(ctb.mockClient, ctb.config)
 	case "banned":
 		cmd = BannedCmd(ctb.mockClient, ctb.config)
@@ -293,16 +299,16 @@ func (ctb *CommandTestBuilder) executeCommand() (string, error) {
 		cmd = TestIPCmd(ctb.mockClient, ctb.config)
 	case "logs":
 		cmd = LogsCmd(ctb.mockClient, ctb.config)
-	case "service":
+	case shared.ServiceCommand:
 		cmd = ServiceCmd(ctb.config)
-	case "version":
+	case shared.CLICmdVersion:
 		cmd = VersionCmd(ctb.config)
 	default:
 		return "", fmt.Errorf("unknown command: %s", ctb.command)
 	}
 
 	// For service commands, we need to capture os.Stdout since PrintOutput writes directly to it
-	if ctb.command == "service" {
+	if ctb.command == shared.ServiceCommand {
 		return ctb.executeServiceCommand(cmd)
 	}
 
@@ -377,10 +383,10 @@ func (ctb *CommandTestBuilder) executeServiceCommand(cmd *cobra.Command) (string
 func (result *CommandTestResult) AssertError(expectError bool) *CommandTestResult {
 	result.t.Helper()
 	if expectError && result.Error == nil {
-		result.t.Fatalf("%s: expected error but got none", result.name)
+		result.t.Fatalf(shared.ErrTestExpectedError, result.name)
 	}
 	if !expectError && result.Error != nil {
-		result.t.Fatalf("%s: unexpected error: %v, output: %s", result.name, result.Error, result.Output)
+		result.t.Fatalf(shared.ErrTestUnexpectedWithOutput, result.name, result.Error, result.Output)
 	}
 	return result
 }
@@ -389,7 +395,7 @@ func (result *CommandTestResult) AssertError(expectError bool) *CommandTestResul
 func (result *CommandTestResult) AssertContains(expected string) *CommandTestResult {
 	result.t.Helper()
 	if !strings.Contains(result.Output, expected) {
-		result.t.Fatalf("%s: expected output to contain %q, got: %s", result.name, expected, result.Output)
+		result.t.Fatalf(shared.ErrTestExpectedOutput, result.name, expected, result.Output)
 	}
 	return result
 }
@@ -429,7 +435,7 @@ func (result *CommandTestResult) AssertJSONField(fieldPath, expected string) *Co
 	case map[string]interface{}:
 		if val, ok := v[fieldName]; ok {
 			if fmt.Sprintf("%v", val) != expected {
-				result.t.Fatalf("%s: expected JSON field %q to be %q, got %v", result.name, fieldName, expected, val)
+				result.t.Fatalf(shared.ErrTestJSONFieldMismatch, result.name, fieldName, expected, val)
 			}
 		} else {
 			result.t.Fatalf("%s: JSON field %q not found in output: %s", result.name, fieldName, result.Output)
@@ -440,7 +446,7 @@ func (result *CommandTestResult) AssertJSONField(fieldPath, expected string) *Co
 			if firstItem, ok := v[0].(map[string]interface{}); ok {
 				if val, ok := firstItem[fieldName]; ok {
 					if fmt.Sprintf("%v", val) != expected {
-						result.t.Fatalf("%s: expected JSON field %q to be %q, got %v", result.name, fieldName, expected, val)
+						result.t.Fatalf(shared.ErrTestJSONFieldMismatch, result.name, fieldName, expected, val)
 					}
 				} else {
 					result.t.Fatalf("%s: JSON field %q not found in first array element: %s", result.name, fieldName, result.Output)
@@ -534,7 +540,7 @@ func (b *MockClientBuilder) WithStatusResponse(target, response string) *MockCli
 	if b.client.StatusJailData == nil {
 		b.client.StatusJailData = make(map[string]string)
 	}
-	if target == "all" {
+	if target == shared.AllFilter {
 		b.client.StatusAllData = response
 	} else {
 		b.client.StatusJailData[target] = response

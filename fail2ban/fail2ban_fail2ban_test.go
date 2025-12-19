@@ -1,81 +1,17 @@
 package fail2ban
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ivuorinen/f2b/shared"
 )
-
-func TestNewClient(t *testing.T) {
-	tests := []struct {
-		name          string
-		hasPrivileges bool
-		expectError   bool
-		errorContains string
-	}{
-		{
-			name:          "with sudo privileges",
-			hasPrivileges: true,
-			expectError:   false,
-		},
-		{
-			name:          "without sudo privileges",
-			hasPrivileges: false,
-			expectError:   true,
-			errorContains: "fail2ban operations require sudo privileges",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Set environment variable to force sudo checking in tests
-			t.Setenv("F2B_TEST_SUDO", "true")
-
-			// Set up mock environment
-			_, cleanup := SetupMockEnvironmentWithSudo(t, tt.hasPrivileges)
-			defer cleanup()
-
-			// Get the mock runner that was set up
-			mockRunner := GetRunner().(*MockRunner)
-			if tt.hasPrivileges {
-				mockRunner.SetResponse("fail2ban-client -V", []byte("0.11.2"))
-				mockRunner.SetResponse("sudo fail2ban-client -V", []byte("0.11.2"))
-				mockRunner.SetResponse("fail2ban-client ping", []byte("pong"))
-				mockRunner.SetResponse("sudo fail2ban-client ping", []byte("pong"))
-				mockRunner.SetResponse(
-					"fail2ban-client status",
-					[]byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"),
-				)
-				mockRunner.SetResponse(
-					"sudo fail2ban-client status",
-					[]byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"),
-				)
-			} else {
-				// For unprivileged tests, set up basic responses for non-sudo commands
-				mockRunner.SetResponse("fail2ban-client -V", []byte("0.11.2"))
-				mockRunner.SetResponse("fail2ban-client ping", []byte("pong"))
-				mockRunner.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-			}
-
-			client, err := NewClient(DefaultLogDir, DefaultFilterDir)
-
-			AssertError(t, err, tt.expectError, tt.name)
-			if tt.expectError {
-				if tt.errorContains != "" && err != nil && !strings.Contains(err.Error(), tt.errorContains) {
-					t.Errorf("expected error to contain %q, got %q", tt.errorContains, err.Error())
-				}
-				return
-			}
-
-			if client == nil {
-				t.Fatal("expected client to be non-nil")
-			}
-		})
-	}
-}
 
 func TestListJails(t *testing.T) {
 	tests := []struct {
@@ -128,12 +64,12 @@ func TestListJails(t *testing.T) {
 
 			if tt.expectError {
 				// For error cases, we expect NewClient to fail
-				_, err := NewClient(DefaultLogDir, DefaultFilterDir)
+				_, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
 				AssertError(t, err, true, tt.name)
 				return
 			}
 
-			client, err := NewClient(DefaultLogDir, DefaultFilterDir)
+			client, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
 			AssertError(t, err, false, "create client")
 
 			jails, err := client.ListJails()
@@ -163,7 +99,7 @@ func TestStatusAll(t *testing.T) {
 	mock.SetResponse("fail2ban-client status", []byte(expectedOutput))
 	mock.SetResponse("sudo fail2ban-client status", []byte(expectedOutput))
 
-	client, err := NewClient(DefaultLogDir, DefaultFilterDir)
+	client, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
 	AssertError(t, err, false, "create client")
 
 	output, err := client.StatusAll()
@@ -186,7 +122,7 @@ func TestStatusJail(t *testing.T) {
 	mock.SetResponse("fail2ban-client status sshd", []byte(expectedOutput))
 	mock.SetResponse("sudo fail2ban-client status sshd", []byte(expectedOutput))
 
-	client, err := NewClient(DefaultLogDir, DefaultFilterDir)
+	client, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
 	AssertError(t, err, false, "create client")
 
 	output, err := client.StatusJail("sshd")
@@ -249,7 +185,7 @@ func TestBanIP(t *testing.T) {
 				mock.SetResponse(fmt.Sprintf("sudo fail2ban-client set %s banip %s", tt.jail, tt.ip), []byte(tt.mockResponse))
 			}
 
-			client, err := NewClient(DefaultLogDir, DefaultFilterDir)
+			client, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
 			AssertError(t, err, false, "create client")
 
 			code, err := client.BanIP(tt.ip, tt.jail)
@@ -306,7 +242,7 @@ func TestUnbanIP(t *testing.T) {
 				[]byte(tt.mockResponse),
 			)
 
-			client, err := NewClient(DefaultLogDir, DefaultFilterDir)
+			client, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
 			AssertError(t, err, false, "create client")
 
 			code, err := client.UnbanIP(tt.ip, tt.jail)
@@ -372,7 +308,7 @@ func TestBannedIn(t *testing.T) {
 			mock.SetResponse(fmt.Sprintf("fail2ban-client banned %s", tt.ip), []byte(tt.mockResponse))
 			mock.SetResponse(fmt.Sprintf("sudo fail2ban-client banned %s", tt.ip), []byte(tt.mockResponse))
 
-			client, err := NewClient(DefaultLogDir, DefaultFilterDir)
+			client, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
 			AssertError(t, err, false, "create client")
 
 			jails, err := client.BannedIn(tt.ip)
@@ -410,7 +346,7 @@ func TestGetBanRecords(t *testing.T) {
 		unbanTime.Format("2006-01-02 15:04:05"))
 	mock.SetResponse("sudo fail2ban-client get sshd banip --with-time", []byte(mockBanOutput))
 
-	client, err := NewClient(DefaultLogDir, DefaultFilterDir)
+	client, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
 	AssertError(t, err, false, "create client")
 
 	records, err := client.GetBanRecords([]string{"sshd"})
@@ -447,9 +383,7 @@ func TestGetLogLines(t *testing.T) {
 	}
 
 	mock := NewMockRunner()
-	mock.SetResponse("fail2ban-client -V", []byte("0.11.2"))
-	mock.SetResponse("fail2ban-client ping", []byte("pong"))
-	mock.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
+	StandardMockSetup(mock)
 	SetRunner(mock)
 
 	tests := []struct {
@@ -486,13 +420,54 @@ func TestGetLogLines(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			lines, err := GetLogLines(tt.jail, tt.ip)
+			lines, err := GetLogLines(context.Background(), tt.jail, tt.ip)
 			AssertError(t, err, false, "get log lines")
 
 			if len(lines) != tt.expectedLines {
 				t.Errorf("expected %d lines, got %d", tt.expectedLines, len(lines))
 			}
 		})
+	}
+}
+func TestGetLogLinesWithLimitPrefersRecent(t *testing.T) {
+	originalDir := GetLogDir()
+	SetLogDir(t.TempDir())
+	defer SetLogDir(originalDir)
+
+	logDir := GetLogDir()
+	oldPath := filepath.Join(logDir, "fail2ban.log.1")
+	newPath := filepath.Join(logDir, "fail2ban.log")
+
+	// Older rotated log with more entries than the requested limit
+	oldContent := "old-entry-1\nold-entry-2\nold-entry-3\n"
+	if err := os.WriteFile(oldPath, []byte(oldContent), 0o600); err != nil {
+		t.Fatalf("failed to create rotated log: %v", err)
+	}
+
+	// Current log with the most recent entries
+	newContent := "new-entry-1\nnew-entry-2\n"
+	if err := os.WriteFile(newPath, []byte(newContent), 0o600); err != nil {
+		t.Fatalf("failed to create current log: %v", err)
+	}
+
+	lines, err := GetLogLinesWithLimit(context.Background(), "", "", 2)
+	if err != nil {
+		t.Fatalf("GetLogLinesWithLimit returned error: %v", err)
+	}
+
+	expected := []string{"new-entry-1", "new-entry-2"}
+	if !reflect.DeepEqual(lines, expected) {
+		t.Fatalf("expected %v, got %v", expected, lines)
+	}
+
+	client := &RealClient{LogDir: logDir}
+	clientLines, err := client.GetLogLinesWithLimit("", "", 2)
+	if err != nil {
+		t.Fatalf("RealClient.GetLogLinesWithLimit returned error: %v", err)
+	}
+
+	if !reflect.DeepEqual(clientLines, expected) {
+		t.Fatalf("client expected %v, got %v", expected, clientLines)
 	}
 }
 
@@ -525,7 +500,7 @@ func TestListFilters(t *testing.T) {
 	SetRunner(mock)
 
 	// Create client with the temporary filter directory
-	client, err := NewClient(DefaultLogDir, filterDir)
+	client, err := NewClient(shared.DefaultLogDir, filterDir)
 	AssertError(t, err, false, "create client")
 
 	// Test ListFilters with the temporary directory
@@ -581,7 +556,7 @@ logpath = /var/log/auth.log`
 	mock.SetResponse("sudo fail2ban-regex /var/log/auth.log "+filterPath, []byte(expectedOutput))
 
 	// Create client with the temp directory as the filter directory
-	client, err := NewClient(DefaultLogDir, tempDir)
+	client, err := NewClient(shared.DefaultLogDir, tempDir)
 	AssertError(t, err, false, "create client")
 
 	// Test the actual created filter
@@ -600,52 +575,114 @@ logpath = /var/log/auth.log`
 }
 
 func TestVersionComparison(t *testing.T) {
-	// This tests the version comparison logic indirectly through NewClient
 	tests := []struct {
-		name        string
-		version     string
-		expectError bool
+		name           string
+		versionOutput  string
+		expectError    bool
+		errorSubstring string
 	}{
 		{
-			name:        "version 0.11.2 should work",
-			version:     "0.11.2",
-			expectError: false,
+			name:          "prefixed supported version",
+			versionOutput: "Fail2Ban v0.11.2",
+			expectError:   false,
 		},
 		{
-			name:        "version 0.12.0 should work",
-			version:     "0.12.0",
-			expectError: false,
+			name:          "plain supported version",
+			versionOutput: "0.12.0",
+			expectError:   false,
 		},
 		{
-			name:        "version 0.10.9 should fail",
-			version:     "0.10.9",
-			expectError: true,
+			name:           "unsupported version",
+			versionOutput:  "Fail2Ban v0.10.9",
+			expectError:    true,
+			errorSubstring: "fail2ban >=0.11.0 required",
+		},
+		{
+			name:           "unparseable version",
+			versionOutput:  "unexpected output",
+			expectError:    true,
+			errorSubstring: "failed to parse fail2ban version",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up mock environment with privileges based on expected outcome
-			_, cleanup := SetupMockEnvironmentWithSudo(t, !tt.expectError)
+			_, cleanup := SetupMockEnvironmentWithSudo(t, true)
 			defer cleanup()
 
-			// Configure specific responses for this test
 			mock := GetRunner().(*MockRunner)
-			mock.SetResponse("fail2ban-client -V", []byte(tt.version))
-			mock.SetResponse("sudo fail2ban-client -V", []byte(tt.version))
+			mock.SetResponse("fail2ban-client -V", []byte(tt.versionOutput))
+			mock.SetResponse("sudo fail2ban-client -V", []byte(tt.versionOutput))
+
 			if !tt.expectError {
 				mock.SetResponse("fail2ban-client ping", []byte("pong"))
 				mock.SetResponse("sudo fail2ban-client ping", []byte("pong"))
-				mock.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-				mock.SetResponse(
-					"sudo fail2ban-client status",
-					[]byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"),
-				)
+				statusOutput := []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd")
+				mock.SetResponse("fail2ban-client status", statusOutput)
+				mock.SetResponse("sudo fail2ban-client status", statusOutput)
 			}
 
-			_, err := NewClient(DefaultLogDir, DefaultFilterDir)
+			_, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
 
 			AssertError(t, err, tt.expectError, tt.name)
+			if tt.expectError && tt.errorSubstring != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.errorSubstring) {
+					t.Fatalf("expected error containing %q, got %v", tt.errorSubstring, err)
+				}
+			}
+		})
+	}
+}
+
+func TestExtractFail2BanVersion(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		expect    string
+		expectErr bool
+	}{
+		{
+			name:   "prefixed output",
+			input:  "Fail2Ban v0.11.2",
+			expect: "0.11.2",
+		},
+		{
+			name:   "with extra context",
+			input:  "fail2ban 0.12.0 (Python 3)",
+			expect: "0.12.0",
+		},
+		{
+			name:   "plain version",
+			input:  "0.13.1",
+			expect: "0.13.1",
+		},
+		{
+			name:   "leading v",
+			input:  "v1.0.0",
+			expect: "1.0.0",
+		},
+		{
+			name:      "invalid output",
+			input:     "not a version",
+			expectErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			version, err := ExtractFail2BanVersion(tt.input)
+			if tt.expectErr {
+				if err == nil {
+					t.Fatalf("expected error for input %q", tt.input)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error for input %q: %v", tt.input, err)
+			}
+			if version != tt.expect {
+				t.Fatalf("expected version %q, got %q", tt.expect, version)
+			}
 		})
 	}
 }

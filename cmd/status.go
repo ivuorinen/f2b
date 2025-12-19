@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/shared"
 )
 
 // StatusCmd returns the status command with injected client and config
@@ -42,7 +43,7 @@ func StatusCmd(client fail2ban.Client, config *Config) *cobra.Command {
 			}
 
 			target := strings.ToLower(args[0])
-			if target == "all" {
+			if target == shared.AllFilter {
 				out, err := client.StatusAllWithContext(ctx)
 				if err != nil {
 					return HandleClientError(err)

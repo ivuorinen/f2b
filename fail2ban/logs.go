@@ -3,14 +3,17 @@ package fail2ban
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
-	"net/url"
+	"net"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/ivuorinen/f2b/shared"
 )
 
 /*
@@ -26,18 +29,63 @@ including support for rotated and compressed logs.
 //
 // Returns a slice of matching log lines, or an error.
 // This function uses streaming to limit memory usage.
-func GetLogLines(jailFilter string, ipFilter string) ([]string, error) {
-	return GetLogLinesWithLimit(jailFilter, ipFilter, 1000) // Default limit for safety
+// Context parameter supports timeout and cancellation of file I/O operations.
+func GetLogLines(ctx context.Context, jailFilter string, ipFilter string) ([]string, error) {
+	return GetLogLinesWithLimit(ctx, jailFilter, ipFilter, shared.DefaultLogLinesLimit) // Default limit for safety
 }
 
 // GetLogLinesWithLimit returns log lines with configurable limits for memory management.
-func GetLogLinesWithLimit(jailFilter string, ipFilter string, maxLines int) ([]string, error) {
-	// Handle zero limit case - return empty slice immediately
+// Context parameter supports timeout and cancellation of file I/O operations.
+func GetLogLinesWithLimit(ctx context.Context, jailFilter string, ipFilter string, maxLines int) ([]string, error) {
+	// Validate maxLines parameter
+	if maxLines < 0 {
+		return nil, fmt.Errorf(shared.ErrMaxLinesNegative, maxLines)
+	}
+
+	if maxLines > shared.MaxLogLinesLimit {
+		return nil, fmt.Errorf(shared.ErrMaxLinesExceedsLimit, shared.MaxLogLinesLimit)
+	}
+
 	if maxLines == 0 {
 		return []string{}, nil
 	}
 
-	pattern := filepath.Join(GetLogDir(), "fail2ban.log*")
+	// Sanitize filter parameters
+	jailFilter = strings.TrimSpace(jailFilter)
+	ipFilter = strings.TrimSpace(ipFilter)
+
+	// Validate jail filter
+	if jailFilter != "" {
+		if err := ValidateJail(jailFilter); err != nil {
+			return nil, fmt.Errorf("invalid jail filter: %w", err)
+		}
+	}
+
+	// Validate IP filter
+	if ipFilter != "" && ipFilter != shared.AllFilter {
+		if net.ParseIP(ipFilter) == nil {
+			return nil, fmt.Errorf(shared.ErrInvalidIPAddress, ipFilter)
+		}
+	}
+
+	config := LogReadConfig{
+		MaxLines:    maxLines,
+		MaxFileSize: shared.DefaultMaxFileSize,
+		JailFilter:  jailFilter,
+		IPFilter:    ipFilter,
+		BaseDir:     GetLogDir(),
+	}
+
+	return collectLogLines(ctx, GetLogDir(), config)
+}
+
+// collectLogLines reads log files under the provided directory using the supplied configuration.
+func collectLogLines(ctx context.Context, logDir string, baseConfig LogReadConfig) ([]string, error) {
+	if baseConfig.MaxLines == 0 {
+		return []string{}, nil
+	}
+
+	pattern := filepath.Join(logDir, "fail2ban.log*")
 	files, err := filepath.Glob(pattern)
 	if err != nil {
 		return nil, fmt.Errorf("error listing log files: %w", err)
@@ -49,64 +97,57 @@ func GetLogLinesWithLimit(jailFilter string, ipFilter string, maxLines int) ([]s
 
 	currentLog, rotated := parseLogFiles(files)
 
-	// Use streaming approach with memory limits
-	config := LogReadConfig{
-		MaxLines:     maxLines,
-		MaxFileSize:  100 * 1024 * 1024, // 100MB file size limit
-		JailFilter:   jailFilter,
-		IPFilter:     ipFilter,
-		ReverseOrder: false,
+	var allLines []string
+
+	appendAndTrim := func(lines []string) {
+		if len(lines) == 0 {
+			return
+		}
+		allLines = append(allLines, lines...)
+		if baseConfig.MaxLines > 0 && len(allLines) > baseConfig.MaxLines {
+			allLines = allLines[len(allLines)-baseConfig.MaxLines:]
+		}
 	}
 
-	var allLines []string
-	totalLines := 0
-
-	// Read rotated logs first (oldest to newest) - maintains original ordering
 	for _, rotatedFile := range rotated {
-		if config.MaxLines > 0 && totalLines >= config.MaxLines {
-			break
-		}
-
-		// Adjust remaining lines limit (skip limit check for negative MaxLines)
-		fileConfig := config
-		if config.MaxLines > 0 {
-			remainingLines := config.MaxLines - totalLines
-			if remainingLines <= 0 {
-				break
-			}
-			fileConfig.MaxLines = remainingLines
-		}
-
-		lines, err := streamLogFile(rotatedFile.path, fileConfig)
+		fileLines, err := readLogLinesFromFile(ctx, rotatedFile.path, baseConfig)
 		if err != nil {
-			getLogger().WithError(err).WithField("file", rotatedFile.path).Error("Failed to read rotated log file")
+			if ctx != nil && errors.Is(err, ctx.Err()) {
+				return nil, err
+			}
+			getLogger().WithError(err).
+				WithField(shared.LogFieldFile, rotatedFile.path).
+				Error("Failed to read rotated log file")
 			continue
 		}
-
-		allLines = append(allLines, lines...)
-		totalLines += len(lines)
+		appendAndTrim(fileLines)
 	}
 
-	// Read current log last (most recent) - maintains original ordering
-	if currentLog != "" && (config.MaxLines <= 0 || totalLines < config.MaxLines) {
-		fileConfig := config
-		if config.MaxLines > 0 {
-			remainingLines := config.MaxLines - totalLines
-			if remainingLines <= 0 {
-				return allLines, nil
-			}
-			fileConfig.MaxLines = remainingLines
-		}
-
-		lines, err := streamLogFile(currentLog, fileConfig)
+	if currentLog != "" {
+		fileLines, err := readLogLinesFromFile(ctx, currentLog, baseConfig)
 		if err != nil {
-			getLogger().WithError(err).WithField("file", currentLog).Error("Failed to read current log file")
+			if ctx != nil && errors.Is(err, ctx.Err()) {
+				return nil, err
+			}
+			getLogger().WithError(err).
+				WithField(shared.LogFieldFile, currentLog).
+				Error("Failed to read current log file")
 		} else {
-			allLines = append(allLines, lines...)
+			appendAndTrim(fileLines)
 		}
 	}
 
 	return allLines, nil
+}
+
+func readLogLinesFromFile(ctx context.Context, path string, baseConfig LogReadConfig) ([]string, error) {
+	fileConfig := baseConfig
+	fileConfig.MaxLines = 0
+
+	if ctx != nil {
+		return streamLogFileWithContext(ctx, path, fileConfig)
+	}
+	return streamLogFile(path, fileConfig)
 }
 
 // parseLogFiles parses log file names and returns the current log and a slice of rotated logs
@@ -117,9 +158,9 @@ func parseLogFiles(files []string) (string, []rotatedLog) {
 
 	for _, path := range files {
 		base := filepath.Base(path)
-		if base == "fail2ban.log" {
+		if base == shared.LogFileName {
 			currentLog = path
-		} else if strings.HasPrefix(base, "fail2ban.log.") {
+		} else if strings.HasPrefix(base, shared.LogFilePrefix) {
 			if num := extractLogNumber(base); num >= 0 {
 				rotated = append(rotated, rotatedLog{num: num, path: path})
 			}
@@ -137,7 +178,7 @@ func parseLogFiles(files []string) (string, []rotatedLog) {
 // extractLogNumber extracts the rotation number from a log file name (e.g., "fail2ban.log.2.gz" -> 2).
 func extractLogNumber(base string) int {
 	numPart := strings.TrimPrefix(base, "fail2ban.log.")
-	numPart = strings.TrimSuffix(numPart, ".gz")
+	numPart = strings.TrimSuffix(numPart, shared.GzipExtension)
 	if n, err := strconv.Atoi(numPart); err == nil {
 		return n
 	}
@@ -152,31 +193,24 @@ type rotatedLog struct {
 
 // LogReadConfig holds configuration for streaming log reading
 type LogReadConfig struct {
-	MaxLines     int    // Maximum number of lines to read (0 = unlimited)
-	MaxFileSize  int64  // Maximum file size to process in bytes (0 = unlimited)
-	JailFilter   string // Filter by jail name (empty = no filter)
-	IPFilter     string // Filter by IP address (empty = no filter)
-	ReverseOrder bool   // Read from end of file backwards (for recent logs)
+	MaxLines    int    // Maximum number of lines to read (0 = unlimited)
+	MaxFileSize int64  // Maximum file size to process in bytes (0 = unlimited)
+	JailFilter  string // Filter by jail name (empty = no filter)
+	IPFilter    string // Filter by IP address (empty = no filter)
+	BaseDir     string // Base directory for log validation
+}
+
+// resolveBaseDir returns the base directory from config or falls back to GetLogDir()
+func resolveBaseDir(config LogReadConfig) string {
+	if config.BaseDir != "" {
+		return config.BaseDir
+	}
+	return GetLogDir()
 }
 
 // streamLogFile reads a log file line by line with memory limits and filtering
 func streamLogFile(path string, config LogReadConfig) ([]string, error) {
-	cleanPath, err := validateLogPath(path)
-	if err != nil {
-		return nil, err
-	}
-
-	if shouldSkipFile(cleanPath, config.MaxFileSize) {
-		return []string{}, nil
-	}
-
-	scanner, cleanup, err := createLogScanner(cleanPath)
-	if err != nil {
-		return nil, err
-	}
-	defer cleanup()
-
-	return scanLogLines(scanner, config)
+	return streamLogFileWithContext(context.Background(), path, config)
 }
 
 // streamLogFileWithContext reads a log file line by line with memory limits,
@@ -189,7 +223,8 @@ func streamLogFileWithContext(ctx context.Context, path string, config LogReadCo
 	default:
 	}
 
-	cleanPath, err := validateLogPath(path)
+	baseDir := resolveBaseDir(config)
+	cleanPath, err := validateLogPathForDir(ctx, path, baseDir)
 	if err != nil {
 		return nil, err
 	}
@@ -207,218 +242,13 @@ func streamLogFileWithContext(ctx context.Context, path string, config LogReadCo
 	return scanLogLinesWithContext(ctx, scanner, config)
 }
 
-// PathSecurityConfig holds configuration for path security validation
-type PathSecurityConfig struct {
-	AllowedBasePaths []string // List of allowed base directories
-	MaxPathLength    int      // Maximum allowed path length (0 = unlimited)
-	AllowSymlinks    bool     // Whether to allow symlinks
-	ResolveSymlinks  bool     // Whether to resolve symlinks before validation
-}
-
 // validateLogPath validates and sanitizes the log file path with comprehensive security checks
 func validateLogPath(path string) (string, error) {
-	config := PathSecurityConfig{
-		AllowedBasePaths: []string{GetLogDir()}, // Use configured log directory
-		MaxPathLength:    4096,                  // Reasonable path length limit
-		AllowSymlinks:    false,                 // Disable symlinks for security
-		ResolveSymlinks:  true,                  // Resolve symlinks before validation
-	}
-
-	return validatePathWithSecurity(path, config)
+	return validateLogPathForDir(context.Background(), path, GetLogDir())
 }
 
-// validatePathWithSecurity performs comprehensive path security validation
-func validatePathWithSecurity(path string, config PathSecurityConfig) (string, error) {
-	if path == "" {
-		return "", fmt.Errorf("empty path not allowed")
-	}
-
-	// Check path length limits
-	if config.MaxPathLength > 0 && len(path) > config.MaxPathLength {
-		return "", fmt.Errorf("path too long: %d characters (max: %d)", len(path), config.MaxPathLength)
-	}
-
-	// Detect and prevent null byte injection
-	if strings.Contains(path, "\x00") {
-		return "", fmt.Errorf("path contains null byte")
-	}
-
-	// Decode URL-encoded path traversal attempts
-	if decodedPath, err := url.QueryUnescape(path); err == nil && decodedPath != path {
-		getLogger().WithField("original", path).WithField("decoded", decodedPath).
-			Warn("Detected URL-encoded path, using decoded version for validation")
-		path = decodedPath
-	}
-
-	// Normalize unicode characters to prevent bypass attempts
-	path = normalizeUnicode(path)
-
-	// Basic path traversal detection (before cleaning)
-	if hasPathTraversal(path) {
-		return "", fmt.Errorf("path contains path traversal patterns")
-	}
-
-	// Clean and resolve the path
-	cleanPath, err := filepath.Abs(filepath.Clean(path))
-	if err != nil {
-		return "", fmt.Errorf("invalid path: %w", err)
-	}
-
-	// Additional check after cleaning (double-check for sophisticated attacks)
-	if hasPathTraversal(cleanPath) {
-		return "", fmt.Errorf("path contains path traversal patterns after normalization")
-	}
-
-	// Handle symlinks according to configuration
-	finalPath, err := handleSymlinks(cleanPath, config)
-	if err != nil {
-		return "", err
-	}
-
-	// Validate against allowed base paths
-	if err := validateBasePath(finalPath, config.AllowedBasePaths); err != nil {
-		return "", err
-	}
-
-	// Check if path points to a device file or other dangerous file types
-	if err := validateFileType(finalPath); err != nil {
-		return "", err
-	}
-
-	return finalPath, nil
-}
-
-// hasPathTraversal detects various path traversal patterns
-func hasPathTraversal(path string) bool {
-	// Check for various path traversal patterns
-	dangerousPatterns := []string{
-		"..",
-		"./",
-		".\\",
-		"//",
-		"\\\\",
-		"/../",
-		"\\..\\",
-		"%2e%2e",       // URL encoded ..
-		"%2f",          // URL encoded /
-		"%5c",          // URL encoded \
-		"\u002e\u002e", // Unicode ..
-		"\u2024\u2024", // Unicode bullet points (can look like ..)
-		"\uff0e\uff0e", // Full-width Unicode ..
-	}
-
-	pathLower := strings.ToLower(path)
-	for _, pattern := range dangerousPatterns {
-		if strings.Contains(pathLower, strings.ToLower(pattern)) {
-			return true
-		}
-	}
-
-	return false
-}
-
-// normalizeUnicode normalizes unicode characters to prevent bypass attempts
-func normalizeUnicode(path string) string {
-	// Replace various Unicode representations of dots and slashes
-	replacements := map[string]string{
-		"\u002e": ".",  // Unicode dot
-		"\u2024": ".",  // Unicode bullet (one dot leader)
-		"\uff0e": ".",  // Full-width dot
-		"\u002f": "/",  // Unicode slash
-		"\u2044": "/",  // Unicode fraction slash
-		"\uff0f": "/",  // Full-width slash
-		"\u005c": "\\", // Unicode backslash
-		"\uff3c": "\\", // Full-width backslash
-	}
-
-	result := path
-	for unicode, ascii := range replacements {
-		result = strings.ReplaceAll(result, unicode, ascii)
-	}
-
-	return result
-}
-
-// handleSymlinks resolves or validates symlinks according to configuration
-func handleSymlinks(path string, config PathSecurityConfig) (string, error) {
-	// Check if the path is a symlink
-	if info, err := os.Lstat(path); err == nil {
-		if info.Mode()&os.ModeSymlink != 0 {
-			if !config.AllowSymlinks {
-				return "", fmt.Errorf("symlinks not allowed: %s", path)
-			}
-
-			if config.ResolveSymlinks {
-				resolved, err := filepath.EvalSymlinks(path)
-				if err != nil {
-					return "", fmt.Errorf("failed to resolve symlink: %w", err)
-				}
-				return resolved, nil
-			}
-		}
-	} else if !os.IsNotExist(err) {
-		return "", fmt.Errorf("failed to check file info: %w", err)
-	}
-
-	return path, nil
-}
-
-// validateBasePath ensures the path is within allowed base directories
-func validateBasePath(path string, allowedBasePaths []string) error {
-	if len(allowedBasePaths) == 0 {
-		return nil // No restrictions if no base paths configured
-	}
-
-	for _, basePath := range allowedBasePaths {
-		cleanBasePath, err := filepath.Abs(filepath.Clean(basePath))
-		if err != nil {
-			continue
-		}
-
-		// Check if path starts with allowed base path
-		if strings.HasPrefix(path, cleanBasePath+string(filepath.Separator)) ||
-			path == cleanBasePath {
-			return nil
-		}
-	}
-
-	return fmt.Errorf("path outside allowed directories: %s", path)
-}
-
-// validateFileType checks for dangerous file types (devices, named pipes, etc.)
-func validateFileType(path string) error {
-	// Check if file exists
-	info, err := os.Stat(path)
-	if os.IsNotExist(err) {
-		return nil // File doesn't exist yet, allow it
-	}
-	if err != nil {
-		return fmt.Errorf("failed to stat file: %w", err)
-	}
-
-	mode := info.Mode()
-
-	// Block device files
-	if mode&os.ModeDevice != 0 {
-		return fmt.Errorf("device files not allowed: %s", path)
-	}
-
-	// Block named pipes (FIFOs)
-	if mode&os.ModeNamedPipe != 0 {
-		return fmt.Errorf("named pipes not allowed: %s", path)
-	}
-
-	// Block socket files
-	if mode&os.ModeSocket != 0 {
-		return fmt.Errorf("socket files not allowed: %s", path)
-	}
-
-	// Block irregular files (anything that's not a regular file or directory)
-	if !mode.IsRegular() && !mode.IsDir() {
-		return fmt.Errorf("irregular file type not allowed: %s", path)
-	}
-
-	return nil
+func validateLogPathForDir(ctx context.Context, path string, baseDir string) (string, error) {
+	return ValidateLogPath(ctx, path, baseDir)
 }
 
 // shouldSkipFile checks if a file should be skipped due to size limits
@@ -429,7 +259,7 @@ func shouldSkipFile(path string, maxFileSize int64) bool {
 
 	if info, err := os.Stat(path); err == nil {
 		if info.Size() > maxFileSize {
-			getLogger().WithField("file", path).WithField("size", info.Size()).
+			getLogger().WithField(shared.LogFieldFile, path).WithField("size", info.Size()).
 				Warn("Skipping large log file due to size limit")
 			return true
 		}
@@ -468,7 +298,7 @@ func scanLogLines(scanner *bufio.Scanner, config LogReadConfig) ([]string, error
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("error scanning log file: %w", err)
+		return nil, fmt.Errorf(shared.ErrScanLogFile, err)
 	}
 
 	return lines, nil
@@ -509,7 +339,7 @@ func scanLogLinesWithContext(ctx context.Context, scanner *bufio.Scanner, config
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("error scanning log file: %w", err)
+		return nil, fmt.Errorf(shared.ErrScanLogFile, err)
 	}
 
 	return lines, nil
@@ -517,14 +347,14 @@ func scanLogLinesWithContext(ctx context.Context, scanner *bufio.Scanner, config
 
 // passesFilters checks if a log line passes the configured filters
 func passesFilters(line string, config LogReadConfig) bool {
-	if config.JailFilter != "" && config.JailFilter != AllFilter {
+	if config.JailFilter != "" && config.JailFilter != shared.AllFilter {
 		jailPattern := fmt.Sprintf("[%s]", config.JailFilter)
 		if !strings.Contains(line, jailPattern) {
 			return false
 		}
 	}
 
-	if config.IPFilter != "" && config.IPFilter != AllFilter {
+	if config.IPFilter != "" && config.IPFilter != shared.AllFilter {
 		if !strings.Contains(line, config.IPFilter) {
 			return false
 		}
@@ -554,4 +384,61 @@ func readLogFile(path string) ([]byte, error) {
 	}()
 
 	return io.ReadAll(reader)
+}
+
+// OptimizedLogProcessor is a thin wrapper maintained for backwards compatibility
+// with existing benchmarks and tests. Internally it delegates to the shared log collection
+// helpers so we have a single codepath to maintain.
+type OptimizedLogProcessor struct{}
+
+// NewOptimizedLogProcessor creates a new optimized processor wrapper.
+func NewOptimizedLogProcessor() *OptimizedLogProcessor {
+	return &OptimizedLogProcessor{}
+}
+
+// GetLogLinesOptimized proxies to the shared collector to keep behavior identical
+// while allowing benchmarks to exercise this entrypoint.
+func (olp *OptimizedLogProcessor) GetLogLinesOptimized(jailFilter, ipFilter string, maxLines int) ([]string, error) {
+	// Validate maxLines parameter
+	if maxLines < 0 {
+		return nil, fmt.Errorf(shared.ErrMaxLinesNegative, maxLines)
+	}
+
+	if maxLines > shared.MaxLogLinesLimit {
+		return nil, fmt.Errorf(shared.ErrMaxLinesExceedsLimit, shared.MaxLogLinesLimit)
+	}
+
+	// Sanitize filter parameters
+	jailFilter = strings.TrimSpace(jailFilter)
+	ipFilter = strings.TrimSpace(ipFilter)
+
+	config := LogReadConfig{
+		MaxLines:    maxLines,
+		MaxFileSize: shared.DefaultMaxFileSize,
+		JailFilter:  jailFilter,
+		IPFilter:    ipFilter,
+		BaseDir:     GetLogDir(),
+	}
+
+	return collectLogLines(context.Background(), GetLogDir(), config)
+}
+
+// GetCacheStats is a no-op maintained for test compatibility.
+// No caching is actually performed by this processor.
+func (olp *OptimizedLogProcessor) GetCacheStats() (hits, misses int64) {
+	return 0, 0
+}
+
+// ClearCaches is a no-op maintained for test compatibility.
+// No caching is actually performed by this processor.
+func (olp *OptimizedLogProcessor) ClearCaches() {
+	// No-op: no cache state to clear
+}
+
+var optimizedLogProcessor = NewOptimizedLogProcessor()
+
+// GetLogLinesUltraOptimized retains the legacy API that benchmarks expect while now
+// sharing the simplified implementation.
+func GetLogLinesUltraOptimized(jailFilter, ipFilter string, maxLines int) ([]string, error) {
+	return optimizedLogProcessor.GetLogLinesOptimized(jailFilter, ipFilter, maxLines)
 }

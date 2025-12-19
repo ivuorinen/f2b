@@ -7,14 +7,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ivuorinen/f2b/shared"
+
 	"github.com/spf13/cobra"
 
 	"github.com/ivuorinen/f2b/fail2ban"
-)
-
-const (
-	// DefaultLogWatchLimit is the default limit for log lines in watch mode
-	DefaultLogWatchLimit = 10
 )
 
 // LogsWatchCmd returns the logs-watch command with injected client and config
@@ -35,7 +32,7 @@ func LogsWatchCmd(ctx context.Context, client fail2ban.Client, config *Config) *
 			// Use memory-efficient approach with configurable limits
 			maxLines := limit
 			if maxLines <= 0 {
-				maxLines = 1000 // Default safe limit
+				maxLines = shared.DefaultLogLinesLimit // Default safe limit
 			}
 
 			// Get initial log lines with memory limits (with file timeout)
@@ -48,7 +45,7 @@ func LogsWatchCmd(ctx context.Context, client fail2ban.Client, config *Config) *
 			PrintOutput(strings.Join(prev, "\n"), config.Format)
 
 			if interval <= 0 {
-				interval = 5 * time.Second
+				interval = shared.DefaultPollingInterval
 			}
 			ticker := time.NewTicker(interval)
 			defer ticker.Stop()
@@ -72,9 +69,10 @@ func LogsWatchCmd(ctx context.Context, client fail2ban.Client, config *Config) *
 			}
 		})
 
-	cmd.Flags().IntVarP(&limit, "limit", "n", DefaultLogWatchLimit, "Number of log lines to show/tail")
-	cmd.Flags().
-		DurationVarP(&interval, "interval", "i", DefaultPollingInterval, "Polling interval for checking new logs")
+	cmd.Flags().IntVarP(&limit, shared.FlagLimit, "n", shared.DefaultLogLinesLimit, "Number of log lines to show/tail")
+	cmd.Flags().DurationVarP(
+		&interval, shared.FlagInterval, "i", shared.DefaultPollingInterval, "Polling interval for checking new logs",
+	)
 	return cmd
 }
 

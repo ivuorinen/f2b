@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ivuorinen/f2b/shared"
+
 	"github.com/ivuorinen/f2b/fail2ban"
 )
 
@@ -140,8 +142,8 @@ func TestLogsWatchCmdJSON(t *testing.T) {
 	if limitFlag == nil {
 		t.Fatalf("limit flag should exist")
 	}
-	if limitFlag.DefValue != "10" {
-		t.Errorf("expected default limit of 10, got %s", limitFlag.DefValue)
+	if limitFlag.DefValue != fmt.Sprintf("%d", shared.DefaultLogLinesLimit) {
+		t.Errorf("expected default limit of %d, got %s", shared.DefaultLogLinesLimit, limitFlag.DefValue)
 	}
 }
 
@@ -254,13 +256,11 @@ func TestLogsWatchCmdFlags(t *testing.T) {
 	if limitFlag == nil {
 		t.Fatal("limit flag should be defined")
 	}
-
 	if limitFlag.Shorthand != "n" {
 		t.Errorf("expected limit flag shorthand to be 'n', got %q", limitFlag.Shorthand)
 	}
-
-	if limitFlag.DefValue != "10" {
-		t.Errorf("expected limit flag default value to be '10', got %q", limitFlag.DefValue)
+	if limitFlag.DefValue != fmt.Sprintf("%d", shared.DefaultLogLinesLimit) {
+		t.Errorf("expected limit flag default value to be %d, got %q", shared.DefaultLogLinesLimit, limitFlag.DefValue)
 	}
 
 	// Test that the interval flag is properly defined
@@ -271,10 +271,10 @@ func TestLogsWatchCmdFlags(t *testing.T) {
 	if intervalFlag.Shorthand != "i" {
 		t.Errorf("expected interval flag shorthand to be 'i', got %q", intervalFlag.Shorthand)
 	}
-	if intervalFlag.DefValue != DefaultPollingInterval.String() {
+	if intervalFlag.DefValue != shared.DefaultPollingInterval.String() {
 		t.Errorf(
 			"expected interval flag default value to be %q, got %q",
-			DefaultPollingInterval.String(),
+			shared.DefaultPollingInterval.String(),
 			intervalFlag.DefValue,
 		)
 	}

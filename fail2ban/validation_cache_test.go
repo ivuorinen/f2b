@@ -1,6 +1,8 @@
 package fail2ban
 
 import (
+	"context"
+	"fmt"
 	"sync"
 	"testing"
 )
@@ -40,7 +42,7 @@ func TestValidationCaching(t *testing.T) {
 
 	tests := []struct {
 		name           string
-		validator      func(string) error
+		validator      func(context.Context, string) error
 		validInput     string
 		expectedHits   int
 		expectedMisses int
@@ -87,13 +89,13 @@ func TestValidationCaching(t *testing.T) {
 			ClearValidationCaches()
 
 			// First call - should be a cache miss
-			err := tt.validator(tt.validInput)
+			err := tt.validator(context.Background(), tt.validInput)
 			if err != nil {
 				t.Fatalf("First validation call failed: %v", err)
 			}
 
 			// Second call - should be a cache hit
-			err = tt.validator(tt.validInput)
+			err = tt.validator(context.Background(), tt.validInput)
 			if err != nil {
 				t.Fatalf("Second validation call failed: %v", err)
 			}
@@ -128,7 +130,7 @@ func TestValidationCacheConcurrency(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < numCallsPerGoroutine; j++ {
 				// Use the same IP to test caching
-				err := CachedValidateIP("192.168.1.1")
+				err := CachedValidateIP(context.Background(), "192.168.1.1")
 				if err != nil {
 					t.Errorf("Concurrent validation failed: %v", err)
 					return
@@ -172,13 +174,13 @@ func TestValidationCacheInvalidInput(t *testing.T) {
 	invalidIP := "invalid.ip.address"
 
 	// First call - should be a cache miss and return error
-	err1 := CachedValidateIP(invalidIP)
+	err1 := CachedValidateIP(context.Background(), invalidIP)
 	if err1 == nil {
 		t.Fatal("Expected error for invalid IP, got none")
 	}
 
 	// Second call - should be a cache hit and return the same error
-	err2 := CachedValidateIP(invalidIP)
+	err2 := CachedValidateIP(context.Background(), invalidIP)
 	if err2 == nil {
 		t.Fatal("Expected error for invalid IP on second call, got none")
 	}
@@ -206,13 +208,13 @@ func BenchmarkValidationCaching(b *testing.B) {
 	validIP := "192.168.1.1"
 
 	// Warm up the cache
-	_ = CachedValidateIP(validIP)
+	_ = CachedValidateIP(context.Background(), validIP)
 
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
 			// All calls should hit the cache
-			_ = CachedValidateIP(validIP)
+			_ = CachedValidateIP(context.Background(), validIP)
 		}
 	})
 }
@@ -226,4 +228,29 @@ func BenchmarkValidationNoCaching(b *testing.B) {
 			_ = ValidateIP(validIP)
 		}
 	})
+}
+
+// TestValidationCacheEviction tests that cache eviction works correctly
+func TestValidationCacheEviction(t *testing.T) {
+	cache := NewValidationCache()
+
+	// Fill cache to trigger eviction (using CacheMaxSize from shared package)
+	// Add significantly more than maxSize to guarantee eviction
+	entriesToAdd := 11000 // CacheMaxSize is 10000
+	for i := 0; i < entriesToAdd; i++ {
+		// Add unique keys to cache
+		key := fmt.Sprintf("test-key-%d", i)
+		cache.Set(key, nil) // nil means valid
+	}
+
+	// Verify cache was evicted and didn't grow unbounded
+	sizeAfter := cache.Size()
+	if sizeAfter > 10000 {
+		t.Errorf("Cache should have evicted entries to stay under 10000, got: %d", sizeAfter)
+	}
+	if sizeAfter == 0 {
+		t.Errorf("Cache should not be empty after eviction, got size: %d", sizeAfter)
+	}
+
+	t.Logf("Cache evicted successfully after adding %d entries: final size %d", entriesToAdd, sizeAfter)
 }

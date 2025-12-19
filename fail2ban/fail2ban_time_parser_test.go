@@ -3,10 +3,18 @@ package fail2ban
 import (
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/ivuorinen/f2b/shared"
 )
 
 func TestTimeParsingCache(t *testing.T) {
-	cache := NewTimeParsingCache("2006-01-02 15:04:05")
+	cache, err := NewTimeParsingCache("2006-01-02 15:04:05")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Test basic parsing
 	testTime := "2023-12-01 14:30:45"
@@ -33,7 +41,10 @@ func TestTimeParsingCache(t *testing.T) {
 }
 
 func TestBuildTimeString(t *testing.T) {
-	cache := NewTimeParsingCache("2006-01-02 15:04:05")
+	cache, err := NewTimeParsingCache("2006-01-02 15:04:05")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	result := cache.BuildTimeString("2023-12-01", "14:30:45")
 	expected := "2023-12-01 14:30:45"
@@ -66,7 +77,11 @@ func TestBuildBanTimeString(t *testing.T) {
 }
 
 func BenchmarkTimeParsingWithCache(b *testing.B) {
-	cache := NewTimeParsingCache("2006-01-02 15:04:05")
+	cache, err := NewTimeParsingCache("2006-01-02 15:04:05")
+	if err != nil {
+		b.Fatal(err)
+	}
+
 	testTime := "2023-12-01 14:30:45"
 
 	b.ResetTimer()
@@ -86,7 +101,10 @@ func BenchmarkTimeParsingWithoutCache(b *testing.B) {
 }
 
 func BenchmarkBuildTimeString(b *testing.B) {
-	cache := NewTimeParsingCache("2006-01-02 15:04:05")
+	cache, err := NewTimeParsingCache("2006-01-02 15:04:05")
+	if err != nil {
+		b.Fatal(err)
+	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -99,4 +117,36 @@ func BenchmarkBuildTimeStringNaive(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = "2023-12-01" + " " + "14:30:45"
 	}
+}
+
+// TestTimeParsingCache_BoundedEviction verifies that the cache doesn't grow unbounded
+func TestTimeParsingCache_BoundedEviction(t *testing.T) {
+	cache, err := NewTimeParsingCache("2006-01-02 15:04:05")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Add significantly more than max to ensure eviction triggers
+	entriesToAdd := shared.CacheMaxSize + 1000
+
+	// Create base time for monotonic timestamp generation
+	baseTime := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	for i := 0; i < entriesToAdd; i++ {
+		// Generate unique time strings using monotonic increment
+		uniqueTime := baseTime.Add(time.Duration(i) * time.Second)
+		timeStr := uniqueTime.Format("2006-01-02 15:04:05")
+		_, err := cache.ParseTime(timeStr)
+		require.NoError(t, err)
+	}
+
+	// Verify cache was evicted and didn't grow unbounded
+	size := cache.parseCache.Size()
+	assert.LessOrEqual(t, size, shared.CacheMaxSize,
+		"Cache must not exceed max size after eviction")
+	assert.Greater(t, size, 0,
+		"Cache should still contain entries after eviction")
+
+	t.Logf("Cache size after adding %d entries: %d (max: %d, evicted: %d)",
+		entriesToAdd, size, shared.CacheMaxSize, entriesToAdd-size)
 }

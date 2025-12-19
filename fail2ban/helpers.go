@@ -2,153 +2,27 @@ package fail2ban
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
-	"sync"
 	"time"
 	"unicode"
 
 	"github.com/hashicorp/go-version"
-	"github.com/sirupsen/logrus"
+
+	"github.com/ivuorinen/f2b/shared"
 )
-
-// loggerInterface defines the logging interface we need
-type loggerInterface interface {
-	WithField(key string, value interface{}) *logrus.Entry
-	WithFields(fields logrus.Fields) *logrus.Entry
-	WithError(err error) *logrus.Entry
-	Debug(args ...interface{})
-	Info(args ...interface{})
-	Warn(args ...interface{})
-	Error(args ...interface{})
-	Debugf(format string, args ...interface{})
-	Infof(format string, args ...interface{})
-	Warnf(format string, args ...interface{})
-	Errorf(format string, args ...interface{})
-}
-
-// logger holds the current logger instance - will be set by cmd package
-var logger loggerInterface = logrus.StandardLogger()
-
-// SetLogger allows the cmd package to set the logger instance
-func SetLogger(l loggerInterface) {
-	logger = l
-}
-
-// getLogger returns the current logger instance
-func getLogger() loggerInterface {
-	return logger
-}
 
 func init() {
 	// Configure logging for CI/test environments to reduce noise
-	configureCITestLogging()
-}
-
-// configureCITestLogging reduces log verbosity in CI and test environments
-func configureCITestLogging() {
-	// Detect CI environments by checking common CI environment variables
-	ciEnvVars := []string{
-		"CI", "GITHUB_ACTIONS", "TRAVIS", "CIRCLECI", "JENKINS_URL",
-		"BUILDKITE", "TF_BUILD", "GITLAB_CI",
-	}
-
-	isCI := false
-	for _, envVar := range ciEnvVars {
-		if os.Getenv(envVar) != "" {
-			isCI = true
-			break
-		}
-	}
-
-	// Also check if we're in test mode
-	isTest := strings.Contains(os.Args[0], ".test") ||
-		os.Getenv("GO_TEST") == "true" ||
-		flag.Lookup("test.v") != nil
-
-	// If in CI or test environment, reduce logging noise unless explicitly overridden
-	// Note: This will be overridden by cmd.Logger once main() runs
-	if (isCI || isTest) && os.Getenv("F2B_LOG_LEVEL") == "" && os.Getenv("F2B_VERBOSE_TESTS") == "" {
-		logrus.SetLevel(logrus.ErrorLevel)
-	}
+	// This now comes from the logging_env module
 }
 
 // Validation constants
-const (
-	// MaxIPAddressLength is the maximum length for an IP address string (IPv6 with brackets and port)
-	MaxIPAddressLength = 45
-	// MaxJailNameLength is the maximum length for a jail name
-	MaxJailNameLength = 64
-	// MaxFilterNameLength is the maximum length for a filter name
-	MaxFilterNameLength = 255
-	// MaxArgumentLength is the maximum length for a command argument
-	MaxArgumentLength = 1024
-)
-
-// Time constants for duration calculations
-const (
-	// SecondsPerMinute is the number of seconds in a minute
-	SecondsPerMinute = 60
-	// SecondsPerHour is the number of seconds in an hour
-	SecondsPerHour = 3600
-	// SecondsPerDay is the number of seconds in a day
-	SecondsPerDay = 86400
-	// DefaultBanDuration is the default fallback duration for bans when parsing fails
-	DefaultBanDuration = 24 * time.Hour
-)
-
-// Fail2Ban status codes
-const (
-	// Fail2BanStatusSuccess indicates successful operation (ban/unban succeeded)
-	Fail2BanStatusSuccess = "0"
-	// Fail2BanStatusAlreadyProcessed indicates IP was already banned/unbanned
-	Fail2BanStatusAlreadyProcessed = "1"
-)
-
-// Fail2Ban command names
-const (
-	// Fail2BanClientCommand is the standard fail2ban client command
-	Fail2BanClientCommand = "fail2ban-client"
-	// Fail2BanRegexCommand is the fail2ban regex testing command
-	Fail2BanRegexCommand = "fail2ban-regex"
-	// Fail2BanServerCommand is the fail2ban server command
-	Fail2BanServerCommand = "fail2ban-server"
-)
-
-// File permission constants
-const (
-	// DefaultFilePermissions for log files and temporary files
-	DefaultFilePermissions = 0600
-	// DefaultDirectoryPermissions for created directories
-	DefaultDirectoryPermissions = 0750
-)
-
-// Timeout limit constants
-const (
-	// MaxCommandTimeout is the maximum allowed timeout for commands
-	MaxCommandTimeout = 10 * time.Minute
-	// MaxFileTimeout is the maximum allowed timeout for file operations
-	MaxFileTimeout = 5 * time.Minute
-	// MaxParallelTimeout is the maximum allowed timeout for parallel operations
-	MaxParallelTimeout = 30 * time.Minute
-)
-
-// Context key types for structured logging
-type contextKey string
-
-const (
-	// ContextKeyRequestID is the context key for request IDs
-	ContextKeyRequestID contextKey = "request_id"
-	// ContextKeyOperation is the context key for operation names
-	ContextKeyOperation contextKey = "operation"
-	// ContextKeyJail is the context key for jail names
-	ContextKeyJail contextKey = "jail"
-	// ContextKeyIP is the context key for IP addresses
-	ContextKeyIP contextKey = "ip"
-)
 
 // Validation helpers
 
@@ -161,7 +35,7 @@ func ValidateIP(ip string) error {
 	parsed := net.ParseIP(ip)
 	if parsed == nil {
 		// Don't include potentially malicious input in error message
-		if containsCommandInjectionPatterns(ip) || len(ip) > MaxIPAddressLength {
+		if containsCommandInjectionPatterns(ip) || len(ip) > shared.MaxIPAddressLength {
 			return fmt.Errorf("invalid IP address format")
 		}
 		return NewInvalidIPError(ip)
@@ -175,10 +49,10 @@ func ValidateJail(jail string) error {
 		return ErrJailRequiredError
 	}
 	// Jail names should be reasonable length
-	if len(jail) > MaxJailNameLength {
+	if len(jail) > shared.MaxJailNameLength {
 		// Don't include potentially malicious input in error message
 		if containsCommandInjectionPatterns(jail) {
-			return fmt.Errorf("invalid jail name format")
+			return fmt.Errorf(shared.ErrInvalidJailFormat)
 		}
 		return NewInvalidJailError(jail + " (too long)")
 	}
@@ -188,7 +62,7 @@ func ValidateJail(jail string) error {
 		if !unicode.IsLetter(first) && !unicode.IsDigit(first) {
 			// Don't include potentially malicious input in error message
 			if containsCommandInjectionPatterns(jail) {
-				return fmt.Errorf("invalid jail name format")
+				return fmt.Errorf(shared.ErrInvalidJailFormat)
 			}
 			return NewInvalidJailError(jail + " (invalid format)")
 		}
@@ -198,7 +72,7 @@ func ValidateJail(jail string) error {
 		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '-' && r != '_' && r != '.' {
 			// Don't include potentially malicious input in error message
 			if containsCommandInjectionPatterns(jail) {
-				return fmt.Errorf("invalid jail name format")
+				return fmt.Errorf(shared.ErrInvalidJailFormat)
 			}
 			return NewInvalidJailError(jail + " (invalid character)")
 		}
@@ -213,7 +87,7 @@ func ValidateFilter(filter string) error {
 	}
 
 	// Check length limits to prevent buffer overflow attacks
-	if len(filter) > MaxFilterNameLength {
+	if len(filter) > shared.MaxFilterNameLength {
 		return NewInvalidFilterError(filter + " (too long)")
 	}
 
@@ -269,13 +143,13 @@ func ParseJailList(output string) ([]string, error) {
 	// Optimized: Find "Jail list:" position directly instead of splitting all lines
 	jailListPos := strings.Index(output, "Jail list:")
 	if jailListPos == -1 {
-		return nil, fmt.Errorf("failed to parse jails")
+		return nil, fmt.Errorf(shared.ErrFailedToParseJails)
 	}
 
 	// Find the start of the jail list content (after "Jail list:")
 	colonPos := strings.Index(output[jailListPos:], ":")
 	if colonPos == -1 {
-		return nil, fmt.Errorf("failed to parse jails")
+		return nil, fmt.Errorf(shared.ErrFailedToParseJails)
 	}
 
 	// Find the end of the line
@@ -327,6 +201,12 @@ func ParseBracketedList(output string) []string {
 // Utility helpers
 
 // CompareVersions compares two version strings
+var (
+	fail2banVersionPattern = regexp.MustCompile(`(?i)fail2ban(?:-client)?[\s-]*v?([0-9]+(?:\.[0-9]+)*)(?:[-+].*)?`)
+	versionNumberPattern   = regexp.MustCompile(`^v?([0-9]+(?:\.[0-9]+)*)(?:[-+].*)?$`)
+)
+
+// CompareVersions compares two version strings
 func CompareVersions(v1, v2 string) int {
 	version1, err1 := version.NewVersion(v1)
 	version2, err2 := version.NewVersion(v2)
@@ -339,62 +219,40 @@ func CompareVersions(v1, v2 string) int {
 	return version1.Compare(version2)
 }
 
+// ExtractFail2BanVersion extracts the semantic version from fail2ban-client -V output
+func ExtractFail2BanVersion(output string) (string, error) {
+	trimmed := strings.TrimSpace(output)
+	if trimmed == "" {
+		return "", fmt.Errorf("empty version output")
+	}
+	if match := fail2banVersionPattern.FindStringSubmatch(trimmed); len(match) == 2 {
+		return match[1], nil
+	}
+	if match := versionNumberPattern.FindStringSubmatch(trimmed); len(match) == 2 {
+		return match[1], nil
+	}
+	return "", fmt.Errorf("unable to parse version from %q", trimmed)
+}
+
 // FormatDuration formats seconds into a human-readable duration string
 func FormatDuration(sec int64) string {
-	days := sec / SecondsPerDay
-	h := (sec % SecondsPerDay) / SecondsPerHour
-	m := (sec % SecondsPerHour) / SecondsPerMinute
-	s := sec % SecondsPerMinute
+	days := sec / shared.SecondsPerDay
+	h := (sec % shared.SecondsPerDay) / shared.SecondsPerHour
+	m := (sec % shared.SecondsPerHour) / shared.SecondsPerMinute
+	s := sec % shared.SecondsPerMinute
 	return fmt.Sprintf("%02d:%02d:%02d:%02d", days, h, m, s)
-}
-
-// IsTestEnvironment returns true if running in a test environment
-func IsTestEnvironment() bool {
-	for _, arg := range os.Args {
-		if strings.HasPrefix(arg, "-test.") {
-			return true
-		}
-	}
-	return false
-}
-
-// ContainsPathTraversal checks for various path traversal patterns
-func ContainsPathTraversal(input string) bool {
-	// Path separators and traversal patterns
-	if strings.ContainsAny(input, "/\\") {
-		return true
-	}
-
-	// Various representations of ".."
-	dangerousPatterns := []string{
-		"..",
-		"%2e%2e",       // URL encoded ..
-		"%2f",          // URL encoded /
-		"%5c",          // URL encoded \
-		"\u002e\u002e", // Unicode ..
-		"\uff0e\uff0e", // Full-width Unicode ..
-	}
-
-	inputLower := strings.ToLower(input)
-	for _, pattern := range dangerousPatterns {
-		if strings.Contains(inputLower, strings.ToLower(pattern)) {
-			return true
-		}
-	}
-
-	return false
 }
 
 // ValidateCommand validates that a command is in the allowlist for security
 func ValidateCommand(command string) error {
 	// Allowlist of commands that f2b is permitted to execute
 	allowedCommands := map[string]bool{
-		Fail2BanClientCommand: true,
-		Fail2BanRegexCommand:  true,
-		Fail2BanServerCommand: true,
-		"service":             true,
-		"systemctl":           true,
-		"sudo":                true, // Only when used internally
+		shared.Fail2BanClientCommand: true,
+		shared.Fail2BanRegexCommand:  true,
+		shared.Fail2BanServerCommand: true,
+		"service":                    true,
+		"systemctl":                  true,
+		"sudo":                       true, // Only when used internally
 	}
 
 	if command == "" {
@@ -404,30 +262,37 @@ func ValidateCommand(command string) error {
 	// Check for null bytes (command injection attempt)
 	if strings.ContainsRune(command, '\x00') {
 		// Don't include potentially malicious input in error message
-		return fmt.Errorf("invalid command format")
+		return fmt.Errorf(shared.ErrInvalidCommandFormat)
+	}
+
+	// Check for dangerous patterns first (before including command in error messages)
+	dangerousPatterns := GetDangerousCommandPatterns()
+	cmdLower := strings.ToLower(command)
+	for _, pattern := range dangerousPatterns {
+		if strings.Contains(cmdLower, strings.ToLower(pattern)) {
+			// Don't include potentially dangerous command in error message
+			return fmt.Errorf(shared.ErrInvalidCommandFormat)
+		}
 	}
 
 	// Check for path traversal in command name
 	if ContainsPathTraversal(command) {
 		// Don't include potentially malicious input in error message
-		// Check for common dangerous patterns that shouldn't be in command names
-		dangerousPatterns := GetDangerousCommandPatterns()
-		cmdLower := strings.ToLower(command)
-		for _, pattern := range dangerousPatterns {
-			if strings.Contains(cmdLower, strings.ToLower(pattern)) {
-				return fmt.Errorf("invalid command format")
-			}
-		}
 		return NewInvalidCommandError(command + " (path traversal)")
 	}
 
 	// Additional security checks for command injection patterns
 	if containsCommandInjectionPatterns(command) {
 		// Don't include potentially malicious input in error message
-		return fmt.Errorf("invalid command format")
+		return fmt.Errorf(shared.ErrInvalidCommandFormat)
 	}
 
-	// Validate against allowlist
+	// Command must be a bare executable name (no paths or whitespace)
+	if strings.ContainsAny(command, "/\\ \t") {
+		return fmt.Errorf(shared.ErrInvalidCommandFormat)
+	}
+
+	// Validate against allowlist (safe to include command name for allowed commands)
 	if !allowedCommands[command] {
 		return NewCommandNotAllowedError(command)
 	}
@@ -437,8 +302,13 @@ func ValidateCommand(command string) error {
 
 // ValidateArguments validates command arguments for security
 func ValidateArguments(args []string) error {
+	return ValidateArgumentsWithContext(context.Background(), args)
+}
+
+// ValidateArgumentsWithContext validates command arguments for security with context support
+func ValidateArgumentsWithContext(ctx context.Context, args []string) error {
 	for i, arg := range args {
-		if err := validateSingleArgument(arg, i); err != nil {
+		if err := validateSingleArgument(ctx, arg, i); err != nil {
 			return fmt.Errorf("argument %d invalid: %w", i, err)
 		}
 	}
@@ -446,14 +316,14 @@ func ValidateArguments(args []string) error {
 }
 
 // validateSingleArgument validates a single command argument
-func validateSingleArgument(arg string, _ int) error {
+func validateSingleArgument(ctx context.Context, arg string, _ int) error {
 	// Check for null bytes
 	if strings.ContainsRune(arg, '\x00') {
 		return NewInvalidArgumentError(arg + " (contains null byte)")
 	}
 
 	// Check length to prevent buffer overflow
-	if len(arg) > MaxArgumentLength {
+	if len(arg) > shared.MaxArgumentLength {
 		return NewInvalidArgumentError(fmt.Sprintf("%s (too long: %d chars)", arg, len(arg)))
 	}
 
@@ -464,7 +334,7 @@ func validateSingleArgument(arg string, _ int) error {
 
 	// For IP arguments, validate IP format
 	if isLikelyIPArgument(arg) {
-		if err := CachedValidateIP(arg); err != nil {
+		if err := CachedValidateIP(ctx, arg); err != nil {
 			return fmt.Errorf("invalid IP format: %w", err)
 		}
 	}
@@ -521,56 +391,6 @@ func isValidFilterChar(r rune) bool {
 		r == '~' // Allow ~ for common naming
 }
 
-// Context helpers for structured logging
-
-// WithRequestID adds a request ID to the context
-func WithRequestID(ctx context.Context, requestID string) context.Context {
-	return context.WithValue(ctx, ContextKeyRequestID, requestID)
-}
-
-// WithOperation adds an operation name to the context
-func WithOperation(ctx context.Context, operation string) context.Context {
-	return context.WithValue(ctx, ContextKeyOperation, operation)
-}
-
-// WithJail adds a jail name to the context
-func WithJail(ctx context.Context, jail string) context.Context {
-	return context.WithValue(ctx, ContextKeyJail, jail)
-}
-
-// WithIP adds an IP address to the context
-func WithIP(ctx context.Context, ip string) context.Context {
-	return context.WithValue(ctx, ContextKeyIP, ip)
-}
-
-// LoggerFromContext creates a logrus Entry with fields from context
-func LoggerFromContext(ctx context.Context) *logrus.Entry {
-	fields := logrus.Fields{}
-
-	if requestID, ok := ctx.Value(ContextKeyRequestID).(string); ok && requestID != "" {
-		fields["request_id"] = requestID
-	}
-
-	if operation, ok := ctx.Value(ContextKeyOperation).(string); ok && operation != "" {
-		fields["operation"] = operation
-	}
-
-	if jail, ok := ctx.Value(ContextKeyJail).(string); ok && jail != "" {
-		fields["jail"] = jail
-	}
-
-	if ip, ok := ctx.Value(ContextKeyIP).(string); ok && ip != "" {
-		fields["ip"] = ip
-	}
-
-	return getLogger().WithFields(fields)
-}
-
-// GenerateRequestID generates a simple request ID for tracing
-func GenerateRequestID() string {
-	return fmt.Sprintf("req_%d", time.Now().UnixNano())
-}
-
 // Timing infrastructure for performance monitoring
 
 // TimedOperation represents a timed operation with metadata
@@ -595,7 +415,7 @@ func NewTimedOperation(name, command string, args ...string) *TimedOperation {
 func (t *TimedOperation) Finish(err error) {
 	duration := time.Since(t.StartTime)
 
-	fields := logrus.Fields{
+	fields := Fields{
 		"operation": t.Name,
 		"command":   t.Command,
 		"duration":  duration,
@@ -603,14 +423,16 @@ func (t *TimedOperation) Finish(err error) {
 	}
 
 	if err != nil {
-		getLogger().WithFields(fields).WithField("error", err.Error()).Warnf("Operation failed after %v", duration)
+		getLogger().WithFields(fields).
+			WithField(shared.LogFieldError, err.Error()).
+			Warnf(shared.ErrOperationFailed, duration)
 	} else {
 		if duration > time.Second {
 			// Log slow operations as warnings for visibility
-			getLogger().WithFields(fields).Warnf("Slow operation completed in %v", duration)
+			getLogger().WithFields(fields).Warnf(shared.ErrSlowOperation, duration)
 		} else {
 			// Log fast operations at debug level to reduce noise
-			getLogger().WithFields(fields).Debugf("Operation completed in %v", duration)
+			getLogger().WithFields(fields).Debugf(shared.MsgOperationCompleted, duration)
 		}
 	}
 }
@@ -623,7 +445,7 @@ func (t *TimedOperation) FinishWithContext(ctx context.Context, err error) {
 	logger := LoggerFromContext(ctx)
 
 	// Add timing-specific fields
-	fields := logrus.Fields{
+	fields := Fields{
 		"operation": t.Name,
 		"command":   t.Command,
 		"duration":  duration,
@@ -632,208 +454,40 @@ func (t *TimedOperation) FinishWithContext(ctx context.Context, err error) {
 	logger = logger.WithFields(fields)
 
 	if err != nil {
-		logger.WithField("error", err.Error()).Warnf("Operation failed after %v", duration)
+		logger.WithField(shared.LogFieldError, err.Error()).Warnf(shared.ErrOperationFailed, duration)
 	} else {
 		if duration > time.Second {
 			// Log slow operations as warnings for visibility
-			logger.Warnf("Slow operation completed in %v", duration)
+			logger.Warnf(shared.ErrSlowOperation, duration)
 		} else {
 			// Log fast operations at debug level to reduce noise
-			logger.Debugf("Operation completed in %v", duration)
+			logger.Debugf(shared.MsgOperationCompleted, duration)
 		}
-	}
-}
-
-// Validation caching for performance optimization
-
-// ValidationCache provides thread-safe caching for validation results
-type ValidationCache struct {
-	mu    sync.RWMutex
-	cache map[string]error
-}
-
-// NewValidationCache creates a new validation cache
-func NewValidationCache() *ValidationCache {
-	return &ValidationCache{
-		cache: make(map[string]error),
-	}
-}
-
-// Get retrieves a cached validation result
-func (vc *ValidationCache) Get(key string) (bool, error) {
-	vc.mu.RLock()
-	defer vc.mu.RUnlock()
-	result, exists := vc.cache[key]
-	return exists, result
-}
-
-// Set stores a validation result in the cache
-func (vc *ValidationCache) Set(key string, err error) {
-	vc.mu.Lock()
-	defer vc.mu.Unlock()
-	vc.cache[key] = err
-}
-
-// Clear removes all cached entries
-func (vc *ValidationCache) Clear() {
-	vc.mu.Lock()
-	defer vc.mu.Unlock()
-	vc.cache = make(map[string]error)
-}
-
-// Size returns the number of cached entries
-func (vc *ValidationCache) Size() int {
-	vc.mu.RLock()
-	defer vc.mu.RUnlock()
-	return len(vc.cache)
-}
-
-// MetricsRecorder interface for recording validation metrics
-type MetricsRecorder interface {
-	RecordValidationCacheHit()
-	RecordValidationCacheMiss()
-}
-
-// Global validation caches for frequently used validators
-var (
-	ipValidationCache      = NewValidationCache()
-	jailValidationCache    = NewValidationCache()
-	filterValidationCache  = NewValidationCache()
-	commandValidationCache = NewValidationCache()
-
-	// metricsRecorder is set by the cmd package to avoid circular dependencies
-	metricsRecorder   MetricsRecorder
-	metricsRecorderMu sync.RWMutex
-)
-
-// SetMetricsRecorder sets the metrics recorder for validation cache tracking
-func SetMetricsRecorder(recorder MetricsRecorder) {
-	metricsRecorderMu.Lock()
-	defer metricsRecorderMu.Unlock()
-	metricsRecorder = recorder
-}
-
-// getMetricsRecorder returns the current metrics recorder
-func getMetricsRecorder() MetricsRecorder {
-	metricsRecorderMu.RLock()
-	defer metricsRecorderMu.RUnlock()
-	return metricsRecorder
-}
-
-// CachedValidateIP validates an IP address with caching
-func CachedValidateIP(ip string) error {
-	cacheKey := "ip:" + ip
-	if exists, result := ipValidationCache.Get(cacheKey); exists {
-		// Record cache hit in metrics
-		if recorder := getMetricsRecorder(); recorder != nil {
-			recorder.RecordValidationCacheHit()
-		}
-		return result
-	}
-
-	// Record cache miss in metrics
-	if recorder := getMetricsRecorder(); recorder != nil {
-		recorder.RecordValidationCacheMiss()
-	}
-
-	err := ValidateIP(ip)
-	ipValidationCache.Set(cacheKey, err)
-	return err
-}
-
-// CachedValidateJail validates a jail name with caching
-func CachedValidateJail(jail string) error {
-	cacheKey := "jail:" + jail
-	if exists, result := jailValidationCache.Get(cacheKey); exists {
-		// Record cache hit in metrics
-		if recorder := getMetricsRecorder(); recorder != nil {
-			recorder.RecordValidationCacheHit()
-		}
-		return result
-	}
-
-	// Record cache miss in metrics
-	if recorder := getMetricsRecorder(); recorder != nil {
-		recorder.RecordValidationCacheMiss()
-	}
-
-	err := ValidateJail(jail)
-	jailValidationCache.Set(cacheKey, err)
-	return err
-}
-
-// CachedValidateFilter validates a filter name with caching
-func CachedValidateFilter(filter string) error {
-	cacheKey := "filter:" + filter
-	if exists, result := filterValidationCache.Get(cacheKey); exists {
-		// Record cache hit in metrics
-		if recorder := getMetricsRecorder(); recorder != nil {
-			recorder.RecordValidationCacheHit()
-		}
-		return result
-	}
-
-	// Record cache miss in metrics
-	if recorder := getMetricsRecorder(); recorder != nil {
-		recorder.RecordValidationCacheMiss()
-	}
-
-	err := ValidateFilter(filter)
-	filterValidationCache.Set(cacheKey, err)
-	return err
-}
-
-// CachedValidateCommand validates a command with caching
-func CachedValidateCommand(command string) error {
-	cacheKey := "command:" + command
-	if exists, result := commandValidationCache.Get(cacheKey); exists {
-		// Record cache hit in metrics
-		if recorder := getMetricsRecorder(); recorder != nil {
-			recorder.RecordValidationCacheHit()
-		}
-		return result
-	}
-
-	// Record cache miss in metrics
-	if recorder := getMetricsRecorder(); recorder != nil {
-		recorder.RecordValidationCacheMiss()
-	}
-
-	err := ValidateCommand(command)
-	commandValidationCache.Set(cacheKey, err)
-	return err
-}
-
-// ClearValidationCaches clears all validation caches
-func ClearValidationCaches() {
-	ipValidationCache.Clear()
-	jailValidationCache.Clear()
-	filterValidationCache.Clear()
-	commandValidationCache.Clear()
-}
-
-// GetValidationCacheStats returns cache statistics
-func GetValidationCacheStats() map[string]int {
-	return map[string]int{
-		"ip_cache_size":      ipValidationCache.Size(),
-		"jail_cache_size":    jailValidationCache.Size(),
-		"filter_cache_size":  filterValidationCache.Size(),
-		"command_cache_size": commandValidationCache.Size(),
 	}
 }
 
 // Path helper functions for centralized path validation
 
+// PathSecurityConfig holds configuration for path security validation
+type PathSecurityConfig struct {
+	AllowedBasePaths []string // List of allowed base directories
+	MaxPathLength    int      // Maximum allowed path length (0 = unlimited)
+	AllowSymlinks    bool     // Whether to allow symlinks
+	ResolveSymlinks  bool     // Whether to resolve symlinks before validation
+}
+
 // GetLogAllowedPaths returns allowed paths for log directories
 func GetLogAllowedPaths() []string {
 	paths := []string{"/var/log", "/opt", "/usr/local", "/home"}
-	return appendDevPathsIfAllowed(paths)
+	paths = appendDevPathsIfAllowed(paths)
+	return expandAllowedPaths(paths)
 }
 
 // GetFilterAllowedPaths returns allowed paths for filter directories
 func GetFilterAllowedPaths() []string {
 	paths := []string{"/etc/fail2ban", "/usr/local/etc/fail2ban", "/opt/fail2ban", "/home"}
-	return appendDevPathsIfAllowed(paths)
+	paths = appendDevPathsIfAllowed(paths)
+	return expandAllowedPaths(paths)
 }
 
 // appendDevPathsIfAllowed adds development paths if ALLOW_DEV_PATHS is set
@@ -844,15 +498,340 @@ func appendDevPathsIfAllowed(paths []string) []string {
 	return paths
 }
 
-// GetDangerousCommandPatterns returns patterns that indicate dangerous commands or injections
-func GetDangerousCommandPatterns() []string {
-	return []string{
-		"rm -rf", "dangerous_rm_command", "dangerous_system_call",
-		"drop table", "'; cat", "/etc/", "DANGEROUS_RM_COMMAND",
-		"DANGEROUS_SYSTEM_CALL", "DANGEROUS_COMMAND", "DANGEROUS_PWD_COMMAND",
-		"DANGEROUS_LIST_COMMAND", "DANGEROUS_READ_COMMAND", "DANGEROUS_OUTPUT_FILE",
-		"DANGEROUS_INPUT_FILE", "DANGEROUS_EXEC_COMMAND", "DANGEROUS_WGET_COMMAND",
-		"DANGEROUS_CURL_COMMAND", "DANGEROUS_EXEC_FUNCTION", "DANGEROUS_SYSTEM_FUNCTION",
-		"DANGEROUS_EVAL_FUNCTION",
+// expandAllowedPaths adds resolved equivalents for allowed paths and removes duplicates
+func expandAllowedPaths(paths []string) []string {
+	seen := make(map[string]struct{}, len(paths)*2)
+	expanded := make([]string, 0, len(paths)*2)
+	for _, p := range paths {
+		if p == "" {
+			continue
+		}
+		if _, ok := seen[p]; !ok {
+			expanded = append(expanded, p)
+			seen[p] = struct{}{}
+		}
+		if resolved, err := resolveAncestorSymlinks(p, true); err == nil && resolved != "" && resolved != p {
+			if _, ok := seen[resolved]; !ok {
+				expanded = append(expanded, resolved)
+				seen[resolved] = struct{}{}
+			}
+		}
 	}
+	return expanded
+}
+
+// CreateLogPathConfig creates a standard PathSecurityConfig for log directories
+func CreateLogPathConfig() PathSecurityConfig {
+	return PathSecurityConfig{
+		AllowedBasePaths: GetLogAllowedPaths(),
+		MaxPathLength:    4096,
+		AllowSymlinks:    true,
+		ResolveSymlinks:  true,
+	}
+}
+
+// CreateFilterPathConfig creates a standard PathSecurityConfig for filter directories
+func CreateFilterPathConfig() PathSecurityConfig {
+	return PathSecurityConfig{
+		AllowedBasePaths: GetFilterAllowedPaths(),
+		MaxPathLength:    4096,
+		AllowSymlinks:    true,
+		ResolveSymlinks:  true,
+	}
+}
+
+// CreateSingleDirPathConfig creates a path config for a single directory (like log file validation)
+func CreateSingleDirPathConfig(baseDir string) PathSecurityConfig {
+	return PathSecurityConfig{
+		AllowedBasePaths: []string{baseDir},
+		MaxPathLength:    4096,
+		AllowSymlinks:    false,
+		ResolveSymlinks:  true,
+	}
+}
+
+// ValidatePathWithSecurity performs comprehensive path security validation
+func ValidatePathWithSecurity(path string, config PathSecurityConfig) (string, error) {
+	if path == "" {
+		return "", fmt.Errorf("empty path not allowed")
+	}
+
+	// Check path length limits (initial check)
+	if config.MaxPathLength > 0 && len(path) > config.MaxPathLength {
+		return "", fmt.Errorf("path too long: %d characters (max: %d)", len(path), config.MaxPathLength)
+	}
+
+	// Detect and prevent null byte injection (initial check)
+	if strings.Contains(path, "\x00") {
+		return "", fmt.Errorf("path contains null byte")
+	}
+
+	// Decode URL-encoded path traversal attempts (path semantics)
+	if decodedPath, err := url.PathUnescape(path); err == nil && decodedPath != path {
+		getLogger().Debug("Detected URL-encoded path; using decoded version for validation")
+		path = decodedPath
+	}
+
+	// Normalize unicode characters to prevent bypass attempts
+	path = normalizeUnicode(path)
+
+	// Re-validate after decoding and normalization to prevent bypass
+	if config.MaxPathLength > 0 && len(path) > config.MaxPathLength {
+		return "", fmt.Errorf("path too long after decoding: %d characters (max: %d)", len(path), config.MaxPathLength)
+	}
+
+	// Re-check for null bytes after decoding and normalization
+	if strings.Contains(path, "\x00") {
+		return "", fmt.Errorf("path contains null byte after decoding")
+	}
+
+	// Basic path traversal detection (before cleaning)
+	if hasPathTraversal(path) {
+		return "", fmt.Errorf("path contains path traversal patterns")
+	}
+
+	// Clean and resolve the path
+	cleanPath, err := filepath.Abs(filepath.Clean(path))
+	if err != nil {
+		return "", fmt.Errorf("invalid path: %w", err)
+	}
+
+	// Additional check after cleaning (double-check for sophisticated attacks)
+	if hasPathTraversal(cleanPath) {
+		return "", fmt.Errorf("path contains path traversal patterns after normalization")
+	}
+
+	// Handle symlinks according to configuration
+	finalPath, err := handleSymlinks(cleanPath, config)
+	if err != nil {
+		return "", err
+	}
+
+	// Validate against allowed base paths using Rel, not prefix
+	if err := validateBasePath(finalPath, config.AllowedBasePaths); err != nil {
+		return "", err
+	}
+
+	// Check if path points to a device file or other dangerous file types
+	if err := validateFileType(finalPath); err != nil {
+		return "", err
+	}
+
+	return finalPath, nil
+}
+
+// hasPathTraversal detects various path traversal patterns
+func hasPathTraversal(path string) bool {
+	// Check for various path traversal patterns
+	dangerousPatterns := []string{
+		"..",
+		"./",
+		".\\",
+		"//",
+		"\\\\",
+		"/../",
+		"\\..\\",
+		"%2e%2e",       // URL encoded ..
+		"%2f",          // URL encoded /
+		"%5c",          // URL encoded \
+		"\u002e\u002e", // Unicode ..
+		"\u2024\u2024", // Unicode bullet points (can look like ..)
+		"\uff0e\uff0e", // Full-width Unicode ..
+	}
+
+	pathLower := strings.ToLower(path)
+	for _, pattern := range dangerousPatterns {
+		if strings.Contains(pathLower, strings.ToLower(pattern)) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// normalizeUnicode normalizes unicode characters to prevent bypass attempts
+func normalizeUnicode(path string) string {
+	// Replace various Unicode representations of dots and slashes
+	replacements := map[string]string{
+		"\u002e": ".",  // Unicode dot
+		"\u2024": ".",  // Unicode bullet (one dot leader)
+		"\uff0e": ".",  // Full-width dot
+		"\u002f": "/",  // Unicode slash
+		"\u2044": "/",  // Unicode fraction slash
+		"\uff0f": "/",  // Full-width slash
+		"\u005c": "\\", // Unicode backslash
+		"\uff3c": "\\", // Full-width backslash
+	}
+
+	result := path
+	for unicode, ascii := range replacements {
+		result = strings.ReplaceAll(result, unicode, ascii)
+	}
+
+	return result
+}
+
+// handleSymlinks resolves or validates symlinks according to configuration
+func handleSymlinks(path string, config PathSecurityConfig) (string, error) {
+	// Check if the path is a symlink
+	if info, err := os.Lstat(path); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			if !config.AllowSymlinks {
+				return "", fmt.Errorf("symlinks not allowed: %s", path)
+			}
+
+			if config.ResolveSymlinks {
+				resolved, err := filepath.EvalSymlinks(path)
+				if err != nil {
+					return "", fmt.Errorf(shared.ErrFailedToResolveSymlink, err)
+				}
+				return resolved, nil
+			}
+		}
+	} else if !os.IsNotExist(err) {
+		return "", fmt.Errorf("failed to check file info: %w", err)
+	}
+
+	// If leaf doesn't exist, resolve symlinks in the deepest existing ancestor
+	if config.ResolveSymlinks {
+		return resolveAncestorSymlinks(path, config.AllowSymlinks)
+	}
+	return path, nil
+}
+
+// resolveAncestorSymlinks resolves symlinks in existing ancestor directories
+func resolveAncestorSymlinks(path string, allowSymlinks bool) (string, error) {
+	dir := path
+	var tail []string
+	for {
+		d := filepath.Dir(dir)
+		if d == dir {
+			break
+		}
+		if _, err := os.Lstat(dir); err == nil {
+			break
+		}
+		tail = append([]string{filepath.Base(dir)}, tail...)
+		dir = d
+	}
+	if fi, err := os.Lstat(dir); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		if !allowSymlinks {
+			return "", fmt.Errorf("symlinks not allowed in path: %s", dir)
+		}
+		resolved, err := filepath.EvalSymlinks(dir)
+		if err != nil {
+			return "", fmt.Errorf(shared.ErrFailedToResolveSymlink, err)
+		}
+		return filepath.Join(append([]string{resolved}, tail...)...), nil
+	}
+	return path, nil
+}
+
+// validateBasePath ensures the path is within allowed base directories
+func validateBasePath(path string, allowedBasePaths []string) error {
+	if len(allowedBasePaths) == 0 {
+		return nil // No restrictions if no base paths configured
+	}
+
+	for _, basePath := range allowedBasePaths {
+		cleanBasePath, err := filepath.Abs(filepath.Clean(basePath))
+		if err != nil {
+			continue
+		}
+
+		rel, err := filepath.Rel(cleanBasePath, path)
+		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("path outside allowed directories: %s", path)
+}
+
+// validateFileType checks for dangerous file types (devices, named pipes, etc.)
+func validateFileType(path string) error {
+	// Check if file exists
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		return nil // File doesn't exist yet, allow it
+	}
+	if err != nil {
+		return fmt.Errorf("failed to stat file: %w", err)
+	}
+
+	mode := info.Mode()
+
+	// Block device files
+	if mode&os.ModeDevice != 0 {
+		return fmt.Errorf("device files not allowed: %s", path)
+	}
+
+	// Block named pipes (FIFOs)
+	if mode&os.ModeNamedPipe != 0 {
+		return fmt.Errorf("named pipes not allowed: %s", path)
+	}
+
+	// Block socket files
+	if mode&os.ModeSocket != 0 {
+		return fmt.Errorf("socket files not allowed: %s", path)
+	}
+
+	// Block irregular files (anything that's not a regular file or directory)
+	if !mode.IsRegular() && !mode.IsDir() {
+		return fmt.Errorf("irregular file type not allowed: %s", path)
+	}
+
+	return nil
+}
+
+// ValidateLogPath validates and sanitizes a log file path using standard log directory config
+// Context parameter accepted for API consistency but not currently used
+func ValidateLogPath(ctx context.Context, path string, logDir string) (string, error) {
+	_ = ctx // Context not currently used by ValidatePathWithSecurity
+	config := CreateSingleDirPathConfig(logDir)
+	return ValidatePathWithSecurity(path, config)
+}
+
+// ValidateClientLogPath validates log directory path for client initialization
+// Context parameter accepted for API consistency but not currently used
+func ValidateClientLogPath(ctx context.Context, logDir string) (string, error) {
+	_ = ctx // Context not currently used by ValidatePathWithSecurity
+	config := CreateLogPathConfig()
+	return ValidatePathWithSecurity(logDir, config)
+}
+
+// ValidateClientFilterPath validates filter directory path for client initialization
+// Context parameter accepted for API consistency but not currently used
+func ValidateClientFilterPath(ctx context.Context, filterDir string) (string, error) {
+	_ = ctx // Context not currently used by ValidatePathWithSecurity
+	config := CreateFilterPathConfig()
+	return ValidatePathWithSecurity(filterDir, config)
+}
+
+// ValidateFilterName validates a filter name for path traversal prevention.
+// Rejects: "..", "/", "\", absolute paths, drive letters
+// Allows: letters, digits, dash, underscore only
+func ValidateFilterName(filter string) error {
+	filter = strings.TrimSpace(filter)
+
+	if filter == "" {
+		return fmt.Errorf("filter name cannot be empty")
+	}
+
+	// Check for path traversal
+	if ContainsPathTraversal(filter) {
+		return fmt.Errorf("filter name contains path traversal")
+	}
+
+	// Check for absolute paths
+	if filepath.IsAbs(filter) {
+		return fmt.Errorf("filter name cannot be an absolute path")
+	}
+
+	// Only allow safe characters (alphanumeric, dash, underscore)
+	if !regexp.MustCompile(`^[a-zA-Z0-9_-]+$`).MatchString(filter) {
+		return fmt.Errorf("filter name contains invalid characters")
+	}
+
+	return nil
 }

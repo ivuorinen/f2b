@@ -1,6 +1,7 @@
 package fail2ban
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,7 +18,7 @@ func TestGetLogLinesErrorHandling(t *testing.T) {
 		// Set log directory to non-existent path
 		SetLogDir("/nonexistent/path/that/should/not/exist")
 
-		lines, err := GetLogLines("sshd", "")
+		lines, err := GetLogLines(context.Background(), "sshd", "")
 		if err != nil {
 			t.Logf("Correctly handled non-existent log directory: %v", err)
 		}
@@ -36,7 +37,7 @@ func TestGetLogLinesErrorHandling(t *testing.T) {
 
 		SetLogDir(tempDir)
 
-		lines, err := GetLogLines("sshd", "192.168.1.100")
+		lines, err := GetLogLines(context.Background(), "sshd", "192.168.1.100")
 		if err != nil {
 			t.Errorf("Should not error on empty directory, got: %v", err)
 		}
@@ -65,7 +66,7 @@ func TestGetLogLinesErrorHandling(t *testing.T) {
 		}
 
 		// Test filtering by jail
-		lines, err := GetLogLines("sshd", "")
+		lines, err := GetLogLines(context.Background(), "sshd", "")
 		if err != nil {
 			t.Errorf("GetLogLines should not error with valid log: %v", err)
 		}
@@ -101,7 +102,7 @@ func TestGetLogLinesErrorHandling(t *testing.T) {
 		}
 
 		// Test filtering by IP
-		lines, err := GetLogLines("", "192.168.1.100")
+		lines, err := GetLogLines(context.Background(), "", "192.168.1.100")
 		if err != nil {
 			t.Errorf("GetLogLines should not error with valid log: %v", err)
 		}
@@ -138,7 +139,7 @@ func TestGetLogLinesWithLimitErrorHandling(t *testing.T) {
 		}
 
 		// Test with zero limit
-		lines, err := GetLogLinesWithLimit("sshd", "", 0)
+		lines, err := GetLogLinesWithLimit(context.Background(), "sshd", "", 0)
 		if err != nil {
 			t.Errorf("GetLogLinesWithLimit should not error with zero limit: %v", err)
 		}
@@ -163,15 +164,15 @@ func TestGetLogLinesWithLimitErrorHandling(t *testing.T) {
 			t.Fatalf("Failed to create test log file: %v", err)
 		}
 
-		// Test with negative limit (should be treated as unlimited)
-		lines, err := GetLogLinesWithLimit("sshd", "", -1)
-		if err != nil {
-			t.Errorf("GetLogLinesWithLimit should not error with negative limit: %v", err)
+		// Test with negative limit (should be rejected with validation error)
+		_, err = GetLogLinesWithLimit(context.Background(), "sshd", "", -1)
+		if err == nil {
+			t.Error("GetLogLinesWithLimit should error with negative limit")
 		}
 
-		// Should return available lines
-		if len(lines) == 0 {
-			t.Error("Expected lines with negative limit (unlimited)")
+		// Error should indicate validation failure
+		if !strings.Contains(err.Error(), "must be non-negative") {
+			t.Errorf("Expected validation error for negative limit, got: %v", err)
 		}
 	})
 
@@ -194,7 +195,7 @@ func TestGetLogLinesWithLimitErrorHandling(t *testing.T) {
 		}
 
 		// Test with limit of 2
-		lines, err := GetLogLinesWithLimit("sshd", "", 2)
+		lines, err := GetLogLinesWithLimit(context.Background(), "sshd", "", 2)
 		if err != nil {
 			t.Errorf("GetLogLinesWithLimit should not error: %v", err)
 		}

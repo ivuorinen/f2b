@@ -1,3 +1,6 @@
+// Package cmd provides structured logging and contextual logging capabilities.
+// This package implements context-aware logging with request tracing and
+// structured field support for better observability in f2b operations.
 package cmd
 
 import (
@@ -5,22 +8,8 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-)
 
-// ContextKey represents keys for context values
-type ContextKey string
-
-const (
-	// RequestIDKey is the key for request ID in context
-	RequestIDKey ContextKey = "request_id"
-	// OperationKey is the key for operation name in context
-	OperationKey ContextKey = "operation"
-	// IPKey is the key for IP address in context
-	IPKey ContextKey = "ip"
-	// JailKey is the key for jail name in context
-	JailKey ContextKey = "jail"
-	// CommandKey is the key for command name in context
-	CommandKey ContextKey = "command"
+	"github.com/ivuorinen/f2b/shared"
 )
 
 // ContextualLogger provides structured logging with context propagation
@@ -71,25 +60,25 @@ func getVersion() string {
 func (cl *ContextualLogger) WithContext(ctx context.Context) *logrus.Entry {
 	entry := cl.WithFields(cl.defaultFields)
 
-	// Extract context values and add as fields
-	if requestID := ctx.Value(RequestIDKey); requestID != nil {
-		entry = entry.WithField("request_id", requestID)
+	// Extract context values and add as fields (using consistent constants)
+	if requestID := ctx.Value(shared.ContextKeyRequestID); requestID != nil {
+		entry = entry.WithField(string(shared.ContextKeyRequestID), requestID)
 	}
 
-	if operation := ctx.Value(OperationKey); operation != nil {
-		entry = entry.WithField("operation", operation)
+	if operation := ctx.Value(shared.ContextKeyOperation); operation != nil {
+		entry = entry.WithField(string(shared.ContextKeyOperation), operation)
 	}
 
-	if ip := ctx.Value(IPKey); ip != nil {
-		entry = entry.WithField("ip", ip)
+	if ip := ctx.Value(shared.ContextKeyIP); ip != nil {
+		entry = entry.WithField(string(shared.ContextKeyIP), ip)
 	}
 
-	if jail := ctx.Value(JailKey); jail != nil {
-		entry = entry.WithField("jail", jail)
+	if jail := ctx.Value(shared.ContextKeyJail); jail != nil {
+		entry = entry.WithField(string(shared.ContextKeyJail), jail)
 	}
 
-	if command := ctx.Value(CommandKey); command != nil {
-		entry = entry.WithField("command", command)
+	if command := ctx.Value(shared.ContextKeyCommand); command != nil {
+		entry = entry.WithField(string(shared.ContextKeyCommand), command)
 	}
 
 	return entry
@@ -97,27 +86,27 @@ func (cl *ContextualLogger) WithContext(ctx context.Context) *logrus.Entry {
 
 // WithOperation adds operation context and returns a new context
 func WithOperation(ctx context.Context, operation string) context.Context {
-	return context.WithValue(ctx, OperationKey, operation)
+	return context.WithValue(ctx, shared.ContextKeyOperation, operation)
 }
 
 // WithIP adds IP context and returns a new context
 func WithIP(ctx context.Context, ip string) context.Context {
-	return context.WithValue(ctx, IPKey, ip)
+	return context.WithValue(ctx, shared.ContextKeyIP, ip)
 }
 
 // WithJail adds jail context and returns a new context
 func WithJail(ctx context.Context, jail string) context.Context {
-	return context.WithValue(ctx, JailKey, jail)
+	return context.WithValue(ctx, shared.ContextKeyJail, jail)
 }
 
 // WithCommand adds command context and returns a new context
 func WithCommand(ctx context.Context, command string) context.Context {
-	return context.WithValue(ctx, CommandKey, command)
+	return context.WithValue(ctx, shared.ContextKeyCommand, command)
 }
 
 // WithRequestID adds request ID context and returns a new context
 func WithRequestID(ctx context.Context, requestID string) context.Context {
-	return context.WithValue(ctx, RequestIDKey, requestID)
+	return context.WithValue(ctx, shared.ContextKeyRequestID, requestID)
 }
 
 // LogOperation logs the start and end of an operation with timing and metrics
@@ -128,7 +117,7 @@ func (cl *ContextualLogger) LogOperation(ctx context.Context, operation string, 
 	// Get metrics instance
 	metrics := GetGlobalMetrics()
 
-	cl.WithContext(ctx).WithField("duration", "start").Info("Operation started")
+	cl.WithContext(ctx).WithField("action", shared.ActionStart).Info("Operation started")
 
 	err := fn()
 	duration := time.Since(start)
@@ -137,7 +126,7 @@ func (cl *ContextualLogger) LogOperation(ctx context.Context, operation string, 
 
 	// Record metrics based on operation type
 	success := err == nil
-	if command := ctx.Value(CommandKey); command != nil {
+	if command := ctx.Value(shared.ContextKeyCommand); command != nil {
 		if cmdStr, ok := command.(string); ok {
 			metrics.RecordCommandExecution(cmdStr, duration, success)
 		}

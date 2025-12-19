@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -209,7 +210,7 @@ func TestSecurityAudit_PathSecurity(t *testing.T) {
 			testFile := filepath.Join(tempDir, "test.log")
 			_ = os.WriteFile(testFile, []byte("test"), 0600)
 
-			_, _ = fail2ban.GetLogLines("all", "all")
+			_, _ = fail2ban.GetLogLines(context.Background(), "all", "all")
 			// The actual path validation happens inside GetLogLines
 			// We're testing that no traversal attempts succeed
 
@@ -234,7 +235,7 @@ func TestSecurityAudit_PathSecurity(t *testing.T) {
 						return err
 					}
 
-					_, err := fail2ban.GetLogLines("sshd", "192.168.1.100")
+					_, err := fail2ban.GetLogLines(context.Background(), "sshd", "192.168.1.100")
 					return err
 				},
 			},
@@ -425,7 +426,7 @@ func testSecurityChainValidation(t *testing.T, jail, ip string, shouldPass, test
 
 	// Test end-to-end log reading (only for legitimate cases)
 	if shouldPass {
-		_, err := fail2ban.GetLogLines(jail, ip)
+		_, err := fail2ban.GetLogLines(context.Background(), jail, ip)
 		if err != nil {
 			t.Errorf("Legitimate log reading should succeed: %v", err)
 		}

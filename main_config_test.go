@@ -46,6 +46,10 @@ func TestMainConfigurationParsing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Clear env vars first to ensure clean state
+			t.Setenv("F2B_LOG_DIR", "")
+			t.Setenv("F2B_FILTER_DIR", "")
+
 			// Set up environment using t.Setenv for automatic cleanup
 			if tt.logDirEnv != "" {
 				t.Setenv("F2B_LOG_DIR", tt.logDirEnv)
@@ -138,11 +142,16 @@ func TestMainEnvironmentVariables(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Clear all environment variables first, then set test values
+			// This ensures "no environment variables" case works even when running with F2B_LOG_LEVEL=error
+			allKeys := []string{"F2B_LOG_DIR", "F2B_FILTER_DIR", "F2B_LOG_LEVEL", "F2B_LOG_FILE", "F2B_TEST_SUDO"}
+			for _, key := range allKeys {
+				t.Setenv(key, "") // Clear first
+			}
+
 			// Set environment variables for test
 			for key, value := range tt.envVars {
-				if value != "" {
-					t.Setenv(key, value)
-				}
+				t.Setenv(key, value)
 			}
 
 			// Check that environment variables are correctly set or empty

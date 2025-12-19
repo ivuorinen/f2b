@@ -8,24 +8,14 @@ import (
 	"os/user"
 	"sync"
 	"time"
+
+	"github.com/ivuorinen/f2b/shared"
 )
 
 const (
 	// DefaultSudoTimeout is the default timeout for sudo privilege checks
 	DefaultSudoTimeout = 5 * time.Second
 )
-
-// SudoChecker provides methods to check sudo privileges
-type SudoChecker interface {
-	// IsRoot returns true if the current user is root (UID 0)
-	IsRoot() bool
-	// InSudoGroup returns true if the current user is in the sudo group
-	InSudoGroup() bool
-	// CanUseSudo returns true if the current user can use sudo
-	CanUseSudo() bool
-	// HasSudoPrivileges returns true if user has any form of sudo access
-	HasSudoPrivileges() bool
-}
 
 // RealSudoChecker implements SudoChecker using actual system calls
 type RealSudoChecker struct{}
@@ -85,7 +75,7 @@ func (r *RealSudoChecker) InSudoGroup() bool {
 		}
 
 		// Check common sudo group names (portable across systems)
-		if group.Name == "sudo" || group.Name == "wheel" || group.Name == "admin" {
+		if group.Name == shared.SudoCommand || group.Name == "wheel" || group.Name == "admin" {
 			return true
 		}
 
@@ -108,7 +98,8 @@ func (r *RealSudoChecker) CanUseSudo() bool {
 	defer cancel()
 
 	// Try to run 'sudo -n true' (non-interactive) to test sudo access
-	cmd := exec.CommandContext(ctx, "sudo", "-n", "true")
+	// #nosec G204 -- shared.SudoCommand is a hardcoded constant "sudo", not user input
+	cmd := exec.CommandContext(ctx, shared.SudoCommand, "-n", "true")
 	err := cmd.Run()
 	return err == nil
 }
@@ -148,14 +139,14 @@ func (m *MockSudoChecker) HasSudoPrivileges() bool {
 // RequiresSudo returns true if the given command typically requires sudo privileges
 func RequiresSudo(command string, args ...string) bool {
 	// Commands that typically require sudo for fail2ban operations
-	if command == Fail2BanClientCommand {
+	if command == shared.Fail2BanClientCommand {
 		if len(args) > 0 {
 			switch args[0] {
-			case "set", "reload", "restart", "start", "stop":
+			case shared.ActionSet, shared.ActionReload, shared.ActionRestart, shared.ActionStart, shared.ActionStop:
 				return true
-			case "get":
+			case shared.ActionGet:
 				// Some get operations might require sudo depending on configuration
-				if len(args) > 2 && (args[2] == "banip" || args[2] == "unbanip") {
+				if len(args) > 2 && (args[2] == shared.ActionBanIP || args[2] == shared.ActionUnbanIP) {
 					return true
 				}
 			}
@@ -163,13 +154,13 @@ func RequiresSudo(command string, args ...string) bool {
 		return false
 	}
 
-	if command == "service" && len(args) > 0 && args[0] == "fail2ban" {
+	if command == shared.ServiceCommand && len(args) > 0 && args[0] == shared.ServiceFail2ban {
 		return true
 	}
 
 	if command == "systemctl" && len(args) > 0 {
 		switch args[0] {
-		case "start", "stop", "restart", "reload", "enable", "disable":
+		case shared.ActionStart, "stop", "restart", "reload", "enable", "disable":
 			return true
 		}
 	}

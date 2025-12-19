@@ -1,113 +1,51 @@
-# AGENTS Guidelines
+# Repository Guidelines
 
-## Purpose
+Use this guide to contribute effectively to f2b, the Go-based CLI for managing Fail2Ban jails.
 
-Instructions for AI agents and human contributors to maintain consistent, secure, and reviewable code changes.
+## Project Structure & Module Organization
 
-## Project Context
+- `main.go` wires logging, sudo detection, and client startup.
+- `cmd/` contains Cobra commands and fluent command tests.
+  Mirror changes under `cmd/*_test.go` when adding scenarios.
+- `fail2ban/` hosts the client interfaces, runners, and mocks used across commands.
+- `docs/` centralizes architecture, testing, and security references; keep updates in sync with code changes.
 
-- **f2b**: Modern, secure Go CLI for managing Fail2Ban jails and bans
-- **Stack**: Go >=1.20, Cobra CLI, logrus logging, dependency injection
-- **Principles**: Security-first, testability, maintainability, privilege safety
+## Build, Test, and Development Commands
 
-For detailed project architecture and design patterns, see [docs/architecture.md](docs/architecture.md).
+- Build the CLI with:
+  `go build -ldflags "-X github.com/ivuorinen/f2b/cmd.version=1.2.3" -o f2b .`
+  This embeds the release version string in the binary.
+- Run tests with coverage:
+  `go test -covermode=atomic -coverprofile=coverage.out ./...`
+  This generates a coverage profile with race-safe metrics.
+- `pre-commit run --all-files` applies formatting, linting, and link checks; run before every push.
+- `make update-deps` refreshes Go dependencies when coordinating dependency upgrades.
 
-## Commit Rules
+## Coding Style & Naming Conventions
 
-- **Read configs FIRST**: Study `.editorconfig`, `.golangci.yml`, `.markdownlint.json`,
-  `.yamlfmt.yaml`, `.pre-commit-config.yaml`
-- **Semantic Commits**: `type(scope): message` (e.g., `feat(cli): add ban command`)
-- **Preferred Workflow**: Use `pre-commit run --all-files` for unified linting and formatting
-- **Pre-commit Setup**: Run `pre-commit install` for automatic hooks on commit
-- **Tests**: Run `go test ./...` after linting for code changes
-- **Alternative**: Individual tools available but pre-commit is preferred for consistency
+- Follow `.editorconfig`: tabs for Go, two-space indentation elsewhere, max line length 120.
+- Format Go code with `gofmt` (automatically enforced by pre-commit); keep package aliases clear and explicit.
+- Name tests as `<feature>_test.go` and exported Cobra commands as `New<Feature>Command` for discoverability.
+- Keep docs concise and avoid hard-coded numeric claims unless required for accuracy.
 
-## Security Rules
+## Testing Guidelines
 
-- **NEVER** execute real sudo commands in tests - always use MockRunner
-- **ALWAYS** validate input before privilege escalation
-- **ALWAYS** use argument arrays, never shell string concatenation
-- **ALWAYS** test both privileged and unprivileged scenarios
-- Validate IPs, jail names, and filter names to prevent injection
-- Use `MockSudoChecker` and `MockRunner` in tests
-- Handle privilege errors gracefully with helpful messages
+- Use the fluent helpers such as `NewCommandTest` and `NewMockClientBuilder` for CLI coverage.
+- Co-locate unit tests with their packages and create `*_integration_test.go` only for integration scenarios.
+- Mock sudo interactions with the provided `MockRunner` and `MockSudoChecker`; never issue real sudo.
+- Ensure security cases include path traversal, privilege errors, and context timeouts.
 
-For comprehensive security guidelines and threat model, see [docs/security.md](docs/security.md).
+## Commit & Pull Request Guidelines
 
-## Configuration Files
+- Write semantic commits (`type(scope): message`) that describe the observable change, such as:
+  `feat(cli): add metrics command`.
+- Include rationale, testing evidence, and configuration updates in PR descriptions; link issues when relevant.
+- Run `pre-commit run --all-files` and `go test ./...` before requesting review and mention the results.
+- Keep PRs focused; split large features into reviewable increments and update docs alongside code.
 
-**Read these files BEFORE making ANY changes to ensure proper code style:**
+## Security & Configuration Tips
 
-- **`.editorconfig`**: Indentation (tabs for Go, 2 spaces for others), final newlines, encoding
-- **`.golangci.yml`**: Go linting rules, enabled/disabled checks, timeout settings
-- **`.markdownlint.json`**: Markdown formatting rules, line length (120 chars), disabled rules
-- **`.yamlfmt.yaml`**: YAML formatting rules for all YAML files
-- **`.pre-commit-config.yaml`**: Pre-commit hook configuration
-
-For detailed information about all linting tools and configuration, see [docs/linting.md](docs/linting.md).
-
-## Code Standards
-
-- Generate idiomatic, readable Go code following project structure
-- Use dependency injection and interfaces for testability
-- Prefer explicit error handling with logrus logging
-- Use `PrintOutput` and `PrintError` helpers for CLI output
-- Support both `plain` and `json` output formats
-- Handle sudo privileges using established patterns
-- **Follow .editorconfig rules**: Use tabs for Go, 2 spaces for other files, add final newlines
-
-## Testing Requirements
-
-- Use `F2B_TEST_SUDO=true` when testing sudo validation
-- Mock all system interactions with dependency injection
-- Test privilege scenarios: privileged, unprivileged, and edge cases
-- Co-locate tests with source files (`*_test.go`)
-- Use `integration_test.go` naming for integration tests
-
-For detailed testing patterns, mock usage, and examples, see [docs/testing.md](docs/testing.md).
-
-## Development Workflow
-
-1. **Read configuration files first**:
-    - `.editorconfig`,
-    - `.golangci.yml`,
-    - `.markdownlint.json`,
-    - `.yamlfmt.yaml`,
-    - `.pre-commit-config.yaml`
-
-2. **Study existing code patterns** and project structure before making changes
-3. **Apply configuration rules** during development to avoid style violations
-4. **Implement changes** following security and testing requirements
-5. **Run pre-commit checks**: `pre-commit run --all-files` to catch all issues
-6. **Fix all issues** across the project, not just modified files
-7. **Keep PRs focused** with clear descriptions
-
-## AI-Specific Guidelines
-
-- Prioritize user intent and project maintainability
-- Avoid large, sweeping changes unless explicitly requested
-- Ask for clarification when in doubt
-- Include appropriate test coverage for security-sensitive changes
-- Respect project's Code of Conduct and community standards
-
-## Common Pitfalls
-
-1. **Testing Sudo Operations**: Always use mocks, never real sudo
-2. **Input Validation**: Validate all user input to prevent injection
-3. **Path Traversal**: Filter names are validated to prevent directory traversal
-4. **Privilege Checking**: Use SudoChecker interface, don't check directly
-5. **Command Execution**: Use RunnerCombinedOutputWithSudo for sudo commands
-
-## Environment Variables
-
-- `F2B_LOG_DIR`: Fail2Ban log directory (default: `/var/log`)
-- `F2B_FILTER_DIR`: Fail2Ban filter directory (default: `/etc/fail2ban/filter.d`)
-- `F2B_LOG_LEVEL`: Application log level (debug, info, warn, error)
-- `F2B_TEST_SUDO`: Enable sudo checking in tests (set to "true")
-
-## Contact
-
-For questions about AI-generated contributions:
-
-- [@ivuorinen](https://github.com/ivuorinen)
-- ismo@ivuorinen.net
+- Validate all user inputs, especially jail names and filesystem paths, before invoking runners.
+- Respect privilege boundaries: prefer dependency injection so tests and CLI paths use mocks by default.
+- Configure logging through the `F2B_LOG_LEVEL` environment variable.
+  Use `F2B_VERBOSE_TESTS` to enable verbose test output.

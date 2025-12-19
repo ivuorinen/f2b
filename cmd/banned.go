@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/shared"
 )
 
 // BannedCmd returns the banned command with injected client and config
@@ -25,9 +26,16 @@ func BannedCmd(client interface {
 			ctx, cancel := context.WithTimeout(context.Background(), config.CommandTimeout)
 			defer cancel()
 
-			target := "all"
+			target := shared.AllFilter
 			if len(args) > 0 {
 				target = strings.ToLower(args[0])
+			}
+
+			// Validate jail name (allow special "ALL" filter)
+			if target != shared.AllFilter {
+				if err := fail2ban.CachedValidateJail(ctx, target); err != nil {
+					return HandleValidationError(err)
+				}
 			}
 
 			records, err := client.GetBanRecordsWithContext(ctx, []string{target})

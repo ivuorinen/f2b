@@ -14,7 +14,7 @@ privilege management, shell completion, and comprehensive security features.
 
 ### What are the prerequisites for running `f2b`?
 
-- Go 1.20 or newer (for building from source)
+- Go 1.25 or newer (for building from source)
 - Fail2Ban installed and running on your system
 - Appropriate privileges (root, sudo group membership, or sudo capability) for ban/unban operations
 

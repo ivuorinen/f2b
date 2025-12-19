@@ -2,9 +2,10 @@
 
 ## Security Model
 
-f2b is designed with security as a fundamental principle. The tool handles privileged operations safely while
-maintaining usability and providing clear security boundaries. Enhanced with context-aware timeout handling,
-comprehensive path traversal protection, and advanced security testing with 17 sophisticated attack vectors.
+f2b is designed with security as a fundamental principle. The tool handles privileged operations safely
+while maintaining usability and providing clear security boundaries. Enhanced with context-aware timeout
+handling, comprehensive path traversal protection, and advanced security testing with extensive
+sophisticated attack vectors.
 
 ### Threat Model
 
@@ -256,7 +257,7 @@ func TestBanCommand_WithPrivileges(t *testing.T) {
 
 ### Advanced Security Test Coverage
 
-The system includes comprehensive security testing with 17 sophisticated attack vectors:
+The system includes comprehensive security testing with extensive sophisticated attack vectors:
 
 ```go
 func TestPathTraversalProtection(t *testing.T) {
@@ -314,7 +315,7 @@ func setupSecureTestEnvironment(t *testing.T) {
 - [ ] Error messages don't leak sensitive information
 - [ ] Input sanitization prevents injection attacks including advanced path traversal
 - [ ] Context-aware operations implemented with proper timeout handling
-- [ ] Path traversal protection covers all 17 sophisticated attack vectors
+- [ ] Path traversal protection covers all sophisticated attack vectors
 - [ ] Thread-safe operations for concurrent access
 
 ### For Security-Critical Changes
@@ -356,7 +357,7 @@ func setupSecureTestEnvironment(t *testing.T) {
 
 - **Issue**: Insufficient path validation against sophisticated attacks
 - **Impact**: Access to files outside intended directories
-- **Fix**: Comprehensive path traversal protection with 17 test cases covering:
+- **Fix**: Comprehensive path traversal protection with extensive test cases covering:
   - Unicode normalization attacks (\u002e\u002e)
   - Mixed case traversal (/var/LOG/../../../etc/passwd)
   - Multiple slashes (/var/log////../../etc/passwd)
@@ -381,7 +382,7 @@ func setupSecureTestEnvironment(t *testing.T) {
 ### Defense in Depth
 
 1. **Input Validation**: First line of defense against malicious input with caching
-2. **Advanced Path Traversal Protection**: 17 sophisticated attack vector protection
+2. **Advanced Path Traversal Protection**: Extensive sophisticated attack vector protection
 3. **Privilege Validation**: Ensure user has necessary permissions with timeout protection
 4. **Context-Aware Execution**: Use argument arrays with timeout and cancellation support
 5. **Safe Execution**: Never use shell strings, always use context-aware operations
@@ -404,7 +405,7 @@ User Input → Context → Validation → Path Traversal → Privilege Check →
 1. **Context Creation**: Establish timeout and cancellation context
 2. **Input Sanitization**: Clean and validate all user input
 3. **Cache Validation**: Check validation cache for performance and DoS protection
-4. **Path Traversal Protection**: Block 17 sophisticated attack vectors
+4. **Path Traversal Protection**: Block extensive sophisticated attack vectors
 5. **Privilege Verification**: Confirm user permissions with timeout protection
 6. **Context-Aware Execution**: Execute with timeout and cancellation support
 7. **Timeout Handling**: Gracefully handle hanging operations
@@ -478,7 +479,8 @@ logger.WithFields(logrus.Fields{
 }).Info("Privileged operation executed")
 ```
 
-This comprehensive security model ensures f2b can be used safely in production environments while maintaining the
-flexibility needed for effective Fail2Ban management. The enhanced security features include context-aware timeout
-handling, sophisticated path traversal protection with 17 attack vector coverage, performance-optimized validation
-caching, and comprehensive audit logging for enterprise-grade security monitoring.
+This comprehensive security model ensures f2b can be used safely in production environments
+while maintaining the flexibility needed for effective Fail2Ban management. The enhanced security
+features include context-aware timeout handling, sophisticated path traversal protection with
+extensive attack vector coverage, performance-optimized validation caching, and comprehensive
+audit logging for enterprise-grade security monitoring.

@@ -16,8 +16,8 @@ func main() {
 	var client fail2ban.Client
 	var err error
 
-	// Set up centralized logging - fail2ban package will use cmd.Logger
-	fail2ban.SetLogger(cmd.Logger)
+	// Set up centralized logging - fail2ban package will use cmd.Logger wrapped with adapter
+	fail2ban.SetLogger(fail2ban.NewLogrusAdapter(cmd.Logger))
 
 	// Build config from env/flags
 	config := cmd.NewConfigFromEnv()

@@ -1,7 +1,7 @@
 # f2b Makefile
 
 .PHONY: help all build test lint fmt clean install dev-deps ci \
-	check-deps test-verbose test-coverage \
+	check-deps test-verbose test-coverage update-deps \
 	lint-go lint-md lint-yaml lint-actions lint-make \
 	ci ci-coverage security dev-setup pre-commit-setup \
 	release-dry-run release release-snapshot release-check _check-tag
@@ -26,14 +26,13 @@ install: ## Install f2b globally
 # Development dependencies
 dev-deps: ## Install development dependencies
 	@echo "Installing development dependencies..."
-	@command -v goreleaser >/dev/null 2>&1 || { \
-		echo "Installing goreleaser..."; \
-		go install github.com/goreleaser/goreleaser/v2@latest; \
-	}
-	@command -v golangci-lint >/dev/null 2>&1 || { \
-		echo "Installing golangci-lint..."; \
-		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.2.2; \
-	}
+	@echo ""
+	@echo "Installing goreleaser..."
+	@go install github.com/goreleaser/goreleaser/v2@v2.12.0;
+	# renovate: datasource=go depName=github.com/goreleaser/goreleaser/v2
+	@echo "Installing golangci-lint...";
+	@go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.4.0;
+	# renovate: datasource=go depName=github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 	@command -v markdownlint-cli2 >/dev/null 2>&1 || { \
 		echo "Installing markdownlint-cli2..."; \
 		npm install -g markdownlint-cli2; \
@@ -44,40 +43,49 @@ dev-deps: ## Install development dependencies
 	}
 	@command -v yamlfmt >/dev/null 2>&1 || { \
 		echo "Installing yamlfmt..."; \
-		go install github.com/google/yamlfmt/cmd/yamlfmt@latest; \
+		go install github.com/google/yamlfmt/cmd/yamlfmt@v0.17.2; \
 	}
+	# renovate: datasource=go depName=github.com/google/yamlfmt/cmd/yamlfmt
 	@command -v actionlint >/dev/null 2>&1 || { \
 		echo "Installing actionlint..."; \
-		go install github.com/rhysd/actionlint/cmd/actionlint@latest; \
+		go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7; \
 	}
+	# renovate: datasource=go depName=github.com/rhysd/actionlint/cmd/actionlint
 	@command -v goimports >/dev/null 2>&1 || { \
 		echo "Installing goimports..."; \
-		go install golang.org/x/tools/cmd/goimports@latest; \
+		go install golang.org/x/tools/cmd/goimports@v0.28.0; \
 	}
+	# renovate: datasource=go depName=golang.org/x/tools/cmd/goimports
 	@command -v editorconfig-checker >/dev/null 2>&1 || { \
 		echo "Installing editorconfig-checker..."; \
-		go install github.com/editorconfig-checker/editorconfig-checker/cmd/editorconfig-checker@latest; \
+		go install github.com/editorconfig-checker/editorconfig-checker/v3/cmd/editorconfig-checker@v3.4.0; \
 	}
+	# renovate: datasource=go depName=github.com/editorconfig-checker/editorconfig-checker/v3
 	@command -v gosec >/dev/null 2>&1 || { \
 		echo "Installing gosec..."; \
-		go install github.com/securego/gosec/v2/cmd/gosec@latest; \
+		go install github.com/securego/gosec/v2/cmd/gosec@v2.22.8; \
 	}
+	# renovate: datasource=go depName=github.com/securego/gosec/v2/cmd/gosec
 	@command -v staticcheck >/dev/null 2>&1 || { \
 		echo "Installing staticcheck..."; \
-		go install honnef.co/go/tools/cmd/staticcheck@latest; \
+		go install honnef.co/go/tools/cmd/staticcheck@2024.1.1; \
 	}
+	# renovate: datasource=go depName=honnef.co/go/tools/cmd/staticcheck
 	@command -v revive >/dev/null 2>&1 || { \
 		echo "Installing revive..."; \
-		go install github.com/mgechev/revive@latest; \
+		go install github.com/mgechev/revive@v1.12.0; \
 	}
+	# renovate: datasource=go depName=github.com/mgechev/revive
 	@command -v checkmake >/dev/null 2>&1 || { \
 		echo "Installing checkmake..."; \
-		go install github.com/checkmake/checkmake/cmd/checkmake@latest; \
+		go install github.com/checkmake/checkmake/cmd/checkmake@0.2.2; \
 	}
+	# renovate: datasource=go depName=github.com/checkmake/checkmake/cmd/checkmake
 	@command -v golines >/dev/null 2>&1 || { \
 		echo "Installing golines..."; \
-		go install github.com/segmentio/golines@latest; \
+		go install github.com/segmentio/golines@v0.13.0; \
 	}
+	# renovate: datasource=go depName=github.com/segmentio/golines
 
 check-deps: ## Check if all development dependencies are installed
 	@echo "Checking development dependencies..."
@@ -122,6 +130,15 @@ test-coverage: ## Run tests with coverage report
 	go test -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
 	@echo "Coverage report saved to coverage.html"
+
+update-deps: ## Update Go dependencies to latest patch versions
+	@echo "Updating Go dependencies (patch versions only)..."
+	go get -u=patch ./...
+	go mod tidy
+	go mod verify
+	@echo "Dependencies updated ✓"
+	@echo "Updated dependencies:"
+	@go list -u -m all | grep '\[' || true
 
 # Code quality targets
 fmt: ## Format Go code

@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/shared"
 )
 
 // LogsCmd returns the logs command with injected client and config
@@ -24,7 +25,7 @@ func LogsCmd(client fail2ban.Client, config *Config) *cobra.Command {
 			jail := parsedArgs[0]
 			ip := parsedArgs[1]
 
-			limit, _ := cmd.Flags().GetInt("limit")
+			limit, _ := cmd.Flags().GetInt(shared.FlagLimit)
 			if limit < 0 {
 				limit = 0
 			}
