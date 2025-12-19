@@ -18,6 +18,14 @@ var (
 	ErrInvalidBanTime     = errors.New("invalid ban time")
 )
 
+// Buffer pool for duration formatting to reduce allocations
+var durationBufPool = sync.Pool{
+	New: func() interface{} {
+		b := make([]byte, 0, 11)
+		return &b
+	},
+}
+
 // BoundedTimeCache provides a concurrent-safe bounded cache for parsed times
 type BoundedTimeCache struct {
 	mu      sync.RWMutex
@@ -406,8 +414,13 @@ func formatDurationOptimized(sec int64) string {
 	m := (sec % shared.SecondsPerHour) / shared.SecondsPerMinute
 	s := sec % shared.SecondsPerMinute
 
-	// Pre-allocate buffer for DD:HH:MM:SS format (11 chars)
-	buf := make([]byte, 0, 11)
+	// Get buffer from pool to reduce allocations
+	bufPtr := durationBufPool.Get().(*[]byte)
+	buf := (*bufPtr)[:0]
+	defer func() {
+		*bufPtr = buf[:0]
+		durationBufPool.Put(bufPtr)
+	}()
 
 	// Format days (2 digits)
 	if days < 10 {

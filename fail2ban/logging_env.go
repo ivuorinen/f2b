@@ -6,26 +6,32 @@ package fail2ban
 import (
 	"os"
 	"strings"
+	"sync/atomic"
 
 	"github.com/sirupsen/logrus"
 )
 
-// logger holds the current logger instance - will be set by cmd package
-var logger = NewLogrusAdapter(logrus.StandardLogger())
+// logger holds the current logger instance in a thread-safe manner
+var logger atomic.Value
+
+func init() {
+	// Initialize with default logger
+	logger.Store(NewLogrusAdapter(logrus.StandardLogger()))
+}
 
 // LevelSetter interface for loggers that support setting log levels
 type LevelSetter interface {
 	SetLevel(level string)
 }
 
-// SetLogger allows the cmd package to set the logger instance
+// SetLogger allows the cmd package to set the logger instance (thread-safe)
 func SetLogger(l LoggerInterface) {
-	logger = l
+	logger.Store(l)
 }
 
-// getLogger returns the current logger instance
+// getLogger returns the current logger instance (thread-safe)
 func getLogger() LoggerInterface {
-	return logger
+	return logger.Load().(LoggerInterface)
 }
 
 // IsCI detects if we're running in a CI environment
@@ -48,7 +54,8 @@ func IsCI() bool {
 func ConfigureCITestLogging() {
 	if IsCI() || IsTestEnvironment() {
 		// Try interface-based assertion first to support custom loggers
-		if l, ok := logger.(interface{ SetLevel(logrus.Level) }); ok {
+		currentLogger := getLogger()
+		if l, ok := currentLogger.(interface{ SetLevel(logrus.Level) }); ok {
 			l.SetLevel(logrus.WarnLevel)
 		} else {
 			// Log when we can't adjust level (observable for debugging)

@@ -208,8 +208,8 @@ func TestParserDeterminismLineByLine(t *testing.T) {
 	}
 }
 
-// TestOptimizedParserStatistics tests the statistics functionality
-func TestOptimizedParserStatistics(t *testing.T) {
+// TestParserStatistics tests the statistics functionality
+func TestParserStatistics(t *testing.T) {
 	parser := NewBanRecordParser()
 
 	// Initial stats should be zero

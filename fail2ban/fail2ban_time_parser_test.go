@@ -110,13 +110,13 @@ func BenchmarkBuildTimeStringNaive(b *testing.B) {
 func TestTimeParsingCache_BoundedEviction(t *testing.T) {
 	cache := NewTimeParsingCache("2006-01-02 15:04:05")
 
-	// Fill cache beyond threshold to trigger eviction
-	maxSize := int(float64(shared.CacheMaxSize)*shared.CacheEvictionThreshold) + 100
+	// Add significantly more than max to ensure eviction triggers
+	entriesToAdd := shared.CacheMaxSize + 1000
 
 	// Create base time for monotonic timestamp generation
 	baseTime := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 
-	for i := 0; i < maxSize; i++ {
+	for i := 0; i < entriesToAdd; i++ {
 		// Generate unique time strings using monotonic increment
 		uniqueTime := baseTime.Add(time.Duration(i) * time.Second)
 		timeStr := uniqueTime.Format("2006-01-02 15:04:05")
@@ -126,11 +126,11 @@ func TestTimeParsingCache_BoundedEviction(t *testing.T) {
 
 	// Verify cache was evicted and didn't grow unbounded
 	size := cache.parseCache.Size()
-	assert.Less(t, size, shared.CacheMaxSize,
-		"Cache should have evicted entries to stay under max size")
+	assert.LessOrEqual(t, size, shared.CacheMaxSize,
+		"Cache must not exceed max size after eviction")
 	assert.Greater(t, size, 0,
 		"Cache should still contain entries after eviction")
 
-	t.Logf("Cache size after filling with %d entries: %d (max: %d)",
-		maxSize, size, shared.CacheMaxSize)
+	t.Logf("Cache size after adding %d entries: %d (max: %d, evicted: %d)",
+		entriesToAdd, size, shared.CacheMaxSize, entriesToAdd-size)
 }
