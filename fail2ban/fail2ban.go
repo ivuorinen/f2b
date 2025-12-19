@@ -68,7 +68,7 @@ func (r *OSRunner) CombinedOutput(name string, args ...string) ([]byte, error) {
 // CombinedOutputWithContext executes a command without sudo with context support.
 func (r *OSRunner) CombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error) {
 	// Validate command for security
-	if err := CachedValidateCommand(context.Background(), name); err != nil {
+	if err := CachedValidateCommand(ctx, name); err != nil {
 		return nil, fmt.Errorf(shared.ErrCommandValidationFailed, err)
 	}
 	// Validate arguments for security
@@ -111,7 +111,7 @@ func (r *OSRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte, 
 // CombinedOutputWithSudoContext executes a command with sudo if needed, with context support.
 func (r *OSRunner) CombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error) {
 	// Validate command for security
-	if err := CachedValidateCommand(context.Background(), name); err != nil {
+	if err := CachedValidateCommand(ctx, name); err != nil {
 		return nil, fmt.Errorf(shared.ErrCommandValidationFailed, err)
 	}
 	// Validate arguments for security

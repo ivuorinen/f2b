@@ -240,7 +240,7 @@ func (brp *BanRecordParser) ParseBanRecordLine(line, jail string) (*BanRecord, e
 
 	// Validate IP address format
 	if fields[0] != "" && net.ParseIP(fields[0]) == nil {
-		return nil, fmt.Errorf("invalid IP address: %s", fields[0])
+		return nil, fmt.Errorf(shared.ErrInvalidIPAddress, fields[0])
 	}
 
 	// Get pooled record

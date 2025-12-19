@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -145,13 +146,13 @@ func TestTimedOperationFinish(t *testing.T) {
 			switch tt.category {
 			case "command":
 				// Command metrics should have been recorded
-				assert.Greater(t, m.CommandExecutions, int64(0))
+				assert.Greater(t, atomic.LoadInt64(&m.CommandExecutions), int64(0))
 			case "client":
 				// Client metrics should have been recorded
-				assert.Greater(t, m.ClientOperations, int64(0))
+				assert.Greater(t, atomic.LoadInt64(&m.ClientOperations), int64(0))
 			case shared.MetricsBan:
 				// Ban metrics should have been recorded
-				assert.Greater(t, m.BanOperations, int64(0))
+				assert.Greater(t, atomic.LoadInt64(&m.BanOperations), int64(0))
 			}
 		})
 	}

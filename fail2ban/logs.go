@@ -62,9 +62,9 @@ func GetLogLinesWithLimit(ctx context.Context, jailFilter string, ipFilter strin
 	}
 
 	// Validate IP filter
-	if ipFilter != "" && ipFilter != "all" {
+	if ipFilter != "" && ipFilter != shared.AllFilter {
 		if net.ParseIP(ipFilter) == nil {
-			return nil, fmt.Errorf("invalid IP address: %s", ipFilter)
+			return nil, fmt.Errorf(shared.ErrInvalidIPAddress, ipFilter)
 		}
 	}
 

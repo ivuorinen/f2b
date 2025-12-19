@@ -536,7 +536,7 @@ func (b *MockClientBuilder) WithStatusResponse(target, response string) *MockCli
 	if b.client.StatusJailData == nil {
 		b.client.StatusJailData = make(map[string]string)
 	}
-	if target == "all" {
+	if target == shared.AllFilter {
 		b.client.StatusAllData = response
 	} else {
 		b.client.StatusJailData[target] = response

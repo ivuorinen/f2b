@@ -288,6 +288,9 @@ const (
 	// ErrInvalidJailFormat is the error message for invalid jail name format
 	ErrInvalidJailFormat = "invalid jail name format"
 
+	// ErrInvalidIPAddress is the error message for invalid IP address format
+	ErrInvalidIPAddress = "invalid IP address: %s"
+
 	// ErrInvalidCommandFormat is the error message for invalid command format
 	ErrInvalidCommandFormat = "invalid command format"
 

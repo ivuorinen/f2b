@@ -46,6 +46,10 @@ func TestMainConfigurationParsing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Clear env vars first to ensure clean state
+			t.Setenv("F2B_LOG_DIR", "")
+			t.Setenv("F2B_FILTER_DIR", "")
+
 			// Set up environment using t.Setenv for automatic cleanup
 			if tt.logDirEnv != "" {
 				t.Setenv("F2B_LOG_DIR", tt.logDirEnv)

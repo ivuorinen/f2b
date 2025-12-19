@@ -47,8 +47,8 @@ func (vc *ValidationCache) Set(key string, err error) {
 	vc.mu.Lock()
 	defer vc.mu.Unlock()
 
-	// Check if eviction is needed (at configured threshold)
-	if len(vc.cache) >= int(float64(shared.CacheMaxSize)*shared.CacheEvictionThreshold) {
+	// Evict if at or above max to ensure bounded size
+	if len(vc.cache) >= shared.CacheMaxSize {
 		vc.evictEntries()
 	}
 

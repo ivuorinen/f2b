@@ -23,10 +23,11 @@ func TestReadStdout_WithData(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		_, _ = w.Write([]byte(testData))
+		_ = w.Close()
 		close(done)
 	}()
 
-	// Wait for write to complete
+	// Wait for write and close to complete
 	<-done
 
 	output := env.ReadStdout()
@@ -111,10 +112,11 @@ func TestReadStdout_MultipleReads(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		_, _ = w.Write([]byte(testData))
+		_ = w.Close()
 		close(done)
 	}()
 
-	// Wait for write to complete
+	// Wait for write and close to complete
 	<-done
 
 	// First read gets the data

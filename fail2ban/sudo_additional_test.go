@@ -167,33 +167,16 @@ func TestRealSudoChecker_CanUseSudo_TestEnvironmentDetection(t *testing.T) {
 			envValue:    "1",
 			shouldBlock: true,
 		},
-		{
-			name:        "F2B_TEST_SUDO empty",
-			envVar:      "F2B_TEST_SUDO",
-			envValue:    "",
-			shouldBlock: false,
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.envValue != "" {
-				t.Setenv(tt.envVar, tt.envValue)
-			} else {
-				// Ensure environment is clean
-				t.Setenv(tt.envVar, "")
-			}
+			t.Setenv(tt.envVar, tt.envValue)
 
 			checker := &RealSudoChecker{}
 			result := checker.CanUseSudo()
 
-			if tt.shouldBlock {
-				assert.False(t, result, "Should return false in test environment")
-			} else {
-				// In non-test environment, result depends on actual sudo availability
-				// We just verify it doesn't panic
-				_ = result
-			}
+			assert.False(t, result, "Should return false in test environment")
 		})
 	}
 }
