@@ -302,8 +302,13 @@ func ValidateCommand(command string) error {
 
 // ValidateArguments validates command arguments for security
 func ValidateArguments(args []string) error {
+	return ValidateArgumentsWithContext(context.Background(), args)
+}
+
+// ValidateArgumentsWithContext validates command arguments for security with context support
+func ValidateArgumentsWithContext(ctx context.Context, args []string) error {
 	for i, arg := range args {
-		if err := validateSingleArgument(arg, i); err != nil {
+		if err := validateSingleArgument(ctx, arg, i); err != nil {
 			return fmt.Errorf("argument %d invalid: %w", i, err)
 		}
 	}
@@ -311,7 +316,7 @@ func ValidateArguments(args []string) error {
 }
 
 // validateSingleArgument validates a single command argument
-func validateSingleArgument(arg string, _ int) error {
+func validateSingleArgument(ctx context.Context, arg string, _ int) error {
 	// Check for null bytes
 	if strings.ContainsRune(arg, '\x00') {
 		return NewInvalidArgumentError(arg + " (contains null byte)")
@@ -329,7 +334,7 @@ func validateSingleArgument(arg string, _ int) error {
 
 	// For IP arguments, validate IP format
 	if isLikelyIPArgument(arg) {
-		if err := CachedValidateIP(context.Background(), arg); err != nil {
+		if err := CachedValidateIP(ctx, arg); err != nil {
 			return fmt.Errorf("invalid IP format: %w", err)
 		}
 	}

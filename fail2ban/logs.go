@@ -210,23 +210,7 @@ func resolveBaseDir(config LogReadConfig) string {
 
 // streamLogFile reads a log file line by line with memory limits and filtering
 func streamLogFile(path string, config LogReadConfig) ([]string, error) {
-	baseDir := resolveBaseDir(config)
-	cleanPath, err := validateLogPathForDir(context.Background(), path, baseDir)
-	if err != nil {
-		return nil, err
-	}
-
-	if shouldSkipFile(cleanPath, config.MaxFileSize) {
-		return []string{}, nil
-	}
-
-	scanner, cleanup, err := createLogScanner(cleanPath)
-	if err != nil {
-		return nil, err
-	}
-	defer cleanup()
-
-	return scanLogLines(scanner, config)
+	return streamLogFileWithContext(context.Background(), path, config)
 }
 
 // streamLogFileWithContext reads a log file line by line with memory limits,

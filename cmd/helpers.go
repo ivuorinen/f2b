@@ -111,12 +111,17 @@ func AddWatchFlags(cmd *cobra.Command, interval *time.Duration) {
 
 // ValidateIPArgument validates that an IP address is provided in args
 func ValidateIPArgument(args []string) (string, error) {
+	return ValidateIPArgumentWithContext(context.Background(), args)
+}
+
+// ValidateIPArgumentWithContext validates that an IP address is provided in args with context support
+func ValidateIPArgumentWithContext(ctx context.Context, args []string) (string, error) {
 	if len(args) < 1 {
 		return "", fmt.Errorf("IP address required")
 	}
 	ip := args[0]
 	// Validate the IP address
-	if err := fail2ban.CachedValidateIP(context.Background(), ip); err != nil {
+	if err := fail2ban.CachedValidateIP(ctx, ip); err != nil {
 		return "", err
 	}
 	return ip, nil

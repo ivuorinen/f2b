@@ -148,7 +148,11 @@ func NewCommandTest(t *testing.T, commandName string) *CommandTestBuilder {
 		name:    commandName,
 		command: commandName,
 		args:    make([]string, 0),
-		config:  &Config{Format: PlainFormat},
+		config: &Config{
+			Format:         PlainFormat,
+			CommandTimeout: shared.DefaultCommandTimeout,
+			FileTimeout:    shared.DefaultFileTimeout,
+		},
 	}
 }
 

@@ -103,7 +103,7 @@ func ExecuteIPCommand(
 		// Log operation with timing
 		return logger.LogOperation(ctx, cmdConfig.OperationName, func() error {
 			// Validate IP argument
-			ip, err := ValidateIPArgument(args)
+			ip, err := ValidateIPArgumentWithContext(ctx, args)
 			if err != nil {
 				return HandleValidationError(err)
 			}

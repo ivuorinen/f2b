@@ -16,14 +16,14 @@ func TestRecordValidationFailure(t *testing.T) {
 	m := NewMetrics()
 
 	// Initial failures should be 0
-	assert.Equal(t, int64(0), m.ValidationFailures)
+	assert.Equal(t, int64(0), atomic.LoadInt64(&m.ValidationFailures))
 
 	// Record failures
 	m.RecordValidationFailure()
-	assert.Equal(t, int64(1), m.ValidationFailures)
+	assert.Equal(t, int64(1), atomic.LoadInt64(&m.ValidationFailures))
 
 	m.RecordValidationFailure()
-	assert.Equal(t, int64(2), m.ValidationFailures)
+	assert.Equal(t, int64(2), atomic.LoadInt64(&m.ValidationFailures))
 
 	// Test concurrent recording
 	done := make(chan bool)
@@ -39,7 +39,7 @@ func TestRecordValidationFailure(t *testing.T) {
 		<-done
 	}
 
-	assert.Equal(t, int64(12), m.ValidationFailures)
+	assert.Equal(t, int64(12), atomic.LoadInt64(&m.ValidationFailures))
 }
 
 // TestNewTimedOperation tests the NewTimedOperation function

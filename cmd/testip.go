@@ -16,7 +16,7 @@ func TestIPCmd(client interface {
 		defer cancel()
 
 		// Validate IP argument
-		ip, err := ValidateIPArgument(args)
+		ip, err := ValidateIPArgumentWithContext(ctx, args)
 		if err != nil {
 			return HandleClientError(err)
 		}
