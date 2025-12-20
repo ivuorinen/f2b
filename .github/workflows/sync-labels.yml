@@ -21,4 +21,4 @@ jobs:
     permissions:
       issues: write
     steps:
-      - uses: ivuorinen/actions/sync-labels@5cc7373a22402ee8985376bc713f00e09b5b2edb # v2025.11.23
+      - uses: ivuorinen/actions/sync-labels@db86bb2f0df059edc619ecca735320ed571f51e0 # v2025.12.19

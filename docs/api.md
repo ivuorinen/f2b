@@ -240,7 +240,7 @@ const (
 The configuration system supports the following environment variables:
 
 | Variable | Description | Default |
-|----------|-------------|---------|
+| -------- | ----------- | ------- |
 | `F2B_LOG_DIR` | Log directory path | `/var/log` |
 | `F2B_FILTER_DIR` | Filter directory path | `/etc/fail2ban/filter.d` |
 | `F2B_LOG_LEVEL` | Log level | `info` |
