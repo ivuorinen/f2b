@@ -51,14 +51,29 @@ jobs:
           path: ~/.cache/pre-commit
           key: ${{ runner.os }}-precommit-${{ hashFiles('.pre-commit-config.yaml') }}
 
-      - name: Install pre-commit requirements
+      - name: Add GOPATH/bin to PATH
+        shell: bash
+        run: echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+      - name: Install tools required by pre-commit
+        shell: bash
+        run: make dev-setup
+
+      - name: Verify golangci-lint version
+        shell: bash
         run: |
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+          which golangci-lint
+          golangci-lint version
+          INSTALLED_VERSION=$(golangci-lint version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+          if [ "$INSTALLED_VERSION" != "2.7.2" ]; then
+            echo "ERROR: Expected golangci-lint v2.7.2, got v$INSTALLED_VERSION"
+            exit 1
+          fi
+          echo "✓ golangci-lint v$INSTALLED_VERSION is correctly installed"
 
       - name: Run pre-commit
-        uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # v3.0.1
-        with:
-          extra_args: --all-files
+        shell: bash
+        run: pre-commit run --all-files --show-diff-on-failure --color=always
 
       - name: Run integration tests and collect coverage
         run: |
