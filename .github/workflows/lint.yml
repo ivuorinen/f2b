@@ -43,6 +43,10 @@ jobs:
         shell: bash
         run: make dev-setup
 
+      - name: Add GOPATH/bin to PATH
+        shell: bash
+        run: echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
       - name: Run pre-commit
         uses: pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd # v3.0.1
         with:
