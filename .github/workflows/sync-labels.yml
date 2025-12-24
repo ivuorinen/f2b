@@ -13,12 +13,14 @@ on:
   workflow_call:
   workflow_dispatch:
 
-permissions: read-all
+permissions:
+  contents: read
 
 jobs:
   sync-labels:
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       issues: write
     steps:
       - uses: ivuorinen/actions/sync-labels@fd030b418fcd967cb77ef04622d5ebc0596dc6e6 # v2025.12.23

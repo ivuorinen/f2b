@@ -11,7 +11,8 @@ on:
   pull_request_review:
     types: [submitted]
 
-permissions: read-all
+permissions:
+  contents: read
 
 jobs:
   claude:
@@ -52,7 +53,6 @@ jobs:
 
       - name: Run Claude Code
         id: claude
-        # kics-scan ignore-line
         uses: anthropics/claude-code-action@7145c3e0510bcdbdd29f67cc4a8c1958f1acfa2f # v1.0.27
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
