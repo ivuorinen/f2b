@@ -449,7 +449,12 @@ func (result *CommandTestResult) AssertJSONField(fieldPath, expected string) *Co
 						result.t.Fatalf(shared.ErrTestJSONFieldMismatch, result.name, fieldName, expected, val)
 					}
 				} else {
-					result.t.Fatalf("%s: JSON field %q not found in first array element: %s", result.name, fieldName, result.Output)
+					result.t.Fatalf(
+						"%s: JSON field %q not found in first array element: %s",
+						result.name,
+						fieldName,
+						result.Output,
+					)
 				}
 			} else {
 				result.t.Fatalf("%s: first array element is not an object in output: %s", result.name, result.Output)

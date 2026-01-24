@@ -12,13 +12,9 @@ import (
 
 // TestTestFilterCmdCreation tests TestFilterCmd command creation
 func TestTestFilterCmdCreation(t *testing.T) {
-	// Save and restore original runner
-	originalRunner := fail2ban.GetRunner()
-	defer fail2ban.SetRunner(originalRunner)
-
 	mockRunner := fail2ban.NewMockRunner()
-	setupBasicMockResponses(mockRunner)
-	fail2ban.SetRunner(mockRunner)
+	defer fail2ban.WithTestRunner(t, mockRunner)()
+	fail2ban.StandardMockSetup(mockRunner)
 
 	client, err := fail2ban.NewClient("/var/log/fail2ban", "/etc/fail2ban/filter.d")
 	require.NoError(t, err)
@@ -39,9 +35,7 @@ func TestTestFilterCmdCreation(t *testing.T) {
 
 // TestTestFilterCmdExecution tests TestFilterCmd execution
 func TestTestFilterCmdExecution(t *testing.T) {
-	// Save and restore original runner
-	originalRunner := fail2ban.GetRunner()
-	defer fail2ban.SetRunner(originalRunner)
+	defer fail2ban.WithTestRunner(t, fail2ban.GetRunner())()
 
 	tests := []struct {
 		name        string
@@ -52,7 +46,7 @@ func TestTestFilterCmdExecution(t *testing.T) {
 		{
 			name: "successful filter test",
 			setupMock: func(m *fail2ban.MockRunner) {
-				setupBasicMockResponses(m)
+				fail2ban.StandardMockSetup(m)
 				m.SetResponse("fail2ban-client get sshd logpath", []byte("/var/log/auth.log"))
 				m.SetResponse("sudo fail2ban-client get sshd logpath", []byte("/var/log/auth.log"))
 			},
@@ -62,7 +56,7 @@ func TestTestFilterCmdExecution(t *testing.T) {
 		{
 			name: "no filter provided - lists available",
 			setupMock: func(m *fail2ban.MockRunner) {
-				setupBasicMockResponses(m)
+				fail2ban.StandardMockSetup(m)
 				// Mock ListFiltersWithContext response
 			},
 			args:        []string{},
@@ -71,7 +65,7 @@ func TestTestFilterCmdExecution(t *testing.T) {
 		{
 			name: "invalid filter name",
 			setupMock: func(m *fail2ban.MockRunner) {
-				setupBasicMockResponses(m)
+				fail2ban.StandardMockSetup(m)
 			},
 			args:        []string{"../../../etc/passwd"},
 			expectError: true,

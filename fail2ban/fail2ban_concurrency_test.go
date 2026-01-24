@@ -10,8 +10,7 @@ import (
 // TestRunnerConcurrentAccess tests that concurrent access to the runner
 // is safe and doesn't cause race conditions.
 func TestRunnerConcurrentAccess(t *testing.T) {
-	original := GetRunner()
-	defer SetRunner(original)
+	defer WithTestRunner(t, GetRunner())()
 
 	const numGoroutines = 100
 	const numOperations = 50
@@ -53,12 +52,9 @@ func TestRunnerConcurrentAccess(t *testing.T) {
 // TestRunnerCombinedOutputConcurrency tests that concurrent calls to
 // RunnerCombinedOutput are safe.
 func TestRunnerCombinedOutputConcurrency(t *testing.T) {
-	original := GetRunner()
-	defer SetRunner(original)
-
 	mockRunner := NewMockRunner()
+	defer WithTestRunner(t, mockRunner)()
 	mockRunner.SetResponse("echo test", []byte("test output"))
-	SetRunner(mockRunner)
 
 	const numGoroutines = 50
 	var wg sync.WaitGroup
@@ -120,12 +116,10 @@ func TestRunnerCombinedOutputWithSudoConcurrency(t *testing.T) {
 // TestMixedConcurrentOperations tests mixed concurrent operations including
 // setting runners and executing commands.
 func TestMixedConcurrentOperations(t *testing.T) {
-	original := GetRunner()
-	defer SetRunner(original)
-
 	// Set up a single shared MockRunner with all required responses
 	// This avoids race conditions from multiple goroutines setting different runners
 	sharedMockRunner := NewMockRunner()
+	defer WithTestRunner(t, sharedMockRunner)()
 
 	// Set up responses for valid fail2ban commands to avoid validation errors
 	sharedMockRunner.SetResponse("fail2ban-client status", []byte("Status: OK"))
@@ -134,8 +128,6 @@ func TestMixedConcurrentOperations(t *testing.T) {
 	// Set up both sudo and non-sudo versions to handle different execution paths
 	sharedMockRunner.SetResponse("sudo fail2ban-client status", []byte("Status: OK"))
 	sharedMockRunner.SetResponse("sudo fail2ban-client -V", []byte("Version: 1.0.0"))
-
-	SetRunner(sharedMockRunner)
 
 	const numGoroutines = 30
 	var wg sync.WaitGroup
@@ -203,8 +195,7 @@ func TestMixedConcurrentOperations(t *testing.T) {
 // TestRunnerManagerLockOrdering verifies there are no deadlocks in the
 // runner manager's lock ordering.
 func TestRunnerManagerLockOrdering(t *testing.T) {
-	original := GetRunner()
-	defer SetRunner(original)
+	defer WithTestRunner(t, GetRunner())()
 
 	// This test specifically looks for deadlocks by creating scenarios
 	// where multiple goroutines could potentially deadlock if locks
@@ -245,13 +236,10 @@ func TestRunnerManagerLockOrdering(t *testing.T) {
 // TestRunnerStateConsistency verifies that the runner state remains
 // consistent across concurrent operations.
 func TestRunnerStateConsistency(t *testing.T) {
-	original := GetRunner()
-	defer SetRunner(original)
-
 	// Set initial state
 	initialRunner := NewMockRunner()
 	initialRunner.SetResponse("initial", []byte("initial response"))
-	SetRunner(initialRunner)
+	defer WithTestRunner(t, initialRunner)()
 
 	const numReaders = 50
 	const numWriters = 10

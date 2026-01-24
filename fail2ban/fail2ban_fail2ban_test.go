@@ -182,7 +182,10 @@ func TestBanIP(t *testing.T) {
 					fmt.Errorf("command failed"),
 				)
 			} else {
-				mock.SetResponse(fmt.Sprintf("sudo fail2ban-client set %s banip %s", tt.jail, tt.ip), []byte(tt.mockResponse))
+				mock.SetResponse(
+					fmt.Sprintf("sudo fail2ban-client set %s banip %s", tt.jail, tt.ip),
+					[]byte(tt.mockResponse),
+				)
 			}
 
 			client, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)

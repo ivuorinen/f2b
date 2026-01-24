@@ -298,6 +298,29 @@ func (m *MockRunner) GetCalls() []string {
 	return calls
 }
 
+// SetupStandardResponses configures comprehensive standard responses for testing.
+// This eliminates the need for repetitive SetResponse calls in individual tests.
+func (m *MockRunner) SetupStandardResponses() {
+	StandardMockSetup(m)
+}
+
+// SetupJailResponses configures responses for a specific jail.
+// This is useful for tests that focus on a single jail's behavior.
+func (m *MockRunner) SetupJailResponses(jail string) {
+	statusResponse := fmt.Sprintf("Status for the jail: %s\n|- Filter\n|  |- Currently failed:\t0\n|  "+
+		"|- Total failed:\t5\n|  `- File list:\t/var/log/auth.log\n`- Actions\n   "+
+		"|- Currently banned:\t1\n   |- Total banned:\t2\n   `- Banned IP list:\t192.168.1.100", jail)
+
+	m.SetResponse(fmt.Sprintf("fail2ban-client status %s", jail), []byte(statusResponse))
+	m.SetResponse(fmt.Sprintf("sudo fail2ban-client status %s", jail), []byte(statusResponse))
+
+	// Common ban/unban operations for the jail
+	m.SetResponse(fmt.Sprintf("fail2ban-client set %s banip 192.168.1.100", jail), []byte("1"))
+	m.SetResponse(fmt.Sprintf("sudo fail2ban-client set %s banip 192.168.1.100", jail), []byte("1"))
+	m.SetResponse(fmt.Sprintf("fail2ban-client set %s unbanip 192.168.1.100", jail), []byte("1"))
+	m.SetResponse(fmt.Sprintf("sudo fail2ban-client set %s unbanip 192.168.1.100", jail), []byte("1"))
+}
+
 // CombinedOutputWithContext returns a mocked response or error for a command with context support.
 func (m *MockRunner) CombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error) {
 	// Check if context is canceled

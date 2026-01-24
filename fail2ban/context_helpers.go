@@ -2,10 +2,25 @@ package fail2ban
 
 import "context"
 
-// ContextWrappers provides a helper to automatically generate WithContext method wrappers.
-// This eliminates the need for duplicate WithContext implementations across different Client types.
-// Usage: embed this in your Client struct and call DefineContextWrappers to get automatic context support.
-type ContextWrappers struct{}
+// Context Wrapper Pattern
+//
+// This package provides generic helper functions for creating WithContext method wrappers.
+// These helpers eliminate boilerplate for methods that simply need context propagation
+// without additional logic.
+//
+// For simple methods (no validation, direct delegation to non-context version):
+//
+//	func (c *Client) ListJailsWithContext(ctx context.Context) ([]string, error) {
+//	    return wrapWithContext0(c.ListJails)(ctx)
+//	}
+//
+// For complex methods (validation, custom logic, different execution paths):
+// Implement the WithContext version directly with the required logic.
+//
+// Note: Code generation was evaluated but determined unnecessary because:
+// - Only 2 methods use the simple wrapper pattern
+// - Most WithContext methods require custom validation/logic
+// - The generic helpers below already solve the simple cases cleanly
 
 // Helper functions to reduce boilerplate in WithContext implementations
 

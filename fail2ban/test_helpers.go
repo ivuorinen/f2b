@@ -262,6 +262,24 @@ func assertContainsText(t *testing.T, lines []string, text string) {
 	t.Errorf("Expected to find '%s' in results", text)
 }
 
+// WithTestRunner sets a test runner and returns a cleanup function.
+// Usage: defer fail2ban.WithTestRunner(t, mockRunner)()
+func WithTestRunner(t TestingInterface, runner Runner) func() {
+	t.Helper()
+	original := GetRunner()
+	SetRunner(runner)
+	return func() { SetRunner(original) }
+}
+
+// WithTestSudoChecker sets a test sudo checker and returns a cleanup function.
+// Usage: defer fail2ban.WithTestSudoChecker(t, mockChecker)()
+func WithTestSudoChecker(t TestingInterface, checker SudoChecker) func() {
+	t.Helper()
+	original := GetSudoChecker()
+	SetSudoChecker(checker)
+	return func() { SetSudoChecker(original) }
+}
+
 // StandardMockSetup configures comprehensive standard responses for MockRunner
 // This eliminates the need for repetitive SetResponse calls in individual tests
 func StandardMockSetup(mockRunner *MockRunner) {

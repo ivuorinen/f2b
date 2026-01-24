@@ -15,7 +15,11 @@ func ServiceCmd(config *Config) *cobra.Command {
 		nil,
 		func(_ *cobra.Command, args []string) error {
 			// Validate service action argument
-			if err := RequireArguments(args, 1, "action required: start|stop|restart|status|reload|enable|disable"); err != nil {
+			if err := RequireArguments(
+				args,
+				1,
+				"action required: start|stop|restart|status|reload|enable|disable",
+			); err != nil {
 				return HandleValidationError(err)
 			}
 

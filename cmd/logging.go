@@ -9,6 +9,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/ivuorinen/f2b/fail2ban"
 	"github.com/ivuorinen/f2b/shared"
 )
 
@@ -84,29 +85,34 @@ func (cl *ContextualLogger) WithContext(ctx context.Context) *logrus.Entry {
 	return entry
 }
 
-// WithOperation adds operation context and returns a new context
+// WithOperation adds operation context and returns a new context.
+// Delegates to fail2ban.WithOperation for consistent validation.
 func WithOperation(ctx context.Context, operation string) context.Context {
-	return context.WithValue(ctx, shared.ContextKeyOperation, operation)
+	return fail2ban.WithOperation(ctx, operation)
 }
 
-// WithIP adds IP context and returns a new context
+// WithIP adds IP context and returns a new context.
+// Delegates to fail2ban.WithIP for consistent IP validation.
 func WithIP(ctx context.Context, ip string) context.Context {
-	return context.WithValue(ctx, shared.ContextKeyIP, ip)
+	return fail2ban.WithIP(ctx, ip)
 }
 
-// WithJail adds jail context and returns a new context
+// WithJail adds jail context and returns a new context.
+// Delegates to fail2ban.WithJail for consistent jail name validation.
 func WithJail(ctx context.Context, jail string) context.Context {
-	return context.WithValue(ctx, shared.ContextKeyJail, jail)
+	return fail2ban.WithJail(ctx, jail)
 }
 
-// WithCommand adds command context and returns a new context
+// WithCommand adds command context and returns a new context.
+// This is cmd-specific as fail2ban doesn't need command tracking.
 func WithCommand(ctx context.Context, command string) context.Context {
 	return context.WithValue(ctx, shared.ContextKeyCommand, command)
 }
 
-// WithRequestID adds request ID context and returns a new context
+// WithRequestID adds request ID context and returns a new context.
+// Delegates to fail2ban.WithRequestID for consistent validation.
 func WithRequestID(ctx context.Context, requestID string) context.Context {
-	return context.WithValue(ctx, shared.ContextKeyRequestID, requestID)
+	return fail2ban.WithRequestID(ctx, requestID)
 }
 
 // LogOperation logs the start and end of an operation with timing and metrics

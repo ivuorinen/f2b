@@ -54,8 +54,7 @@ func TestRunnerFunctions(t *testing.T) {
 	// Set up mock runner for testing
 	mockRunner := NewMockRunner()
 	mockRunner.SetResponse("test-cmd arg1", []byte("test output"))
-	SetRunner(mockRunner)
-	defer SetRunner(&OSRunner{}) // Restore real runner
+	defer WithTestRunner(t, mockRunner)()
 
 	// Test RunnerCombinedOutput
 	output, err := RunnerCombinedOutput("test-cmd", "arg1")

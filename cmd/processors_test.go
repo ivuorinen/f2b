@@ -12,17 +12,13 @@ import (
 
 // TestUnbanProcessorProcessParallel tests the ProcessParallel method
 func TestUnbanProcessorProcessParallel(t *testing.T) {
-	// Save and restore original runner
-	originalRunner := fail2ban.GetRunner()
-	defer fail2ban.SetRunner(originalRunner)
-
 	mockRunner := fail2ban.NewMockRunner()
-	setupBasicMockResponses(mockRunner)
+	defer fail2ban.WithTestRunner(t, mockRunner)()
+	fail2ban.StandardMockSetup(mockRunner)
 	mockRunner.SetResponse("fail2ban-client set sshd unbanip 192.168.1.1", []byte("1"))
 	mockRunner.SetResponse("sudo fail2ban-client set sshd unbanip 192.168.1.1", []byte("1"))
 	mockRunner.SetResponse("fail2ban-client set apache unbanip 192.168.1.1", []byte("1"))
 	mockRunner.SetResponse("sudo fail2ban-client set apache unbanip 192.168.1.1", []byte("1"))
-	fail2ban.SetRunner(mockRunner)
 
 	client, err := fail2ban.NewClient("/var/log/fail2ban", "/etc/fail2ban/filter.d")
 	require.NoError(t, err)
