@@ -21,10 +21,14 @@ repos:
     hooks:
       - id: sync-pre-commit-deps
 
-  - repo: https://github.com/dnephin/pre-commit-golang
-    rev: v0.5.1
+  - repo: local
     hooks:
       - id: golangci-lint
+        name: golangci-lint
+        entry: golangci-lint run
+        language: system
+        types: [go]
+        pass_filenames: false
 
   - repo: https://github.com/google/yamlfmt
     rev: v0.20.0
@@ -32,7 +36,7 @@ repos:
       - id: yamlfmt
 
   - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.45.0
+    rev: v0.47.0
     hooks:
       - id: markdownlint
         args: [-c, .markdownlint.json, --fix]

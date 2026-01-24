@@ -30,8 +30,13 @@ dev-deps: ## Install development dependencies
 	@echo "Installing goreleaser..."
 	@go install github.com/goreleaser/goreleaser/v2@v2.12.0;
 	# renovate: datasource=go depName=github.com/goreleaser/goreleaser/v2
-	@echo "Installing golangci-lint...";
-	@go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.4.0;
+	@GOLANGCI_VERSION=$$(golangci-lint version 2>/dev/null \
+		| grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "0.0.0"); \
+	EXPECTED_VERSION="2.7.2"; \
+	if [ "$$GOLANGCI_VERSION" != "$$EXPECTED_VERSION" ]; then \
+		echo "Installing golangci-lint v$$EXPECTED_VERSION (current: v$$GOLANGCI_VERSION)..."; \
+		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v$$EXPECTED_VERSION; \
+	fi
 	# renovate: datasource=go depName=github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 	@command -v markdownlint-cli2 >/dev/null 2>&1 || { \
 		echo "Installing markdownlint-cli2..."; \

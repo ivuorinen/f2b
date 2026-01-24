@@ -1,5 +1,7 @@
 // Package shared provides constants used across all packages in the f2b project.
 // This file consolidates all constants to ensure consistency and maintainability.
+//
+//nolint:revive // Package name 'shared' is intentional for project-wide constants
 package shared
 
 import "time"
