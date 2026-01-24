@@ -35,10 +35,9 @@ dev-deps: ## Install development dependencies
 	EXPECTED_VERSION="2.7.2"; \
 	if [ "$$GOLANGCI_VERSION" != "$$EXPECTED_VERSION" ]; then \
 		echo "Installing golangci-lint v$$EXPECTED_VERSION (current: v$$GOLANGCI_VERSION)..."; \
-		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh \
-			| sh -s -- -b $$(go env GOPATH)/bin v$$EXPECTED_VERSION; \
+		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v$$EXPECTED_VERSION; \
 	fi
-	# renovate: datasource=github-releases depName=golangci/golangci-lint
+	# renovate: datasource=go depName=github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 	@command -v markdownlint-cli2 >/dev/null 2>&1 || { \
 		echo "Installing markdownlint-cli2..."; \
 		npm install -g markdownlint-cli2; \
