@@ -35,8 +35,6 @@ func TestTestFilterCmdCreation(t *testing.T) {
 
 // TestTestFilterCmdExecution tests TestFilterCmd execution
 func TestTestFilterCmdExecution(t *testing.T) {
-	defer fail2ban.WithTestRunner(t, fail2ban.GetRunner())()
-
 	tests := []struct {
 		name        string
 		setupMock   func(*fail2ban.MockRunner)
@@ -75,8 +73,8 @@ func TestTestFilterCmdExecution(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockRunner := fail2ban.NewMockRunner()
+			defer fail2ban.WithTestRunner(t, mockRunner)()
 			tt.setupMock(mockRunner)
-			fail2ban.SetRunner(mockRunner)
 
 			client, err := fail2ban.NewClient("/var/log/fail2ban", "/etc/fail2ban/filter.d")
 			require.NoError(t, err)
