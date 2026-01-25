@@ -335,11 +335,20 @@ func (m *MockRunner) SetupJailResponses(jail string) {
 	m.SetResponse(fmt.Sprintf("fail2ban-client status %s", jail), []byte(statusResponse))
 	m.SetResponse(fmt.Sprintf("sudo fail2ban-client status %s", jail), []byte(statusResponse))
 
-	// Common ban/unban operations for the jail
-	m.SetResponse(fmt.Sprintf("fail2ban-client set %s banip 192.168.1.100", jail), []byte("1"))
-	m.SetResponse(fmt.Sprintf("sudo fail2ban-client set %s banip 192.168.1.100", jail), []byte("1"))
-	m.SetResponse(fmt.Sprintf("fail2ban-client set %s unbanip 192.168.1.100", jail), []byte("1"))
-	m.SetResponse(fmt.Sprintf("sudo fail2ban-client set %s unbanip 192.168.1.100", jail), []byte("1"))
+	// Common ban/unban operations for the jail (use success status, not already-processed)
+	m.SetResponse(fmt.Sprintf("fail2ban-client set %s banip 192.168.1.100", jail), []byte(shared.Fail2BanStatusSuccess))
+	m.SetResponse(
+		fmt.Sprintf("sudo fail2ban-client set %s banip 192.168.1.100", jail),
+		[]byte(shared.Fail2BanStatusSuccess),
+	)
+	m.SetResponse(
+		fmt.Sprintf("fail2ban-client set %s unbanip 192.168.1.100", jail),
+		[]byte(shared.Fail2BanStatusSuccess),
+	)
+	m.SetResponse(
+		fmt.Sprintf("sudo fail2ban-client set %s unbanip 192.168.1.100", jail),
+		[]byte(shared.Fail2BanStatusSuccess),
+	)
 }
 
 // CombinedOutputWithContext returns a mocked response or error for a command with context support.

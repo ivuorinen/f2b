@@ -88,7 +88,8 @@ func ExecuteIPCommand(
 		logger := GetContextualLogger()
 
 		// Create timeout context for the entire operation
-		ctx, cancel := createTimeoutContext(context.Background(), config)
+		// Use cmd.Context() to inherit Cobra's signal cancellation
+		ctx, cancel := createTimeoutContext(cmd.Context(), config)
 		defer cancel()
 
 		// Add command context
