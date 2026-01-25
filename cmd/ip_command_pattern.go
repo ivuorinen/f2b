@@ -87,14 +87,8 @@ func ExecuteIPCommand(
 		// Get the contextual logger
 		logger := GetContextualLogger()
 
-		// Safe timeout handling with nil check
-		timeout := shared.DefaultCommandTimeout
-		if config != nil && config.CommandTimeout > 0 {
-			timeout = config.CommandTimeout
-		}
-
 		// Create timeout context for the entire operation
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		ctx, cancel := createTimeoutContext(context.Background(), config)
 		defer cancel()
 
 		// Add command context

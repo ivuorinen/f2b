@@ -274,6 +274,17 @@ func (m *MockRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte
 	return m.CombinedOutput(name, args...)
 }
 
+// withContextCheck wraps an operation with context cancellation check.
+// This helper consolidates the duplicate context cancellation pattern.
+func withContextCheck(ctx context.Context, fn func() ([]byte, error)) ([]byte, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+	return fn()
+}
+
 // SetResponse sets a response for a command.
 func (m *MockRunner) SetResponse(cmd string, response []byte) {
 	m.mu.Lock()
@@ -323,28 +334,16 @@ func (m *MockRunner) SetupJailResponses(jail string) {
 
 // CombinedOutputWithContext returns a mocked response or error for a command with context support.
 func (m *MockRunner) CombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error) {
-	// Check if context is canceled
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	default:
-	}
-
-	// Delegate to the non-context version for simplicity in tests
-	return m.CombinedOutput(name, args...)
+	return withContextCheck(ctx, func() ([]byte, error) {
+		return m.CombinedOutput(name, args...)
+	})
 }
 
 // CombinedOutputWithSudoContext returns a mocked response for sudo commands with context support.
 func (m *MockRunner) CombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error) {
-	// Check if context is canceled
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	default:
-	}
-
-	// Delegate to the non-context version for simplicity in tests
-	return m.CombinedOutputWithSudo(name, args...)
+	return withContextCheck(ctx, func() ([]byte, error) {
+		return m.CombinedOutputWithSudo(name, args...)
+	})
 }
 
 func (c *RealClient) fetchJailsWithContext(ctx context.Context) ([]string, error) {

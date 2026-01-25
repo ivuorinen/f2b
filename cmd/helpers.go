@@ -17,6 +17,20 @@ import (
 	"github.com/ivuorinen/f2b/fail2ban"
 )
 
+// createTimeoutContext creates a context with the configured command timeout.
+// This helper consolidates the duplicate timeout handling pattern.
+// If base is nil, context.Background() is used.
+func createTimeoutContext(base context.Context, config *Config) (context.Context, context.CancelFunc) {
+	if base == nil {
+		base = context.Background()
+	}
+	timeout := shared.DefaultCommandTimeout
+	if config != nil && config.CommandTimeout > 0 {
+		timeout = config.CommandTimeout
+	}
+	return context.WithTimeout(base, timeout)
+}
+
 // IsCI detects if we're running in a CI environment
 func IsCI() bool {
 	return fail2ban.IsCI()
@@ -50,17 +64,8 @@ func NewContextualCommand(
 		// Get the contextual logger
 		logger := GetContextualLogger()
 
-		// Base on Cobra's context so signals/cancellations propagate
-		base := cmd.Context()
-		if base == nil {
-			base = context.Background()
-		}
-		// Create timeout context for the entire operation
-		timeout := shared.DefaultCommandTimeout
-		if config != nil && config.CommandTimeout > 0 {
-			timeout = config.CommandTimeout
-		}
-		ctx, cancel := context.WithTimeout(base, timeout)
+		// Create timeout context based on Cobra's context so signals/cancellations propagate
+		ctx, cancel := createTimeoutContext(cmd.Context(), config)
 		defer cancel()
 
 		// Extract command name from use string (first word)

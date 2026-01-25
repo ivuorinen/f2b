@@ -57,29 +57,30 @@ func getVersion() string {
 	return version
 }
 
+// contextKeyEntry defines a context key and its log field name
+type contextKeyEntry struct {
+	key       any    // The context key to look up
+	fieldName string // The log field name to use
+}
+
+// contextKeys lists all context keys to extract for logging
+var contextKeys = []contextKeyEntry{
+	{shared.ContextKeyRequestID, string(shared.ContextKeyRequestID)},
+	{shared.ContextKeyOperation, string(shared.ContextKeyOperation)},
+	{shared.ContextKeyIP, string(shared.ContextKeyIP)},
+	{shared.ContextKeyJail, string(shared.ContextKeyJail)},
+	{shared.ContextKeyCommand, string(shared.ContextKeyCommand)},
+}
+
 // WithContext creates a logger entry with context values
 func (cl *ContextualLogger) WithContext(ctx context.Context) *logrus.Entry {
 	entry := cl.WithFields(cl.defaultFields)
 
-	// Extract context values and add as fields (using consistent constants)
-	if requestID := ctx.Value(shared.ContextKeyRequestID); requestID != nil {
-		entry = entry.WithField(string(shared.ContextKeyRequestID), requestID)
-	}
-
-	if operation := ctx.Value(shared.ContextKeyOperation); operation != nil {
-		entry = entry.WithField(string(shared.ContextKeyOperation), operation)
-	}
-
-	if ip := ctx.Value(shared.ContextKeyIP); ip != nil {
-		entry = entry.WithField(string(shared.ContextKeyIP), ip)
-	}
-
-	if jail := ctx.Value(shared.ContextKeyJail); jail != nil {
-		entry = entry.WithField(string(shared.ContextKeyJail), jail)
-	}
-
-	if command := ctx.Value(shared.ContextKeyCommand); command != nil {
-		entry = entry.WithField(string(shared.ContextKeyCommand), command)
+	// Extract context values and add as fields using table-driven approach
+	for _, ck := range contextKeys {
+		if val := ctx.Value(ck.key); val != nil {
+			entry = entry.WithField(ck.fieldName, val)
+		}
 	}
 
 	return entry
