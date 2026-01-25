@@ -52,6 +52,18 @@ func SetFilterDir(dir string) {
 // OSRunner runs commands locally.
 type OSRunner struct{}
 
+// validateCommandExecution validates command name and arguments before execution.
+// This helper consolidates the duplicate validation pattern used in command execution methods.
+func validateCommandExecution(ctx context.Context, name string, args []string) error {
+	if err := CachedValidateCommand(ctx, name); err != nil {
+		return fmt.Errorf(shared.ErrCommandValidationFailed, err)
+	}
+	if err := ValidateArgumentsWithContext(ctx, args); err != nil {
+		return fmt.Errorf(shared.ErrArgumentValidationFailed, err)
+	}
+	return nil
+}
+
 // CombinedOutput executes a command without sudo.
 func (r *OSRunner) CombinedOutput(name string, args ...string) ([]byte, error) {
 	return r.CombinedOutputWithContext(context.Background(), name, args...)
@@ -59,13 +71,8 @@ func (r *OSRunner) CombinedOutput(name string, args ...string) ([]byte, error) {
 
 // CombinedOutputWithContext executes a command without sudo with context support.
 func (r *OSRunner) CombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error) {
-	// Validate command for security
-	if err := CachedValidateCommand(ctx, name); err != nil {
-		return nil, fmt.Errorf(shared.ErrCommandValidationFailed, err)
-	}
-	// Validate arguments for security
-	if err := ValidateArgumentsWithContext(ctx, args); err != nil {
-		return nil, fmt.Errorf(shared.ErrArgumentValidationFailed, err)
+	if err := validateCommandExecution(ctx, name, args); err != nil {
+		return nil, err
 	}
 	return exec.CommandContext(ctx, name, args...).CombinedOutput()
 }
@@ -77,13 +84,8 @@ func (r *OSRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte, 
 
 // CombinedOutputWithSudoContext executes a command with sudo if needed, with context support.
 func (r *OSRunner) CombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error) {
-	// Validate command for security
-	if err := CachedValidateCommand(ctx, name); err != nil {
-		return nil, fmt.Errorf(shared.ErrCommandValidationFailed, err)
-	}
-	// Validate arguments for security
-	if err := ValidateArgumentsWithContext(ctx, args); err != nil {
-		return nil, fmt.Errorf(shared.ErrArgumentValidationFailed, err)
+	if err := validateCommandExecution(ctx, name, args); err != nil {
+		return nil, err
 	}
 
 	checker := GetSudoChecker()
@@ -158,30 +160,38 @@ func RunnerCombinedOutputWithSudo(name string, args ...string) ([]byte, error) {
 	return output, err
 }
 
+// runWithTimerContext is a helper that consolidates the common pattern of
+// creating a timer, getting the runner, executing a command, and finishing the timer.
+// This reduces code duplication between RunnerCombinedOutputWithContext and RunnerCombinedOutputWithSudoContext.
+func runWithTimerContext(
+	ctx context.Context,
+	opName, name string,
+	args []string,
+	runFn func(Runner, context.Context, string, ...string) ([]byte, error),
+) ([]byte, error) {
+	timer := NewTimedOperation(opName, name, args...)
+	runner := GetRunner()
+	output, err := runFn(runner, ctx, name, args...)
+	timer.FinishWithContext(ctx, err)
+	return output, err
+}
+
 // RunnerCombinedOutputWithContext invokes the runner for a command with context support.
 // RunnerCombinedOutputWithContext executes a command with context using the global runner.
 func RunnerCombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error) {
-	timer := NewTimedOperation("RunnerCombinedOutputWithContext", name, args...)
-
-	runner := GetRunner()
-
-	output, err := runner.CombinedOutputWithContext(ctx, name, args...)
-	timer.FinishWithContext(ctx, err)
-
-	return output, err
+	return runWithTimerContext(ctx, "RunnerCombinedOutputWithContext", name, args,
+		func(r Runner, c context.Context, n string, a ...string) ([]byte, error) {
+			return r.CombinedOutputWithContext(c, n, a...)
+		})
 }
 
 // RunnerCombinedOutputWithSudoContext invokes the runner for a command with sudo and context support.
 // RunnerCombinedOutputWithSudoContext executes a command with sudo privileges and context using the global runner.
 func RunnerCombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error) {
-	timer := NewTimedOperation("RunnerCombinedOutputWithSudoContext", name, args...)
-
-	runner := GetRunner()
-
-	output, err := runner.CombinedOutputWithSudoContext(ctx, name, args...)
-	timer.FinishWithContext(ctx, err)
-
-	return output, err
+	return runWithTimerContext(ctx, "RunnerCombinedOutputWithSudoContext", name, args,
+		func(r Runner, c context.Context, n string, a ...string) ([]byte, error) {
+			return r.CombinedOutputWithSudoContext(c, n, a...)
+		})
 }
 
 // MockRunner is a simple mock for Runner, used in unit tests.
@@ -509,8 +519,12 @@ func (c *RealClient) StatusJailWithContext(ctx context.Context, jail string) (st
 	return string(out), err
 }
 
-// BanIPWithContext bans an IP address in the specified jail with context support.
-func (c *RealClient) BanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
+// executeIPActionWithContext executes a ban/unban IP action with validation and response parsing.
+// It returns (0, nil) for success, (1, nil) if already processed, or an error.
+func (c *RealClient) executeIPActionWithContext(
+	ctx context.Context,
+	ip, jail, action, errorTemplate string,
+) (int, error) {
 	if err := CachedValidateIP(ctx, ip); err != nil {
 		return 0, err
 	}
@@ -519,10 +533,9 @@ func (c *RealClient) BanIPWithContext(ctx context.Context, ip, jail string) (int
 	}
 
 	currentRunner := GetRunner()
-
-	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, c.Path, shared.ActionSet, jail, shared.ActionBanIP, ip)
+	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, c.Path, shared.ActionSet, jail, action, ip)
 	if err != nil {
-		return 0, fmt.Errorf(shared.ErrFailedToBanIP, ip, jail, err)
+		return 0, fmt.Errorf(errorTemplate, ip, jail, err)
 	}
 	code := strings.TrimSpace(string(out))
 	if code == shared.Fail2BanStatusSuccess {
@@ -534,36 +547,14 @@ func (c *RealClient) BanIPWithContext(ctx context.Context, ip, jail string) (int
 	return 0, fmt.Errorf(shared.ErrUnexpectedOutput, code)
 }
 
+// BanIPWithContext bans an IP address in the specified jail with context support.
+func (c *RealClient) BanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
+	return c.executeIPActionWithContext(ctx, ip, jail, shared.ActionBanIP, shared.ErrFailedToBanIP)
+}
+
 // UnbanIPWithContext unbans an IP address from the specified jail with context support.
 func (c *RealClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
-	if err := CachedValidateIP(ctx, ip); err != nil {
-		return 0, err
-	}
-	if err := CachedValidateJail(ctx, jail); err != nil {
-		return 0, err
-	}
-
-	currentRunner := GetRunner()
-
-	out, err := currentRunner.CombinedOutputWithSudoContext(
-		ctx,
-		c.Path,
-		shared.ActionSet,
-		jail,
-		shared.ActionUnbanIP,
-		ip,
-	)
-	if err != nil {
-		return 0, fmt.Errorf(shared.ErrFailedToUnbanIP, ip, jail, err)
-	}
-	code := strings.TrimSpace(string(out))
-	if code == shared.Fail2BanStatusSuccess {
-		return 0, nil
-	}
-	if code == shared.Fail2BanStatusAlreadyProcessed {
-		return 1, nil
-	}
-	return 0, fmt.Errorf(shared.ErrUnexpectedOutput, code)
+	return c.executeIPActionWithContext(ctx, ip, jail, shared.ActionUnbanIP, shared.ErrFailedToUnbanIP)
 }
 
 // BannedInWithContext returns a list of jails where the specified IP address is currently banned with context support.
