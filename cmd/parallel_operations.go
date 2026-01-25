@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"runtime"
 	"sync"
 
@@ -155,13 +156,20 @@ func (pop *ParallelOperationProcessor) processOperations(
 		close(resultCh)
 	}()
 
-	// Collect results
+	// Collect results and errors
+	var errs []error
 	for result := range resultCh {
 		if result.index >= 0 && result.index < len(results) {
 			results[result.index] = result.result
 		}
+		if result.err != nil {
+			errs = append(errs, result.err)
+		}
 	}
 
+	if len(errs) > 0 {
+		return results, errors.Join(errs...)
+	}
 	return results, nil
 }
 
@@ -175,6 +183,7 @@ type jailWork struct {
 type operationResult struct {
 	result OperationResult
 	index  int
+	err    error
 }
 
 // worker processes jail operations
@@ -203,16 +212,15 @@ func (pop *ParallelOperationProcessor) worker(
 			"status": status,
 		}).Info("Operation result")
 
-		result := operationResult{
+		resultCh <- operationResult{
 			result: OperationResult{
 				IP:     ip,
 				Jail:   work.jail,
 				Status: status,
 			},
 			index: work.index,
+			err:   err,
 		}
-
-		resultCh <- result
 	}
 }
 
