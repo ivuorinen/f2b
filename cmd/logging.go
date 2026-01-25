@@ -5,6 +5,7 @@ package cmd
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -106,7 +107,12 @@ func WithJail(ctx context.Context, jail string) context.Context {
 
 // WithCommand adds command context and returns a new context.
 // This is cmd-specific as fail2ban doesn't need command tracking.
+// Empty commands are not stored in context.
 func WithCommand(ctx context.Context, command string) context.Context {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return ctx
+	}
 	return context.WithValue(ctx, shared.ContextKeyCommand, command)
 }
 
