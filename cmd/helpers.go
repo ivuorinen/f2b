@@ -17,6 +17,20 @@ import (
 	"github.com/ivuorinen/f2b/fail2ban"
 )
 
+// createTimeoutContext creates a context with the configured command timeout.
+// This helper consolidates the duplicate timeout handling pattern.
+// If base is nil, context.Background() is used.
+func createTimeoutContext(base context.Context, config *Config) (context.Context, context.CancelFunc) {
+	if base == nil {
+		base = context.Background()
+	}
+	timeout := shared.DefaultCommandTimeout
+	if config != nil && config.CommandTimeout > 0 {
+		timeout = config.CommandTimeout
+	}
+	return context.WithTimeout(base, timeout)
+}
+
 // IsCI detects if we're running in a CI environment
 func IsCI() bool {
 	return fail2ban.IsCI()
@@ -50,17 +64,8 @@ func NewContextualCommand(
 		// Get the contextual logger
 		logger := GetContextualLogger()
 
-		// Base on Cobra's context so signals/cancellations propagate
-		base := cmd.Context()
-		if base == nil {
-			base = context.Background()
-		}
-		// Create timeout context for the entire operation
-		timeout := shared.DefaultCommandTimeout
-		if config != nil && config.CommandTimeout > 0 {
-			timeout = config.CommandTimeout
-		}
-		ctx, cancel := context.WithTimeout(base, timeout)
+		// Create timeout context based on Cobra's context so signals/cancellations propagate
+		ctx, cancel := createTimeoutContext(cmd.Context(), config)
 		defer cancel()
 
 		// Extract command name from use string (first word)
@@ -388,22 +393,63 @@ type OperationResult struct {
 	Status string `json:"status"`
 }
 
-// ProcessBanOperation processes ban operations across multiple jails
-func ProcessBanOperation(client fail2ban.Client, ip string, jails []string) ([]OperationResult, error) {
+// OperationType defines a ban or unban operation with its associated metadata
+type OperationType struct {
+	// MetricsType is the metrics key for this operation (e.g., shared.MetricsBan)
+	MetricsType string
+	// Message is the log message for this operation (e.g., shared.MsgBanResult)
+	Message string
+	// Operation is the function to execute without context
+	Operation func(client fail2ban.Client, ip, jail string) (int, error)
+	// OperationCtx is the function to execute with context
+	OperationCtx func(ctx context.Context, client fail2ban.Client, ip, jail string) (int, error)
+}
+
+// BanOperationType defines the ban operation
+var BanOperationType = OperationType{
+	MetricsType: shared.MetricsBan,
+	Message:     shared.MsgBanResult,
+	Operation: func(c fail2ban.Client, ip, jail string) (int, error) {
+		return c.BanIP(ip, jail)
+	},
+	OperationCtx: func(ctx context.Context, c fail2ban.Client, ip, jail string) (int, error) {
+		return c.BanIPWithContext(ctx, ip, jail)
+	},
+}
+
+// UnbanOperationType defines the unban operation
+var UnbanOperationType = OperationType{
+	MetricsType: shared.MetricsUnban,
+	Message:     shared.MsgUnbanResult,
+	Operation: func(c fail2ban.Client, ip, jail string) (int, error) {
+		return c.UnbanIP(ip, jail)
+	},
+	OperationCtx: func(ctx context.Context, c fail2ban.Client, ip, jail string) (int, error) {
+		return c.UnbanIPWithContext(ctx, ip, jail)
+	},
+}
+
+// ProcessOperation processes operations across multiple jails using the specified operation type
+func ProcessOperation(
+	client fail2ban.Client,
+	ip string,
+	jails []string,
+	opType OperationType,
+) ([]OperationResult, error) {
 	results := make([]OperationResult, 0, len(jails))
 
 	for _, jail := range jails {
-		code, err := client.BanIP(ip, jail)
+		code, err := opType.Operation(client, ip, jail)
 		if err != nil {
 			return nil, err
 		}
 
-		status := InterpretBanStatus(code, shared.MetricsBan)
+		status := InterpretBanStatus(code, opType.MetricsType)
 		Logger.WithFields(map[string]interface{}{
 			"ip":     ip,
 			"jail":   jail,
 			"status": status,
-		}).Info(shared.MsgBanResult)
+		}).Info(opType.Message)
 
 		results = append(results, OperationResult{
 			IP:     ip,
@@ -413,6 +459,59 @@ func ProcessBanOperation(client fail2ban.Client, ip string, jails []string) ([]O
 	}
 
 	return results, nil
+}
+
+// ProcessOperationWithContext processes operations across multiple jails with timeout context
+func ProcessOperationWithContext(
+	ctx context.Context,
+	client fail2ban.Client,
+	ip string,
+	jails []string,
+	opType OperationType,
+) ([]OperationResult, error) {
+	logger := GetContextualLogger()
+	results := make([]OperationResult, 0, len(jails))
+
+	for _, jail := range jails {
+		// Add jail to context for this operation
+		jailCtx := WithJail(ctx, jail)
+
+		// Time the operation
+		start := time.Now()
+		code, err := opType.OperationCtx(jailCtx, client, ip, jail)
+		duration := time.Since(start)
+
+		if err != nil {
+			// Log the failed operation with timing
+			logger.LogBanOperation(jailCtx, opType.MetricsType, ip, jail, false, duration)
+			return nil, err
+		}
+
+		status := InterpretBanStatus(code, opType.MetricsType)
+
+		// Log the successful operation with timing
+		logger.LogBanOperation(jailCtx, opType.MetricsType, ip, jail, true, duration)
+
+		// Log the operation-specific message (ban vs unban)
+		Logger.WithFields(map[string]interface{}{
+			"ip":     ip,
+			"jail":   jail,
+			"status": status,
+		}).Info(opType.Message)
+
+		results = append(results, OperationResult{
+			IP:     ip,
+			Jail:   jail,
+			Status: status,
+		})
+	}
+
+	return results, nil
+}
+
+// ProcessBanOperation processes ban operations across multiple jails
+func ProcessBanOperation(client fail2ban.Client, ip string, jails []string) ([]OperationResult, error) {
+	return ProcessOperation(client, ip, jails, BanOperationType)
 }
 
 // ProcessBanOperationWithContext processes ban operations across multiple jails with timeout context
@@ -422,70 +521,12 @@ func ProcessBanOperationWithContext(
 	ip string,
 	jails []string,
 ) ([]OperationResult, error) {
-	logger := GetContextualLogger()
-	results := make([]OperationResult, 0, len(jails))
-
-	for _, jail := range jails {
-		// Add jail to context for this operation
-		jailCtx := WithJail(ctx, jail)
-
-		// Time the ban operation
-		start := time.Now()
-		code, err := client.BanIPWithContext(jailCtx, ip, jail)
-		duration := time.Since(start)
-
-		if err != nil {
-			// Log the failed operation with timing
-			logger.LogBanOperation(jailCtx, shared.MetricsBan, ip, jail, false, duration)
-			return nil, err
-		}
-
-		status := InterpretBanStatus(code, shared.MetricsBan)
-
-		// Log the successful operation with timing
-		logger.LogBanOperation(jailCtx, shared.MetricsBan, ip, jail, true, duration)
-
-		Logger.WithFields(map[string]interface{}{
-			"ip":     ip,
-			"jail":   jail,
-			"status": status,
-		}).Info(shared.MsgBanResult)
-
-		results = append(results, OperationResult{
-			IP:     ip,
-			Jail:   jail,
-			Status: status,
-		})
-	}
-
-	return results, nil
+	return ProcessOperationWithContext(ctx, client, ip, jails, BanOperationType)
 }
 
 // ProcessUnbanOperation processes unban operations across multiple jails
 func ProcessUnbanOperation(client fail2ban.Client, ip string, jails []string) ([]OperationResult, error) {
-	results := make([]OperationResult, 0, len(jails))
-
-	for _, jail := range jails {
-		code, err := client.UnbanIP(ip, jail)
-		if err != nil {
-			return nil, err
-		}
-
-		status := InterpretBanStatus(code, shared.MetricsUnban)
-		Logger.WithFields(map[string]interface{}{
-			"ip":     ip,
-			"jail":   jail,
-			"status": status,
-		}).Info(shared.MsgUnbanResult)
-
-		results = append(results, OperationResult{
-			IP:     ip,
-			Jail:   jail,
-			Status: status,
-		})
-	}
-
-	return results, nil
+	return ProcessOperation(client, ip, jails, UnbanOperationType)
 }
 
 // ProcessUnbanOperationWithContext processes unban operations across multiple jails with timeout context
@@ -495,43 +536,7 @@ func ProcessUnbanOperationWithContext(
 	ip string,
 	jails []string,
 ) ([]OperationResult, error) {
-	logger := GetContextualLogger()
-	results := make([]OperationResult, 0, len(jails))
-
-	for _, jail := range jails {
-		// Add jail to context for this operation
-		jailCtx := WithJail(ctx, jail)
-
-		// Time the unban operation
-		start := time.Now()
-		code, err := client.UnbanIPWithContext(jailCtx, ip, jail)
-		duration := time.Since(start)
-
-		if err != nil {
-			// Log the failed operation with timing
-			logger.LogBanOperation(jailCtx, shared.MetricsUnban, ip, jail, false, duration)
-			return nil, err
-		}
-
-		status := InterpretBanStatus(code, shared.MetricsUnban)
-
-		// Log the successful operation with timing
-		logger.LogBanOperation(jailCtx, shared.MetricsUnban, ip, jail, true, duration)
-
-		Logger.WithFields(map[string]interface{}{
-			"ip":     ip,
-			"jail":   jail,
-			"status": status,
-		}).Info(shared.MsgUnbanResult)
-
-		results = append(results, OperationResult{
-			IP:     ip,
-			Jail:   jail,
-			Status: status,
-		})
-	}
-
-	return results, nil
+	return ProcessOperationWithContext(ctx, client, ip, jails, UnbanOperationType)
 }
 
 // Argument validation helpers

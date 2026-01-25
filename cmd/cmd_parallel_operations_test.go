@@ -88,7 +88,7 @@ func TestParallelOperationProcessor_EmptyJailsList(t *testing.T) {
 }
 
 func TestParallelOperationProcessor_ErrorHandling(t *testing.T) {
-	// Test error handling doesn't cause index issues
+	// Test error handling returns aggregated errors while still populating results
 	processor := NewParallelOperationProcessor(2)
 
 	// Mock client for testing
@@ -99,15 +99,16 @@ func TestParallelOperationProcessor_ErrorHandling(t *testing.T) {
 
 	results, err := processor.ProcessBanOperationParallel(mockClient, "192.168.1.100", jails)
 
-	if err != nil {
-		t.Fatalf("ProcessBanOperationParallel failed: %v", err)
+	// Errors should now be returned (aggregated)
+	if err == nil {
+		t.Error("Expected error for non-existent jails, got nil")
 	}
 
 	if len(results) != 2 {
 		t.Errorf("Expected 2 results, got %d", len(results))
 	}
 
-	// All results should have errors for non-existent jails
+	// All results should still be populated with error status
 	for i, result := range results {
 		if result.Jail == "" {
 			t.Errorf("Result %d has empty jail", i)

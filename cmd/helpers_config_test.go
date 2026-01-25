@@ -12,9 +12,7 @@ import (
 
 // TestProcessBanOperation tests the ProcessBanOperation function
 func TestProcessBanOperation(t *testing.T) {
-	// Save and restore original runner
-	originalRunner := fail2ban.GetRunner()
-	defer fail2ban.SetRunner(originalRunner)
+	defer fail2ban.WithTestRunner(t, fail2ban.GetRunner())()
 
 	tests := []struct {
 		name        string
@@ -27,7 +25,7 @@ func TestProcessBanOperation(t *testing.T) {
 		{
 			name: "successful ban single jail",
 			setupMock: func(m *fail2ban.MockRunner) {
-				setupBasicMockResponses(m)
+				fail2ban.StandardMockSetup(m)
 				m.SetResponse("fail2ban-client set sshd banip 192.168.1.1", []byte("1"))
 				m.SetResponse("sudo fail2ban-client set sshd banip 192.168.1.1", []byte("1"))
 			},
@@ -39,7 +37,7 @@ func TestProcessBanOperation(t *testing.T) {
 		{
 			name: "successful ban multiple jails",
 			setupMock: func(m *fail2ban.MockRunner) {
-				setupBasicMockResponses(m)
+				fail2ban.StandardMockSetup(m)
 				m.SetResponse("fail2ban-client set sshd banip 192.168.1.1", []byte("1"))
 				m.SetResponse("sudo fail2ban-client set sshd banip 192.168.1.1", []byte("1"))
 				m.SetResponse("fail2ban-client set apache banip 192.168.1.1", []byte("1"))
@@ -53,7 +51,7 @@ func TestProcessBanOperation(t *testing.T) {
 		{
 			name: "invalid IP address",
 			setupMock: func(m *fail2ban.MockRunner) {
-				setupBasicMockResponses(m)
+				fail2ban.StandardMockSetup(m)
 			},
 			ip:          "invalid.ip",
 			jails:       []string{"sshd"},
@@ -146,14 +144,4 @@ func TestParseTimeoutFromEnv(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
-}
-
-// setupBasicMockResponses is a helper for setting up version check and ping responses
-func setupBasicMockResponses(m *fail2ban.MockRunner) {
-	m.SetResponse("fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
-	m.SetResponse("sudo fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
-	m.SetResponse("fail2ban-client ping", []byte("Server replied: pong"))
-	m.SetResponse("sudo fail2ban-client ping", []byte("Server replied: pong"))
-	m.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 2\n`- Jail list: sshd, apache"))
-	m.SetResponse("sudo fail2ban-client status", []byte("Status\n|- Number of jail: 2\n`- Jail list: sshd, apache"))
 }

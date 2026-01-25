@@ -36,17 +36,7 @@ func NewTimeParsingCache(layout string) (*TimeParsingCache, error) {
 
 // ParseTime parses a time string with bounded caching for performance
 func (tpc *TimeParsingCache) ParseTime(timeStr string) (time.Time, error) {
-	// Check cache first
-	if cached, ok := tpc.parseCache.Load(timeStr); ok {
-		return cached, nil
-	}
-
-	// Parse and cache
-	t, err := time.Parse(tpc.layout, timeStr)
-	if err == nil {
-		tpc.parseCache.Store(timeStr, t)
-	}
-	return t, err
+	return tpc.parseCache.ParseWithLayout(timeStr, tpc.layout)
 }
 
 // BuildTimeString efficiently builds a time string from date and time components

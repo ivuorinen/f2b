@@ -164,6 +164,17 @@ func validateConfigPath(path, pathType string) (string, error) {
 	return absPath, nil
 }
 
+// validateConfigPathWithFallback validates a config path and returns the fallback if validation fails.
+// This consolidates the common pattern of validate-or-fallback-with-logging used for config paths.
+func validateConfigPathWithFallback(path, pathType, defaultPath, errorMsg string) string {
+	validated, err := validateConfigPath(path, pathType)
+	if err != nil {
+		Logger.WithError(err).WithField(shared.LogFieldPath, path).Error(errorMsg)
+		return defaultPath
+	}
+	return validated
+}
+
 // isReasonableSystemPath checks if a path is in a reasonable system location
 func isReasonableSystemPath(path, pathType string) bool {
 	// Allow common system directories based on path type
@@ -195,28 +206,20 @@ func NewConfigFromEnv() Config {
 	if logDir == "" {
 		logDir = shared.DefaultLogDir
 	}
-
-	validatedLogDir, err := validateConfigPath(logDir, shared.PathTypeLog)
-	if err != nil {
-		Logger.WithError(err).WithField(shared.LogFieldPath, logDir).Error("Invalid log directory from environment")
-		validatedLogDir = shared.DefaultLogDir // Fallback to safe default
-	}
-	cfg.LogDir = validatedLogDir
+	cfg.LogDir = validateConfigPathWithFallback(
+		logDir, shared.PathTypeLog, shared.DefaultLogDir,
+		"Invalid log directory from environment",
+	)
 
 	// Get and validate filter directory
 	filterDir := os.Getenv("F2B_FILTER_DIR")
 	if filterDir == "" {
 		filterDir = shared.DefaultFilterDir
 	}
-
-	validatedFilterDir, err := validateConfigPath(filterDir, shared.PathTypeFilter)
-	if err != nil {
-		Logger.WithError(err).
-			WithField(shared.LogFieldPath, filterDir).
-			Error("Invalid filter directory from environment")
-		validatedFilterDir = shared.DefaultFilterDir // Fallback to safe default
-	}
-	cfg.FilterDir = validatedFilterDir
+	cfg.FilterDir = validateConfigPathWithFallback(
+		filterDir, shared.PathTypeFilter, shared.DefaultFilterDir,
+		"Invalid filter directory from environment",
+	)
 
 	// Configure timeouts from environment variables
 	cfg.CommandTimeout = parseTimeoutFromEnv("F2B_COMMAND_TIMEOUT", shared.DefaultCommandTimeout)

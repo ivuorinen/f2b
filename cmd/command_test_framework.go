@@ -149,9 +149,10 @@ func NewCommandTest(t *testing.T, commandName string) *CommandTestBuilder {
 		command: commandName,
 		args:    make([]string, 0),
 		config: &Config{
-			Format:         PlainFormat,
-			CommandTimeout: shared.DefaultCommandTimeout,
-			FileTimeout:    shared.DefaultFileTimeout,
+			Format:          PlainFormat,
+			CommandTimeout:  shared.DefaultCommandTimeout,
+			FileTimeout:     shared.DefaultFileTimeout,
+			ParallelTimeout: shared.DefaultParallelTimeout,
 		},
 	}
 }
@@ -418,6 +419,20 @@ func (result *CommandTestResult) AssertExactOutput(expected string) *CommandTest
 	return result
 }
 
+// checkJSONFieldValue validates that a JSON field value matches the expected string.
+func (result *CommandTestResult) checkJSONFieldValue(val interface{}, fieldName, expected string) {
+	result.t.Helper()
+	if fmt.Sprintf("%v", val) != expected {
+		result.t.Fatalf(shared.ErrTestJSONFieldMismatch, result.name, fieldName, expected, val)
+	}
+}
+
+// failMissingJSONField reports a missing JSON field with context.
+func (result *CommandTestResult) failMissingJSONField(fieldName, context string) {
+	result.t.Helper()
+	result.t.Fatalf("%s: JSON field %q not found%s: %s", result.name, fieldName, context, result.Output)
+}
+
 // AssertJSONField validates a specific field in JSON output
 func (result *CommandTestResult) AssertJSONField(fieldPath, expected string) *CommandTestResult {
 	result.t.Helper()
@@ -434,22 +449,18 @@ func (result *CommandTestResult) AssertJSONField(fieldPath, expected string) *Co
 	switch v := data.(type) {
 	case map[string]interface{}:
 		if val, ok := v[fieldName]; ok {
-			if fmt.Sprintf("%v", val) != expected {
-				result.t.Fatalf(shared.ErrTestJSONFieldMismatch, result.name, fieldName, expected, val)
-			}
+			result.checkJSONFieldValue(val, fieldName, expected)
 		} else {
-			result.t.Fatalf("%s: JSON field %q not found in output: %s", result.name, fieldName, result.Output)
+			result.failMissingJSONField(fieldName, " in output")
 		}
 	case []interface{}:
 		// Handle array case - look in first element
 		if len(v) > 0 {
 			if firstItem, ok := v[0].(map[string]interface{}); ok {
 				if val, ok := firstItem[fieldName]; ok {
-					if fmt.Sprintf("%v", val) != expected {
-						result.t.Fatalf(shared.ErrTestJSONFieldMismatch, result.name, fieldName, expected, val)
-					}
+					result.checkJSONFieldValue(val, fieldName, expected)
 				} else {
-					result.t.Fatalf("%s: JSON field %q not found in first array element: %s", result.name, fieldName, result.Output)
+					result.failMissingJSONField(fieldName, " in first array element")
 				}
 			} else {
 				result.t.Fatalf("%s: first array element is not an object in output: %s", result.name, result.Output)

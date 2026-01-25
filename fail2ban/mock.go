@@ -9,6 +9,17 @@ import (
 	"time"
 )
 
+// setNestedMapValue sets a value in a nested map[string]map[string]T structure with mutex protection.
+// It initializes the inner map if nil.
+func setNestedMapValue[T any](mu *sync.Mutex, mp map[string]map[string]T, jail, ip string, value T) {
+	mu.Lock()
+	defer mu.Unlock()
+	if mp[jail] == nil {
+		mp[jail] = make(map[string]T)
+	}
+	mp[jail][ip] = value
+}
+
 // MockClient is a stateful, thread-safe mock implementation of the Client interface for testing.
 type MockClient struct {
 	mu         sync.Mutex
@@ -286,42 +297,22 @@ func (m *MockClient) Reset() {
 
 // SetBanError configures an error to return for BanIP(ip, jail).
 func (m *MockClient) SetBanError(jail, ip string, err error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.BanErrors[jail] == nil {
-		m.BanErrors[jail] = make(map[string]error)
-	}
-	m.BanErrors[jail][ip] = err
+	setNestedMapValue(&m.mu, m.BanErrors, jail, ip, err)
 }
 
 // SetBanResult configures a result code to return for BanIP(ip, jail).
 func (m *MockClient) SetBanResult(jail, ip string, result int) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.BanResults[jail] == nil {
-		m.BanResults[jail] = make(map[string]int)
-	}
-	m.BanResults[jail][ip] = result
+	setNestedMapValue(&m.mu, m.BanResults, jail, ip, result)
 }
 
 // SetUnbanError configures an error to return for UnbanIP(ip, jail).
 func (m *MockClient) SetUnbanError(jail, ip string, err error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.UnbanErrors[jail] == nil {
-		m.UnbanErrors[jail] = make(map[string]error)
-	}
-	m.UnbanErrors[jail][ip] = err
+	setNestedMapValue(&m.mu, m.UnbanErrors, jail, ip, err)
 }
 
 // SetUnbanResult configures a result code to return for UnbanIP(ip, jail).
 func (m *MockClient) SetUnbanResult(jail, ip string, result int) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.UnbanResults[jail] == nil {
-		m.UnbanResults[jail] = make(map[string]int)
-	}
-	m.UnbanResults[jail][ip] = result
+	setNestedMapValue(&m.mu, m.UnbanResults, jail, ip, result)
 }
 
 // SetStatusJailData configures the status data for a specific jail.

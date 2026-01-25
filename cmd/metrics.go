@@ -68,17 +68,34 @@ func NewMetrics() *Metrics {
 	}
 }
 
+// recordOperationMetrics records metrics for any operation type.
+// This helper consolidates the duplicate metrics recording pattern.
+func (m *Metrics) recordOperationMetrics(
+	execCounter, durationCounter, failureCounter *int64,
+	buckets map[string]*LatencyBucket,
+	operation string,
+	duration time.Duration,
+	success bool,
+) {
+	atomic.AddInt64(execCounter, 1)
+	atomic.AddInt64(durationCounter, duration.Milliseconds())
+	if !success {
+		atomic.AddInt64(failureCounter, 1)
+	}
+	m.recordLatencyBucket(buckets, operation, duration)
+}
+
 // RecordCommandExecution records metrics for command execution
 func (m *Metrics) RecordCommandExecution(command string, duration time.Duration, success bool) {
-	atomic.AddInt64(&m.CommandExecutions, 1)
-	atomic.AddInt64(&m.CommandTotalDuration, duration.Milliseconds())
-
-	if !success {
-		atomic.AddInt64(&m.CommandFailures, 1)
-	}
-
-	// Record latency bucket
-	m.recordLatencyBucket(m.commandLatencyBuckets, command, duration)
+	m.recordOperationMetrics(
+		&m.CommandExecutions,
+		&m.CommandTotalDuration,
+		&m.CommandFailures,
+		m.commandLatencyBuckets,
+		command,
+		duration,
+		success,
+	)
 }
 
 // RecordBanOperation records metrics for ban operations
@@ -99,15 +116,15 @@ func (m *Metrics) RecordBanOperation(operation string, _ time.Duration, success 
 
 // RecordClientOperation records metrics for client operations
 func (m *Metrics) RecordClientOperation(operation string, duration time.Duration, success bool) {
-	atomic.AddInt64(&m.ClientOperations, 1)
-	atomic.AddInt64(&m.ClientTotalDuration, duration.Milliseconds())
-
-	if !success {
-		atomic.AddInt64(&m.ClientFailures, 1)
-	}
-
-	// Record latency bucket
-	m.recordLatencyBucket(m.clientLatencyBuckets, operation, duration)
+	m.recordOperationMetrics(
+		&m.ClientOperations,
+		&m.ClientTotalDuration,
+		&m.ClientFailures,
+		m.clientLatencyBuckets,
+		operation,
+		duration,
+		success,
+	)
 }
 
 // RecordValidationCacheHit records validation cache hits
@@ -141,6 +158,25 @@ func (m *Metrics) UpdateMemoryUsage(bytes int64) {
 // UpdateGoroutineCount updates the goroutine count
 func (m *Metrics) UpdateGoroutineCount(count int64) {
 	atomic.StoreInt64(&m.GoroutineCount, count)
+}
+
+// copyBuckets creates a snapshot copy of latency buckets
+// This helper consolidates the duplicate bucket copying logic
+func copyBuckets(buckets map[string]*LatencyBucket) map[string]LatencyBucketSnapshot {
+	result := make(map[string]LatencyBucketSnapshot, len(buckets))
+	for op, bucket := range buckets {
+		result[op] = LatencyBucketSnapshot{
+			Under1ms:   atomic.LoadInt64(&bucket.Under1ms),
+			Under10ms:  atomic.LoadInt64(&bucket.Under10ms),
+			Under100ms: atomic.LoadInt64(&bucket.Under100ms),
+			Under1s:    atomic.LoadInt64(&bucket.Under1s),
+			Under10s:   atomic.LoadInt64(&bucket.Under10s),
+			Over10s:    atomic.LoadInt64(&bucket.Over10s),
+			Total:      atomic.LoadInt64(&bucket.Total),
+			TotalTime:  atomic.LoadInt64(&bucket.TotalTime),
+		}
+	}
+	return result
 }
 
 // recordLatencyBucket records latency in appropriate bucket
@@ -177,37 +213,8 @@ func (m *Metrics) recordLatencyBucket(buckets map[string]*LatencyBucket, operati
 // GetSnapshot returns a snapshot of current metrics
 func (m *Metrics) GetSnapshot() MetricsSnapshot {
 	m.mu.RLock()
-
-	// Copy command latency buckets
-	commandBuckets := make(map[string]LatencyBucketSnapshot)
-	for op, bucket := range m.commandLatencyBuckets {
-		commandBuckets[op] = LatencyBucketSnapshot{
-			Under1ms:   atomic.LoadInt64(&bucket.Under1ms),
-			Under10ms:  atomic.LoadInt64(&bucket.Under10ms),
-			Under100ms: atomic.LoadInt64(&bucket.Under100ms),
-			Under1s:    atomic.LoadInt64(&bucket.Under1s),
-			Under10s:   atomic.LoadInt64(&bucket.Under10s),
-			Over10s:    atomic.LoadInt64(&bucket.Over10s),
-			Total:      atomic.LoadInt64(&bucket.Total),
-			TotalTime:  atomic.LoadInt64(&bucket.TotalTime),
-		}
-	}
-
-	// Copy client latency buckets
-	clientBuckets := make(map[string]LatencyBucketSnapshot)
-	for op, bucket := range m.clientLatencyBuckets {
-		clientBuckets[op] = LatencyBucketSnapshot{
-			Under1ms:   atomic.LoadInt64(&bucket.Under1ms),
-			Under10ms:  atomic.LoadInt64(&bucket.Under10ms),
-			Under100ms: atomic.LoadInt64(&bucket.Under100ms),
-			Under1s:    atomic.LoadInt64(&bucket.Under1s),
-			Under10s:   atomic.LoadInt64(&bucket.Under10s),
-			Over10s:    atomic.LoadInt64(&bucket.Over10s),
-			Total:      atomic.LoadInt64(&bucket.Total),
-			TotalTime:  atomic.LoadInt64(&bucket.TotalTime),
-		}
-	}
-
+	commandBuckets := copyBuckets(m.commandLatencyBuckets)
+	clientBuckets := copyBuckets(m.clientLatencyBuckets)
 	m.mu.RUnlock()
 
 	return MetricsSnapshot{

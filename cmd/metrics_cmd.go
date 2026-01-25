@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -97,35 +98,40 @@ func printMetricsPlain(output io.Writer, snapshot MetricsSnapshot) error {
 	// Command latency distribution
 	if len(snapshot.CommandLatencyBuckets) > 0 {
 		sb.WriteString("Command Latency Distribution:\n")
-		for cmd, bucket := range snapshot.CommandLatencyBuckets {
-			sb.WriteString(fmt.Sprintf(shared.MetricsFmtOperationHeader, cmd))
-			sb.WriteString(fmt.Sprintf(shared.MetricsFmtLatencyUnder1ms, bucket.Under1ms))
-			sb.WriteString(fmt.Sprintf(shared.MetricsFmtLatencyUnder10ms, bucket.Under10ms))
-			sb.WriteString(fmt.Sprintf(shared.MetricsFmtLatencyUnder100ms, bucket.Under100ms))
-			sb.WriteString(fmt.Sprintf(shared.MetricsFmtLatencyUnder1s, bucket.Under1s))
-			sb.WriteString(fmt.Sprintf(shared.MetricsFmtLatencyUnder10s, bucket.Under10s))
-			sb.WriteString(fmt.Sprintf(shared.MetricsFmtLatencyOver10s, bucket.Over10s))
-			sb.WriteString(fmt.Sprintf(shared.MetricsFmtAverageLatency, bucket.GetAverageLatency()))
-		}
+		formatLatencyBuckets(&sb, snapshot.CommandLatencyBuckets)
 		sb.WriteString("\n")
 	}
 
 	// Client latency distribution
 	if len(snapshot.ClientLatencyBuckets) > 0 {
 		sb.WriteString("Client Operation Latency Distribution:\n")
-		for op, bucket := range snapshot.ClientLatencyBuckets {
-			sb.WriteString(fmt.Sprintf(shared.MetricsFmtOperationHeader, op))
-			sb.WriteString(fmt.Sprintf(shared.MetricsFmtLatencyUnder1ms, bucket.Under1ms))
-			sb.WriteString(fmt.Sprintf(shared.MetricsFmtLatencyUnder10ms, bucket.Under10ms))
-			sb.WriteString(fmt.Sprintf(shared.MetricsFmtLatencyUnder100ms, bucket.Under100ms))
-			sb.WriteString(fmt.Sprintf(shared.MetricsFmtLatencyUnder1s, bucket.Under1s))
-			sb.WriteString(fmt.Sprintf(shared.MetricsFmtLatencyUnder10s, bucket.Under10s))
-			sb.WriteString(fmt.Sprintf(shared.MetricsFmtLatencyOver10s, bucket.Over10s))
-			sb.WriteString(fmt.Sprintf(shared.MetricsFmtAverageLatency, bucket.GetAverageLatency()))
-		}
+		formatLatencyBuckets(&sb, snapshot.ClientLatencyBuckets)
 	}
 
 	// Write the entire string at once
 	_, err := output.Write([]byte(sb.String()))
 	return err
+}
+
+// formatLatencyBuckets writes latency bucket distribution to the builder.
+// Keys are sorted for deterministic output.
+func formatLatencyBuckets(sb *strings.Builder, buckets map[string]LatencyBucketSnapshot) {
+	// Sort keys for deterministic output
+	keys := make([]string, 0, len(buckets))
+	for name := range buckets {
+		keys = append(keys, name)
+	}
+	sort.Strings(keys)
+
+	for _, name := range keys {
+		bucket := buckets[name]
+		fmt.Fprintf(sb, shared.MetricsFmtOperationHeader, name)
+		fmt.Fprintf(sb, shared.MetricsFmtLatencyUnder1ms, bucket.Under1ms)
+		fmt.Fprintf(sb, shared.MetricsFmtLatencyUnder10ms, bucket.Under10ms)
+		fmt.Fprintf(sb, shared.MetricsFmtLatencyUnder100ms, bucket.Under100ms)
+		fmt.Fprintf(sb, shared.MetricsFmtLatencyUnder1s, bucket.Under1s)
+		fmt.Fprintf(sb, shared.MetricsFmtLatencyUnder10s, bucket.Under10s)
+		fmt.Fprintf(sb, shared.MetricsFmtLatencyOver10s, bucket.Over10s)
+		fmt.Fprintf(sb, shared.MetricsFmtAverageLatency, bucket.GetAverageLatency())
+	}
 }

@@ -95,6 +95,23 @@ func (btc *BoundedTimeCache) Size() int {
 	return len(btc.cache)
 }
 
+// ParseWithLayout parses a time string using the specified layout with caching.
+// This method consolidates the cache-lookup-parse-store pattern used across
+// different time parsing caches in the codebase.
+func (btc *BoundedTimeCache) ParseWithLayout(timeStr, layout string) (time.Time, error) {
+	// Fast path: check cache
+	if cached, ok := btc.Load(timeStr); ok {
+		return cached, nil
+	}
+
+	// Parse and cache - only cache successful parses
+	t, err := time.Parse(layout, timeStr)
+	if err == nil {
+		btc.Store(timeStr, t)
+	}
+	return t, err
+}
+
 // BanRecordParser provides high-performance parsing of ban records
 type BanRecordParser struct {
 	// Pools for zero-allocation parsing (goroutine-safe)
@@ -167,17 +184,7 @@ func NewFastTimeCache(layout string) (*FastTimeCache, error) {
 
 // ParseTimeOptimized parses time with minimal allocations
 func (ftc *FastTimeCache) ParseTimeOptimized(timeStr string) (time.Time, error) {
-	// Fast path: check cache
-	if cached, ok := ftc.parseCache.Load(timeStr); ok {
-		return cached, nil
-	}
-
-	// Parse and cache - only cache successful parses
-	t, err := time.Parse(ftc.layout, timeStr)
-	if err == nil {
-		ftc.parseCache.Store(timeStr, t)
-	}
-	return t, err
+	return ftc.parseCache.ParseWithLayout(timeStr, ftc.layout)
 }
 
 // BuildTimeStringOptimized builds time string with zero allocations using byte buffer

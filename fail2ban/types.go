@@ -33,19 +33,10 @@ type LoggerEntry interface {
 	Errorf(format string, args ...interface{})
 }
 
-// LoggerInterface defines the top-level logging interface (decoupled from logrus)
+// LoggerInterface defines the top-level logging interface (decoupled from logrus).
+// It embeds LoggerEntry since both interfaces share the same method signatures.
 type LoggerInterface interface {
-	WithField(key string, value interface{}) LoggerEntry
-	WithFields(fields Fields) LoggerEntry
-	WithError(err error) LoggerEntry
-	Debug(args ...interface{})
-	Info(args ...interface{})
-	Warn(args ...interface{})
-	Error(args ...interface{})
-	Debugf(format string, args ...interface{})
-	Infof(format string, args ...interface{})
-	Warnf(format string, args ...interface{})
-	Errorf(format string, args ...interface{})
+	LoggerEntry
 }
 
 // LogCollectionConfig configures log line collection behavior

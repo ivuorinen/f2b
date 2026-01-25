@@ -12,17 +12,13 @@ import (
 
 // TestProcessBanOperationParallel tests the ProcessBanOperationParallel wrapper function
 func TestProcessBanOperationParallel(t *testing.T) {
-	// Save and restore original runner
-	originalRunner := fail2ban.GetRunner()
-	defer fail2ban.SetRunner(originalRunner)
-
 	mockRunner := fail2ban.NewMockRunner()
-	setupBasicMockResponses(mockRunner)
+	defer fail2ban.WithTestRunner(t, mockRunner)()
+	fail2ban.StandardMockSetup(mockRunner)
 	mockRunner.SetResponse("fail2ban-client set sshd banip 192.168.1.1", []byte("1"))
 	mockRunner.SetResponse("sudo fail2ban-client set sshd banip 192.168.1.1", []byte("1"))
 	mockRunner.SetResponse("fail2ban-client set apache banip 192.168.1.1", []byte("1"))
 	mockRunner.SetResponse("sudo fail2ban-client set apache banip 192.168.1.1", []byte("1"))
-	fail2ban.SetRunner(mockRunner)
 
 	client, err := fail2ban.NewClient("/var/log/fail2ban", "/etc/fail2ban/filter.d")
 	require.NoError(t, err)
@@ -34,15 +30,11 @@ func TestProcessBanOperationParallel(t *testing.T) {
 
 // TestProcessUnbanOperationParallel tests the ProcessUnbanOperationParallel wrapper function
 func TestProcessUnbanOperationParallel(t *testing.T) {
-	// Save and restore original runner
-	originalRunner := fail2ban.GetRunner()
-	defer fail2ban.SetRunner(originalRunner)
-
 	mockRunner := fail2ban.NewMockRunner()
-	setupBasicMockResponses(mockRunner)
+	defer fail2ban.WithTestRunner(t, mockRunner)()
+	fail2ban.StandardMockSetup(mockRunner)
 	mockRunner.SetResponse("fail2ban-client set sshd unbanip 192.168.1.1", []byte("1"))
 	mockRunner.SetResponse("sudo fail2ban-client set sshd unbanip 192.168.1.1", []byte("1"))
-	fail2ban.SetRunner(mockRunner)
 
 	client, err := fail2ban.NewClient("/var/log/fail2ban", "/etc/fail2ban/filter.d")
 	require.NoError(t, err)
@@ -54,15 +46,11 @@ func TestProcessUnbanOperationParallel(t *testing.T) {
 
 // TestProcessBanOperationParallelWithContext tests the wrapper with context
 func TestProcessBanOperationParallelWithContext(t *testing.T) {
-	// Save and restore original runner
-	originalRunner := fail2ban.GetRunner()
-	defer fail2ban.SetRunner(originalRunner)
-
 	mockRunner := fail2ban.NewMockRunner()
-	setupBasicMockResponses(mockRunner)
+	defer fail2ban.WithTestRunner(t, mockRunner)()
+	fail2ban.StandardMockSetup(mockRunner)
 	mockRunner.SetResponse("fail2ban-client set sshd banip 192.168.1.1", []byte("1"))
 	mockRunner.SetResponse("sudo fail2ban-client set sshd banip 192.168.1.1", []byte("1"))
-	fail2ban.SetRunner(mockRunner)
 
 	client, err := fail2ban.NewClient("/var/log/fail2ban", "/etc/fail2ban/filter.d")
 	require.NoError(t, err)
@@ -75,15 +63,11 @@ func TestProcessBanOperationParallelWithContext(t *testing.T) {
 
 // TestProcessUnbanOperationParallelWithContext tests the wrapper with context
 func TestProcessUnbanOperationParallelWithContext(t *testing.T) {
-	// Save and restore original runner
-	originalRunner := fail2ban.GetRunner()
-	defer fail2ban.SetRunner(originalRunner)
-
 	mockRunner := fail2ban.NewMockRunner()
-	setupBasicMockResponses(mockRunner)
+	defer fail2ban.WithTestRunner(t, mockRunner)()
+	fail2ban.StandardMockSetup(mockRunner)
 	mockRunner.SetResponse("fail2ban-client set sshd unbanip 192.168.1.1", []byte("1"))
 	mockRunner.SetResponse("sudo fail2ban-client set sshd unbanip 192.168.1.1", []byte("1"))
-	fail2ban.SetRunner(mockRunner)
 
 	client, err := fail2ban.NewClient("/var/log/fail2ban", "/etc/fail2ban/filter.d")
 	require.NoError(t, err)

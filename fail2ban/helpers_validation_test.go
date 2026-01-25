@@ -75,18 +75,14 @@ func TestValidateFilterName(t *testing.T) {
 
 // TestGetLogLinesWrapper tests the GetLogLines wrapper function
 func TestGetLogLinesWrapper(t *testing.T) {
-	// Save and restore original runner
-	originalRunner := GetRunner()
-	defer SetRunner(originalRunner)
-
 	mockRunner := NewMockRunner()
+	defer WithTestRunner(t, mockRunner)()
 	mockRunner.SetResponse("fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
 	mockRunner.SetResponse("sudo fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
 	mockRunner.SetResponse("fail2ban-client ping", []byte("Server replied: pong"))
 	mockRunner.SetResponse("sudo fail2ban-client ping", []byte("Server replied: pong"))
 	mockRunner.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
 	mockRunner.SetResponse("sudo fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-	SetRunner(mockRunner)
 
 	// Create temporary log directory
 	tmpDir := t.TempDir()
@@ -107,9 +103,7 @@ func TestGetLogLinesWrapper(t *testing.T) {
 
 // TestBanIPWithContext tests the BanIPWithContext function
 func TestBanIPWithContext(t *testing.T) {
-	// Save and restore original runner
-	originalRunner := GetRunner()
-	defer SetRunner(originalRunner)
+	defer WithTestRunner(t, GetRunner())()
 
 	tests := []struct {
 		name        string
@@ -160,18 +154,14 @@ func TestBanIPWithContext(t *testing.T) {
 
 // TestGetLogLinesWithLimitAndContext tests the GetLogLinesWithLimitAndContext function
 func TestGetLogLinesWithLimitAndContext(t *testing.T) {
-	// Save and restore original runner
-	originalRunner := GetRunner()
-	defer SetRunner(originalRunner)
-
 	mockRunner := NewMockRunner()
+	defer WithTestRunner(t, mockRunner)()
 	mockRunner.SetResponse("fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
 	mockRunner.SetResponse("sudo fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
 	mockRunner.SetResponse("fail2ban-client ping", []byte("Server replied: pong"))
 	mockRunner.SetResponse("sudo fail2ban-client ping", []byte("Server replied: pong"))
 	mockRunner.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
 	mockRunner.SetResponse("sudo fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-	SetRunner(mockRunner)
 
 	// Create temporary log directory
 	tmpDir := t.TempDir()

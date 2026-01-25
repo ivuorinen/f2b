@@ -301,7 +301,7 @@ func (m *MockLogsWatchClient) GetLogLines(jail, ip string) ([]string, error) {
 		logs = m.initialLogs
 	} else {
 		// Simulate new logs being added
-		logs = make([]string, len(m.initialLogs))
+		logs = make([]string, len(m.initialLogs), len(m.initialLogs)+1)
 		copy(logs, m.initialLogs)
 		logs = append(logs, fmt.Sprintf("new log line %d", m.callCount))
 	}

@@ -110,18 +110,14 @@ func TestValidateConfigPath(t *testing.T) {
 
 // TestLogsWatchCmdCreation tests LogsWatchCmd creation
 func TestLogsWatchCmdCreation(t *testing.T) {
-	// Save and restore original runner
-	originalRunner := fail2ban.GetRunner()
-	defer fail2ban.SetRunner(originalRunner)
-
 	mockRunner := fail2ban.NewMockRunner()
+	defer fail2ban.WithTestRunner(t, mockRunner)()
 	mockRunner.SetResponse("fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
 	mockRunner.SetResponse("sudo fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
 	mockRunner.SetResponse("fail2ban-client ping", []byte("Server replied: pong"))
 	mockRunner.SetResponse("sudo fail2ban-client ping", []byte("Server replied: pong"))
 	mockRunner.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
 	mockRunner.SetResponse("sudo fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-	fail2ban.SetRunner(mockRunner)
 
 	client, err := fail2ban.NewClient("/var/log/fail2ban", "/etc/fail2ban/filter.d")
 	require.NoError(t, err)
@@ -142,18 +138,14 @@ func TestLogsWatchCmdCreation(t *testing.T) {
 
 // TestGetLogLinesWithLimitAndContext_Function tests the function
 func TestGetLogLinesWithLimitAndContext_Function(t *testing.T) {
-	// Save and restore original runner
-	originalRunner := fail2ban.GetRunner()
-	defer fail2ban.SetRunner(originalRunner)
-
 	mockRunner := fail2ban.NewMockRunner()
+	defer fail2ban.WithTestRunner(t, mockRunner)()
 	mockRunner.SetResponse("fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
 	mockRunner.SetResponse("sudo fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
 	mockRunner.SetResponse("fail2ban-client ping", []byte("Server replied: pong"))
 	mockRunner.SetResponse("sudo fail2ban-client ping", []byte("Server replied: pong"))
 	mockRunner.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
 	mockRunner.SetResponse("sudo fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-	fail2ban.SetRunner(mockRunner)
 
 	tmpDir := t.TempDir()
 	oldLogDir := fail2ban.GetLogDir()

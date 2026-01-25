@@ -2,11 +2,11 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"runtime"
 	"sync"
 
 	"github.com/ivuorinen/f2b/fail2ban"
-	"github.com/ivuorinen/f2b/shared"
 )
 
 // ParallelOperationProcessor handles parallel ban/unban operations across multiple jails
@@ -24,15 +24,16 @@ func NewParallelOperationProcessor(workerCount int) *ParallelOperationProcessor 
 	}
 }
 
-// ProcessBanOperationParallel processes ban operations across multiple jails in parallel
-func (pop *ParallelOperationProcessor) ProcessBanOperationParallel(
+// ProcessOperationParallel processes operations across multiple jails in parallel
+func (pop *ParallelOperationProcessor) ProcessOperationParallel(
 	client fail2ban.Client,
 	ip string,
 	jails []string,
+	opType OperationType,
 ) ([]OperationResult, error) {
 	if len(jails) <= 1 {
 		// For single jail, use sequential processing to avoid overhead
-		return ProcessBanOperation(client, ip, jails)
+		return ProcessOperation(client, ip, jails, opType)
 	}
 
 	return pop.processOperations(
@@ -40,11 +41,41 @@ func (pop *ParallelOperationProcessor) ProcessBanOperationParallel(
 		client,
 		ip,
 		jails,
-		func(ctx context.Context, client fail2ban.Client, ip, jail string) (int, error) {
-			return client.BanIPWithContext(ctx, ip, jail)
-		},
-		shared.MetricsBan,
+		opType.OperationCtx,
+		opType.MetricsType,
 	)
+}
+
+// ProcessOperationParallelWithContext processes operations across multiple jails in parallel with context
+func (pop *ParallelOperationProcessor) ProcessOperationParallelWithContext(
+	ctx context.Context,
+	client fail2ban.Client,
+	ip string,
+	jails []string,
+	opType OperationType,
+) ([]OperationResult, error) {
+	if len(jails) <= 1 {
+		// For single jail, use sequential processing to avoid overhead
+		return ProcessOperationWithContext(ctx, client, ip, jails, opType)
+	}
+
+	return pop.processOperations(
+		ctx,
+		client,
+		ip,
+		jails,
+		opType.OperationCtx,
+		opType.MetricsType,
+	)
+}
+
+// ProcessBanOperationParallel processes ban operations across multiple jails in parallel
+func (pop *ParallelOperationProcessor) ProcessBanOperationParallel(
+	client fail2ban.Client,
+	ip string,
+	jails []string,
+) ([]OperationResult, error) {
+	return pop.ProcessOperationParallel(client, ip, jails, BanOperationType)
 }
 
 // ProcessBanOperationParallelWithContext processes ban operations across
@@ -55,21 +86,7 @@ func (pop *ParallelOperationProcessor) ProcessBanOperationParallelWithContext(
 	ip string,
 	jails []string,
 ) ([]OperationResult, error) {
-	if len(jails) <= 1 {
-		// For single jail, use sequential processing to avoid overhead
-		return ProcessBanOperationWithContext(ctx, client, ip, jails)
-	}
-
-	return pop.processOperations(
-		ctx,
-		client,
-		ip,
-		jails,
-		func(opCtx context.Context, client fail2ban.Client, ip, jail string) (int, error) {
-			return client.BanIPWithContext(opCtx, ip, jail)
-		},
-		shared.MetricsBan,
-	)
+	return pop.ProcessOperationParallelWithContext(ctx, client, ip, jails, BanOperationType)
 }
 
 // ProcessUnbanOperationParallel processes unban operations across multiple jails in parallel
@@ -78,21 +95,7 @@ func (pop *ParallelOperationProcessor) ProcessUnbanOperationParallel(
 	ip string,
 	jails []string,
 ) ([]OperationResult, error) {
-	if len(jails) <= 1 {
-		// For single jail, use sequential processing to avoid overhead
-		return ProcessUnbanOperation(client, ip, jails)
-	}
-
-	return pop.processOperations(
-		context.Background(),
-		client,
-		ip,
-		jails,
-		func(ctx context.Context, client fail2ban.Client, ip, jail string) (int, error) {
-			return client.UnbanIPWithContext(ctx, ip, jail)
-		},
-		shared.MetricsUnban,
-	)
+	return pop.ProcessOperationParallel(client, ip, jails, UnbanOperationType)
 }
 
 // ProcessUnbanOperationParallelWithContext processes unban operations across
@@ -103,25 +106,34 @@ func (pop *ParallelOperationProcessor) ProcessUnbanOperationParallelWithContext(
 	ip string,
 	jails []string,
 ) ([]OperationResult, error) {
-	if len(jails) <= 1 {
-		// For single jail, use sequential processing to avoid overhead
-		return ProcessUnbanOperationWithContext(ctx, client, ip, jails)
-	}
-
-	return pop.processOperations(
-		ctx,
-		client,
-		ip,
-		jails,
-		func(opCtx context.Context, client fail2ban.Client, ip, jail string) (int, error) {
-			return client.UnbanIPWithContext(opCtx, ip, jail)
-		},
-		shared.MetricsUnban,
-	)
+	return pop.ProcessOperationParallelWithContext(ctx, client, ip, jails, UnbanOperationType)
 }
 
 // operationFunc represents a ban or unban operation with context
 type operationFunc func(ctx context.Context, client fail2ban.Client, ip, jail string) (int, error)
+
+// validateOperationInputs validates IP and jail inputs before parallel processing.
+// Returns an aggregated error if any inputs are invalid.
+func validateOperationInputs(ctx context.Context, ip string, jails []string) error {
+	var errs []error
+
+	// Validate IP address
+	if err := fail2ban.CachedValidateIP(ctx, ip); err != nil {
+		errs = append(errs, err)
+	}
+
+	// Validate each jail name
+	for _, jail := range jails {
+		if err := fail2ban.CachedValidateJail(ctx, jail); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+	return nil
+}
 
 // processOperations handles the parallel processing of operations
 func (pop *ParallelOperationProcessor) processOperations(
@@ -132,6 +144,11 @@ func (pop *ParallelOperationProcessor) processOperations(
 	operation operationFunc,
 	operationType string,
 ) ([]OperationResult, error) {
+	// Validate inputs before processing
+	if err := validateOperationInputs(ctx, ip, jails); err != nil {
+		return nil, err
+	}
+
 	results := make([]OperationResult, len(jails))
 	resultCh := make(chan operationResult, len(jails))
 
@@ -167,13 +184,20 @@ func (pop *ParallelOperationProcessor) processOperations(
 		close(resultCh)
 	}()
 
-	// Collect results
+	// Collect results and errors
+	var errs []error
 	for result := range resultCh {
 		if result.index >= 0 && result.index < len(results) {
 			results[result.index] = result.result
 		}
+		if result.err != nil {
+			errs = append(errs, result.err)
+		}
 	}
 
+	if len(errs) > 0 {
+		return results, errors.Join(errs...)
+	}
 	return results, nil
 }
 
@@ -187,6 +211,7 @@ type jailWork struct {
 type operationResult struct {
 	result OperationResult
 	index  int
+	err    error
 }
 
 // worker processes jail operations
@@ -215,16 +240,15 @@ func (pop *ParallelOperationProcessor) worker(
 			"status": status,
 		}).Info("Operation result")
 
-		result := operationResult{
+		resultCh <- operationResult{
 			result: OperationResult{
 				IP:     ip,
 				Jail:   work.jail,
 				Status: status,
 			},
 			index: work.index,
+			err:   err,
 		}
-
-		resultCh <- result
 	}
 }
 

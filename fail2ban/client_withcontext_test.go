@@ -12,17 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// setupBasicMockResponses sets up the basic responses needed for client initialization
-func setupBasicMockResponses(m *MockRunner) {
-	m.SetResponse("fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
-	m.SetResponse("sudo fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
-	m.SetResponse("fail2ban-client ping", []byte("Server replied: pong"))
-	m.SetResponse("sudo fail2ban-client ping", []byte("Server replied: pong"))
-	// NewClient calls fetchJailsWithContext which runs status
-	m.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 2\n`- Jail list: sshd, apache"))
-	m.SetResponse("sudo fail2ban-client status", []byte("Status\n|- Number of jail: 2\n`- Jail list: sshd, apache"))
-}
-
 // TestListJailsWithContext tests jail listing with context
 func TestListJailsWithContext(t *testing.T) {
 	tests := []struct {
@@ -35,11 +24,11 @@ func TestListJailsWithContext(t *testing.T) {
 		{
 			name: "successful jail listing",
 			setupMock: func(m *MockRunner) {
-				setupBasicMockResponses(m)
+				StandardMockSetup(m)
 			},
 			timeout:     5 * time.Second,
 			expectError: false,
-			expectJails: []string{"sshd", "apache"}, // From setupBasicMockResponses
+			expectJails: []string{"sshd", "apache"}, // From StandardMockSetup
 		},
 	}
 
@@ -83,7 +72,7 @@ func TestStatusAllWithContext(t *testing.T) {
 		{
 			name: "successful status all",
 			setupMock: func(m *MockRunner) {
-				setupBasicMockResponses(m)
+				StandardMockSetup(m)
 				m.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
 				m.SetResponse("sudo fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
 			},
@@ -94,7 +83,7 @@ func TestStatusAllWithContext(t *testing.T) {
 		{
 			name: "context timeout",
 			setupMock: func(m *MockRunner) {
-				setupBasicMockResponses(m)
+				StandardMockSetup(m)
 				m.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
 				m.SetResponse("sudo fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
 			},
@@ -145,7 +134,7 @@ func TestStatusJailWithContext(t *testing.T) {
 			name: "successful status jail",
 			jail: "sshd",
 			setupMock: func(m *MockRunner) {
-				setupBasicMockResponses(m)
+				StandardMockSetup(m)
 				m.SetResponse(
 					"fail2ban-client status sshd",
 					[]byte("Status for the jail: sshd\n|- Filter\n`- Currently banned: 0"),
@@ -163,7 +152,7 @@ func TestStatusJailWithContext(t *testing.T) {
 			name: "invalid jail name",
 			jail: "invalid@jail",
 			setupMock: func(m *MockRunner) {
-				setupBasicMockResponses(m)
+				StandardMockSetup(m)
 				// Validation will fail before command execution
 			},
 			timeout:     5 * time.Second,
@@ -173,7 +162,7 @@ func TestStatusJailWithContext(t *testing.T) {
 			name: "context timeout",
 			jail: "sshd",
 			setupMock: func(m *MockRunner) {
-				setupBasicMockResponses(m)
+				StandardMockSetup(m)
 				m.SetResponse(
 					"fail2ban-client status sshd",
 					[]byte("Status for the jail: sshd\n|- Filter\n`- Currently banned: 0"),
@@ -234,7 +223,7 @@ func TestUnbanIPWithContext(t *testing.T) {
 			ip:   "192.168.1.100",
 			jail: "sshd",
 			setupMock: func(m *MockRunner) {
-				setupBasicMockResponses(m)
+				StandardMockSetup(m)
 				m.SetResponse("fail2ban-client set sshd unbanip 192.168.1.100", []byte("0"))
 				m.SetResponse("sudo fail2ban-client set sshd unbanip 192.168.1.100", []byte("0"))
 			},
@@ -247,7 +236,7 @@ func TestUnbanIPWithContext(t *testing.T) {
 			ip:   "192.168.1.100",
 			jail: "sshd",
 			setupMock: func(m *MockRunner) {
-				setupBasicMockResponses(m)
+				StandardMockSetup(m)
 				m.SetResponse("fail2ban-client set sshd unbanip 192.168.1.100", []byte("1"))
 				m.SetResponse("sudo fail2ban-client set sshd unbanip 192.168.1.100", []byte("1"))
 			},
@@ -260,7 +249,7 @@ func TestUnbanIPWithContext(t *testing.T) {
 			ip:   "invalid-ip",
 			jail: "sshd",
 			setupMock: func(m *MockRunner) {
-				setupBasicMockResponses(m)
+				StandardMockSetup(m)
 				// Validation will fail before command execution
 			},
 			timeout:     5 * time.Second,
@@ -271,7 +260,7 @@ func TestUnbanIPWithContext(t *testing.T) {
 			ip:   "192.168.1.100",
 			jail: "invalid@jail",
 			setupMock: func(m *MockRunner) {
-				setupBasicMockResponses(m)
+				StandardMockSetup(m)
 				// Validation will fail before command execution
 			},
 			timeout:     5 * time.Second,
@@ -282,7 +271,7 @@ func TestUnbanIPWithContext(t *testing.T) {
 			ip:   "192.168.1.100",
 			jail: "sshd",
 			setupMock: func(m *MockRunner) {
-				setupBasicMockResponses(m)
+				StandardMockSetup(m)
 				m.SetResponse("fail2ban-client set sshd unbanip 192.168.1.100", []byte("0"))
 				m.SetResponse("sudo fail2ban-client set sshd unbanip 192.168.1.100", []byte("0"))
 			},
@@ -332,7 +321,7 @@ func TestListFiltersWithContext(t *testing.T) {
 		{
 			name: "successful filter listing",
 			setupMock: func(m *MockRunner) {
-				setupBasicMockResponses(m)
+				StandardMockSetup(m)
 				// Mock responses not needed - uses file system
 			},
 			setupEnv: func() {
@@ -345,7 +334,7 @@ func TestListFiltersWithContext(t *testing.T) {
 		{
 			name: "context timeout",
 			setupMock: func(m *MockRunner) {
-				setupBasicMockResponses(m)
+				StandardMockSetup(m)
 				// Not applicable for file system operation
 			},
 			setupEnv: func() {
@@ -412,7 +401,7 @@ logpath = /var/log/auth.log
 			name:   "successful filter test",
 			filter: "sshd",
 			setupMock: func(m *MockRunner) {
-				setupBasicMockResponses(m)
+				StandardMockSetup(m)
 				m.SetResponse(
 					"fail2ban-regex /var/log/auth.log "+filepath.Join(tmpDir, "sshd.conf"),
 					[]byte("Success: 0 matches"),
@@ -429,7 +418,7 @@ logpath = /var/log/auth.log
 			name:   "invalid filter name",
 			filter: "invalid@filter",
 			setupMock: func(m *MockRunner) {
-				setupBasicMockResponses(m)
+				StandardMockSetup(m)
 				// Validation will fail before command execution
 			},
 			timeout:     5 * time.Second,
@@ -439,7 +428,7 @@ logpath = /var/log/auth.log
 			name:   "context timeout",
 			filter: "sshd",
 			setupMock: func(m *MockRunner) {
-				setupBasicMockResponses(m)
+				StandardMockSetup(m)
 				m.SetResponse(
 					"fail2ban-regex /var/log/auth.log "+filepath.Join(tmpDir, "sshd.conf"),
 					[]byte("Success: 0 matches"),
@@ -485,7 +474,7 @@ logpath = /var/log/auth.log
 // TestWithContextCancellation tests that all WithContext functions respect cancellation
 func TestWithContextCancellation(t *testing.T) {
 	mock := NewMockRunner()
-	setupBasicMockResponses(mock)
+	StandardMockSetup(mock)
 	SetRunner(mock)
 
 	client, err := NewClient("/var/log", "/etc/fail2ban/filter.d")
@@ -520,7 +509,7 @@ func TestWithContextCancellation(t *testing.T) {
 // TestWithContextDeadline tests that all WithContext functions respect deadlines
 func TestWithContextDeadline(t *testing.T) {
 	mock := NewMockRunner()
-	setupBasicMockResponses(mock)
+	StandardMockSetup(mock)
 	SetRunner(mock)
 
 	client, err := NewClient("/var/log", "/etc/fail2ban/filter.d")
@@ -576,7 +565,7 @@ func TestWithContextDeadline(t *testing.T) {
 // TestWithContextValidation tests that validation happens before context usage
 func TestWithContextValidation(t *testing.T) {
 	mock := NewMockRunner()
-	setupBasicMockResponses(mock)
+	StandardMockSetup(mock)
 	SetRunner(mock)
 
 	client, err := NewClient("/var/log", "/etc/fail2ban/filter.d")

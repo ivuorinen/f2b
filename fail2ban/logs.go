@@ -377,11 +377,7 @@ func readLogFile(path string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		if cerr := reader.Close(); cerr != nil {
-			getLogger().WithError(cerr).Error("failed to close log file")
-		}
-	}()
+	defer safeCloseReader(reader, cleanPath)
 
 	return io.ReadAll(reader)
 }

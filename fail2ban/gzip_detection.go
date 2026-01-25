@@ -11,6 +11,32 @@ import (
 	"github.com/ivuorinen/f2b/shared"
 )
 
+// safeCloseFile closes a file and logs any error.
+// This helper consolidates the duplicate close-and-log pattern.
+func safeCloseFile(f *os.File, path string) {
+	if f == nil {
+		return
+	}
+	if closeErr := f.Close(); closeErr != nil {
+		getLogger().WithError(closeErr).
+			WithField(shared.LogFieldFile, path).
+			Warn("Failed to close file")
+	}
+}
+
+// safeCloseReader closes a reader and logs any error.
+// This helper consolidates the duplicate close-and-log pattern for io.ReadCloser.
+func safeCloseReader(r io.ReadCloser, path string) {
+	if r == nil {
+		return
+	}
+	if closeErr := r.Close(); closeErr != nil {
+		getLogger().WithError(closeErr).
+			WithField(shared.LogFieldFile, path).
+			Warn("Failed to close reader")
+	}
+}
+
 // GzipDetector provides utilities for detecting and handling gzip-compressed files
 type GzipDetector struct{}
 
@@ -38,13 +64,7 @@ func (gd *GzipDetector) hasGzipMagicBytes(path string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer func() {
-		if closeErr := f.Close(); closeErr != nil {
-			getLogger().WithError(closeErr).
-				WithField(shared.LogFieldFile, path).
-				Warn("Failed to close file in gzip magic byte check")
-		}
-	}()
+	defer safeCloseFile(f, path)
 
 	var magic [2]byte
 	n, err := f.Read(magic[:])
@@ -70,11 +90,7 @@ func (gd *GzipDetector) OpenGzipAwareReader(path string) (io.ReadCloser, error) 
 
 	isGzip, err := gd.IsGzipFile(path)
 	if err != nil {
-		if closeErr := f.Close(); closeErr != nil {
-			getLogger().WithError(closeErr).
-				WithField(shared.LogFieldFile, path).
-				Warn("Failed to close file during error handling")
-		}
+		safeCloseFile(f, path)
 		return nil, err
 	}
 
@@ -82,21 +98,13 @@ func (gd *GzipDetector) OpenGzipAwareReader(path string) (io.ReadCloser, error) 
 		// For gzip files, we need to position at the beginning and create gzip reader
 		_, err = f.Seek(0, io.SeekStart)
 		if err != nil {
-			if closeErr := f.Close(); closeErr != nil {
-				getLogger().WithError(closeErr).
-					WithField(shared.LogFieldFile, path).
-					Warn("Failed to close file during seek error handling")
-			}
+			safeCloseFile(f, path)
 			return nil, err
 		}
 
 		gz, err := gzip.NewReader(f)
 		if err != nil {
-			if closeErr := f.Close(); closeErr != nil {
-				getLogger().WithError(closeErr).
-					WithField(shared.LogFieldFile, path).
-					Warn("Failed to close file during gzip reader error handling")
-			}
+			safeCloseFile(f, path)
 			return nil, err
 		}
 
@@ -128,11 +136,7 @@ func (gd *GzipDetector) CreateGzipAwareScannerWithBuffer(path string, maxLineSiz
 	}
 
 	cleanup := func() {
-		if err := reader.Close(); err != nil {
-			getLogger().WithError(err).
-				WithField(shared.LogFieldFile, path).
-				Warn("Failed to close reader during cleanup")
-		}
+		safeCloseReader(reader, path)
 	}
 
 	return scanner, cleanup, nil
