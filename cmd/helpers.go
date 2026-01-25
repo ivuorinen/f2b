@@ -492,6 +492,13 @@ func ProcessOperationWithContext(
 		// Log the successful operation with timing
 		logger.LogBanOperation(jailCtx, opType.MetricsType, ip, jail, true, duration)
 
+		// Log the operation-specific message (ban vs unban)
+		Logger.WithFields(map[string]interface{}{
+			"ip":     ip,
+			"jail":   jail,
+			"status": status,
+		}).Info(opType.Message)
+
 		results = append(results, OperationResult{
 			IP:     ip,
 			Jail:   jail,
