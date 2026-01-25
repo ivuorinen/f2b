@@ -112,6 +112,29 @@ func (pop *ParallelOperationProcessor) ProcessUnbanOperationParallelWithContext(
 // operationFunc represents a ban or unban operation with context
 type operationFunc func(ctx context.Context, client fail2ban.Client, ip, jail string) (int, error)
 
+// validateOperationInputs validates IP and jail inputs before parallel processing.
+// Returns an aggregated error if any inputs are invalid.
+func validateOperationInputs(ctx context.Context, ip string, jails []string) error {
+	var errs []error
+
+	// Validate IP address
+	if err := fail2ban.CachedValidateIP(ctx, ip); err != nil {
+		errs = append(errs, err)
+	}
+
+	// Validate each jail name
+	for _, jail := range jails {
+		if err := fail2ban.CachedValidateJail(ctx, jail); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+	return nil
+}
+
 // processOperations handles the parallel processing of operations
 func (pop *ParallelOperationProcessor) processOperations(
 	ctx context.Context,
@@ -121,6 +144,11 @@ func (pop *ParallelOperationProcessor) processOperations(
 	operation operationFunc,
 	operationType string,
 ) ([]OperationResult, error) {
+	// Validate inputs before processing
+	if err := validateOperationInputs(ctx, ip, jails); err != nil {
+		return nil, err
+	}
+
 	results := make([]OperationResult, len(jails))
 	resultCh := make(chan operationResult, len(jails))
 
