@@ -792,20 +792,23 @@ func ValidateLogPath(ctx context.Context, path string, logDir string) (string, e
 	return ValidatePathWithSecurity(path, config)
 }
 
+// validateClientPath is a generic helper for client path validation.
+// It reduces duplication between ValidateClientLogPath and ValidateClientFilterPath.
+func validateClientPath(ctx context.Context, path string, configFn func() PathSecurityConfig) (string, error) {
+	_ = ctx // Context not currently used by ValidatePathWithSecurity
+	return ValidatePathWithSecurity(path, configFn())
+}
+
 // ValidateClientLogPath validates log directory path for client initialization
 // Context parameter accepted for API consistency but not currently used
 func ValidateClientLogPath(ctx context.Context, logDir string) (string, error) {
-	_ = ctx // Context not currently used by ValidatePathWithSecurity
-	config := CreateLogPathConfig()
-	return ValidatePathWithSecurity(logDir, config)
+	return validateClientPath(ctx, logDir, CreateLogPathConfig)
 }
 
 // ValidateClientFilterPath validates filter directory path for client initialization
 // Context parameter accepted for API consistency but not currently used
 func ValidateClientFilterPath(ctx context.Context, filterDir string) (string, error) {
-	_ = ctx // Context not currently used by ValidatePathWithSecurity
-	config := CreateFilterPathConfig()
-	return ValidatePathWithSecurity(filterDir, config)
+	return validateClientPath(ctx, filterDir, CreateFilterPathConfig)
 }
 
 // ValidateFilterName validates a filter name for path traversal prevention.
