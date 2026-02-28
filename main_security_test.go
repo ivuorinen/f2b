@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -380,7 +381,7 @@ func TestSecurityAudit_ConcurrentSafety(t *testing.T) {
 		// This is tested by running with -race flag in CI
 		for i := 0; i < 10; i++ {
 			go func(id int) {
-				fail2ban.SetLogDir("/tmp/test-" + string(rune(id))) //nolint:gosec // test code, intentional
+				fail2ban.SetLogDir("/tmp/test-" + strconv.Itoa(id))
 				fail2ban.GetLogDir()
 			}(i)
 		}

@@ -68,8 +68,8 @@ func printMetricsPlain(output io.Writer, snapshot MetricsSnapshot) error {
 
 	// Ban/Unban metrics
 	sb.WriteString("Ban Operations:\n")
-	fmt.Fprintf(&sb, "  Ban Operations: %d (failures: %d)\n", snapshot.BanOperations, snapshot.BanFailures)
-	fmt.Fprintf(&sb, "  Unban Operations: %d (failures: %d)\n", snapshot.UnbanOperations, snapshot.UnbanFailures)
+	fmt.Fprintf(&sb, shared.MetricsFmtBanOperations, snapshot.BanOperations, snapshot.BanFailures)
+	fmt.Fprintf(&sb, shared.MetricsFmtUnbanOperations, snapshot.UnbanOperations, snapshot.UnbanFailures)
 	sb.WriteString("\n")
 
 	// Client metrics

@@ -89,4 +89,4 @@ repos:
       - id: mdformat
         additional_dependencies:
           - mdformat-gfm
-        exclude: ^\.serena/
+        exclude: ^(\.serena/|\.github/ISSUE_TEMPLATE/)

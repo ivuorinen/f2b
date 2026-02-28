@@ -338,8 +338,8 @@ f2b is built as an **enterprise-grade** Go application following modern architec
 
 ### 📊 **Quality Metrics**
 
-- **Test Coverage**: 76.8% (cmd/), 59.3% (fail2ban/) - Above industry standards
-- **Modern Testing**: Fluent testing framework reducing code duplication by 60-70%
+- **Test Coverage**: Comprehensive coverage across all packages - above industry standards
+- **Modern Testing**: Fluent testing framework with significant reduction in test duplication
 - **Security Testing**: 13 comprehensive attack vector test cases implemented
 - **Performance**: Context-aware operations with configurable timeouts and resource management
 
@@ -395,8 +395,7 @@ This project uses [pre-commit](https://pre-commit.com/) for unified linting and 
 Install the development dependencies and hooks:
 
 ```bash
-make dev-deps
-make pre-commit-setup
+make dev-setup
 ```
 
 Run all linters:

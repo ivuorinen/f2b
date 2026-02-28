@@ -499,4 +499,10 @@ const (
 
 	// MetricsFmtAverageLatencyTop is the format for average latency (top-level)
 	MetricsFmtAverageLatencyTop = "  Average Latency: %.2f ms\n"
+
+	// MetricsFmtBanOperations is the format for ban operations with failures
+	MetricsFmtBanOperations = "  Ban Operations: %d (failures: %d)\n"
+
+	// MetricsFmtUnbanOperations is the format for unban operations with failures
+	MetricsFmtUnbanOperations = "  Unban Operations: %d (failures: %d)\n"
 )

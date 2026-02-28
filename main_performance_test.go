@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
@@ -179,7 +180,7 @@ func BenchmarkGlobalStateAccess(b *testing.B) {
 					fail2ban.GetLogDir()
 				} else {
 					// 50% writes
-					fail2ban.SetLogDir("/tmp/test-" + string(rune(b.N))) //nolint:gosec // test code, intentional
+					fail2ban.SetLogDir("/tmp/test-" + strconv.Itoa(b.N))
 				}
 			}
 		})
