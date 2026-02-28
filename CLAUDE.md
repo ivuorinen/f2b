@@ -29,6 +29,6 @@ Claude Code **MUST** follow ALL instructions in [AGENTS.md](AGENTS.md) when work
 
 **The f2b project is in production-ready state** with all critical infrastructure completed.
 
----
+______________________________________________________________________
 
 **📋 For all development work, refer to [AGENTS.md](AGENTS.md) for complete instructions.**

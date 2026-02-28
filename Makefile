@@ -1,10 +1,34 @@
 # f2b Makefile
 
-.PHONY: help all build test lint fmt clean install dev-deps ci \
-	check-deps test-verbose test-coverage update-deps \
-	lint-go lint-md lint-yaml lint-actions lint-make \
-	ci ci-coverage security dev-setup pre-commit-setup \
-	release-dry-run release release-snapshot release-check _check-tag
+.PHONY: help all build test lint fmt clean install
+.PHONY: ci ci-coverage test-verbose test-coverage update-deps fmt-md
+.PHONY: lint-go lint-md lint-yaml lint-actions lint-make
+.PHONY: security dev-setup pre-commit-setup
+.PHONY: release-dry-run release release-snapshot release-check _check-tag
+
+# Tool versions (managed by Renovate)
+# renovate: datasource=go depName=github.com/goreleaser/goreleaser/v2
+GORELEASER_VERSION := v2.14.1
+# renovate: datasource=go depName=github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+GOLANGCI_LINT_VERSION := v2.10.1
+# renovate: datasource=go depName=github.com/google/yamlfmt/cmd/yamlfmt
+YAMLFMT_VERSION := v0.21.0
+# renovate: datasource=go depName=github.com/rhysd/actionlint/cmd/actionlint
+ACTIONLINT_VERSION := v1.7.11
+# renovate: datasource=go depName=golang.org/x/tools/cmd/goimports
+GOIMPORTS_VERSION := v0.42.0
+# renovate: datasource=go depName=github.com/editorconfig-checker/editorconfig-checker/v3/cmd/editorconfig-checker
+EDITORCONFIG_CHECKER_VERSION := v3.6.1
+# renovate: datasource=go depName=github.com/securego/gosec/v2/cmd/gosec
+GOSEC_VERSION := v2.24.0
+# renovate: datasource=go depName=honnef.co/go/tools/cmd/staticcheck
+STATICCHECK_VERSION := v0.7.0
+# renovate: datasource=go depName=github.com/mgechev/revive
+REVIVE_VERSION := v1.14.0
+# renovate: datasource=go depName=github.com/checkmake/checkmake/cmd/checkmake
+CHECKMAKE_VERSION := v0.3.2
+# renovate: datasource=go depName=github.com/segmentio/golines
+GOLINES_VERSION := v0.13.0
 
 # Default target
 help: ## Show this help message
@@ -14,7 +38,7 @@ help: ## Show this help message
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 all: ci ## Run all CI checks (same as ci target)
-	@echo "All checks completed ✓"
+	@echo "All checks completed"
 
 # Build targets
 build: ## Build the f2b binary
@@ -22,107 +46,6 @@ build: ## Build the f2b binary
 
 install: ## Install f2b globally
 	go install github.com/ivuorinen/f2b@latest
-
-# Development dependencies
-dev-deps: ## Install development dependencies
-	@echo "Installing development dependencies..."
-	@echo ""
-	@echo "Installing goreleaser..."
-	@go install github.com/goreleaser/goreleaser/v2@v2.12.0;
-	# renovate: datasource=go depName=github.com/goreleaser/goreleaser/v2
-	@GOLANGCI_VERSION=$$(golangci-lint version 2>/dev/null \
-		| grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "0.0.0"); \
-	EXPECTED_VERSION="2.7.2"; \
-	if [ "$$GOLANGCI_VERSION" != "$$EXPECTED_VERSION" ]; then \
-		echo "Installing golangci-lint v$$EXPECTED_VERSION (current: v$$GOLANGCI_VERSION)..."; \
-		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v$$EXPECTED_VERSION; \
-	fi
-	# renovate: datasource=go depName=github.com/golangci/golangci-lint/v2/cmd/golangci-lint
-	@command -v markdownlint-cli2 >/dev/null 2>&1 || { \
-		echo "Installing markdownlint-cli2..."; \
-		npm install -g markdownlint-cli2; \
-	}
-	@command -v markdown-link-check >/dev/null 2>&1 || { \
-		echo "Installing markdown-link-check..."; \
-		npm install -g markdown-link-check; \
-	}
-	@command -v yamlfmt >/dev/null 2>&1 || { \
-		echo "Installing yamlfmt..."; \
-		go install github.com/google/yamlfmt/cmd/yamlfmt@v0.17.2; \
-	}
-	# renovate: datasource=go depName=github.com/google/yamlfmt/cmd/yamlfmt
-	@command -v actionlint >/dev/null 2>&1 || { \
-		echo "Installing actionlint..."; \
-		go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7; \
-	}
-	# renovate: datasource=go depName=github.com/rhysd/actionlint/cmd/actionlint
-	@command -v goimports >/dev/null 2>&1 || { \
-		echo "Installing goimports..."; \
-		go install golang.org/x/tools/cmd/goimports@v0.28.0; \
-	}
-	# renovate: datasource=go depName=golang.org/x/tools/cmd/goimports
-	@command -v editorconfig-checker >/dev/null 2>&1 || { \
-		echo "Installing editorconfig-checker..."; \
-		go install github.com/editorconfig-checker/editorconfig-checker/v3/cmd/editorconfig-checker@v3.4.0; \
-	}
-	# renovate: datasource=go depName=github.com/editorconfig-checker/editorconfig-checker/v3
-	@command -v gosec >/dev/null 2>&1 || { \
-		echo "Installing gosec..."; \
-		go install github.com/securego/gosec/v2/cmd/gosec@v2.22.8; \
-	}
-	# renovate: datasource=go depName=github.com/securego/gosec/v2/cmd/gosec
-	@command -v staticcheck >/dev/null 2>&1 || { \
-		echo "Installing staticcheck..."; \
-		go install honnef.co/go/tools/cmd/staticcheck@2024.1.1; \
-	}
-	# renovate: datasource=go depName=honnef.co/go/tools/cmd/staticcheck
-	@command -v revive >/dev/null 2>&1 || { \
-		echo "Installing revive..."; \
-		go install github.com/mgechev/revive@v1.12.0; \
-	}
-	# renovate: datasource=go depName=github.com/mgechev/revive
-	@command -v checkmake >/dev/null 2>&1 || { \
-		echo "Installing checkmake..."; \
-		go install github.com/checkmake/checkmake/cmd/checkmake@0.2.2; \
-	}
-	# renovate: datasource=go depName=github.com/checkmake/checkmake/cmd/checkmake
-	@command -v golines >/dev/null 2>&1 || { \
-		echo "Installing golines..."; \
-		go install github.com/segmentio/golines@v0.13.0; \
-	}
-	# renovate: datasource=go depName=github.com/segmentio/golines
-
-check-deps: ## Check if all development dependencies are installed
-	@echo "Checking development dependencies..."
-	@command -v go >/dev/null 2>&1 || { \
-		echo "go is not installed"; exit 1; }
-	@command -v goreleaser >/dev/null 2>&1 || {
-		echo "goreleaser is not installed (run: make dev-deps)"; exit 1; }
-	@command -v golangci-lint >/dev/null 2>&1 || {
-		echo "golangci-lint is not installed (run: make dev-deps)"; exit 1; }
-	@command -v markdownlint-cli2 >/dev/null 2>&1 || {
-		echo "markdownlint-cli2 is not installed (run: make dev-deps)"; exit 1; }
-	@command -v markdown-link-check >/dev/null 2>&1 || {
-		echo "markdown-link-check is not installed (run: make dev-deps)"; exit 1; }
-	@command -v goimports >/dev/null 2>&1 || {
-		echo "goimports is not installed (run: make dev-deps)"; exit 1; }
-	@command -v editorconfig-checker >/dev/null 2>&1 || {
-		echo "editorconfig-checker is not installed (run: make dev-deps)"; exit 1; }
-	@command -v gosec >/dev/null 2>&1 || {
-		echo "gosec is not installed (run: make dev-deps)"; exit 1; }
-	@command -v staticcheck >/dev/null 2>&1 || {
-		echo "staticcheck is not installed (run: make dev-deps)"; exit 1; }
-	@command -v revive >/dev/null 2>&1 || {
-		echo "revive is not installed (run: make dev-deps)"; exit 1; }
-	@command -v checkmake >/dev/null 2>&1 || {
-		echo "checkmake is not installed (run: make dev-deps)"; exit 1; }
-	@command -v yamlfmt >/dev/null 2>&1 || {
-		echo "yamlfmt is not installed (run: make dev-deps)"; exit 1; }
-	@command -v actionlint >/dev/null 2>&1 || {
-		echo "actionlint is not installed (run: make dev-deps)"; exit 1; }
-	@command -v golines >/dev/null 2>&1 || {
-		echo "golines is not installed (run: make dev-deps)"; exit 1; }
-	@echo "All dependencies are installed ✓"
 
 # Testing targets
 test: ## Run all tests
@@ -134,42 +57,38 @@ test-verbose: ## Run tests with verbose output
 test-coverage: ## Run tests with coverage report
 	go test -coverprofile=coverage.out ./...
 	go tool cover -html=coverage.out -o coverage.html
-	@echo "Coverage report saved to coverage.html"
 
 update-deps: ## Update Go dependencies to latest patch versions
-	@echo "Updating Go dependencies (patch versions only)..."
 	go get -u=patch ./...
 	go mod tidy
 	go mod verify
-	@echo "Dependencies updated ✓"
-	@echo "Updated dependencies:"
 	@go list -u -m all | grep '\[' || true
 
 # Code quality targets
 fmt: ## Format Go code
 	gofmt -w .
-	@echo "Go code formatted ✓"
+
+fmt-md: ## Format Markdown files
+	npx --yes mdformat *.md docs/*.md
 
 lint: ## Run all linters using pre-commit (preferred method)
-	@echo "Running pre-commit linters..."
 	@pre-commit run --all-files
-	@echo "All linting completed ✓"
 
 lint-go: ## Run only Go linters
 	go vet ./...
-	golangci-lint run --timeout=5m
+	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --timeout=5m
 
 lint-md: ## Run only Markdown linter
-	markdownlint-cli2 *.md **/*.md
+	npx --yes markdownlint-cli2 "*.md" "**/*.md"
 
 lint-yaml: ## Run only YAML linter
-	yamlfmt -lint .
+	go run github.com/google/yamlfmt/cmd/yamlfmt@$(YAMLFMT_VERSION) -lint .
 
 lint-actions: ## Run only GitHub Actions linter
-	actionlint .github/workflows/*.yml
+	go run github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION) .github/workflows/*.yml
 
 lint-make: ## Run only Makefile linter
-	checkmake Makefile
+	go run github.com/checkmake/checkmake/cmd/checkmake@$(CHECKMAKE_VERSION) Makefile
 
 # CI targets
 ci: fmt lint test ## Run all CI checks (format, lint, test)
@@ -178,48 +97,28 @@ ci-coverage: fmt lint test-coverage ## Run CI checks with coverage
 
 # Security targets
 security: ## Run security checks
-	gosec ./...
+	go run github.com/securego/gosec/v2/cmd/gosec@$(GOSEC_VERSION) ./...
 
 # Cleanup targets
 clean: ## Clean build artifacts
-	rm -f f2b
-	rm -f coverage.out
-	rm -f coverage.html
+	rm -f f2b coverage.out coverage.html
 	go clean
 
 # Development targets
-dev-setup: dev-deps ## Set up development environment
-	@echo "Setting up development environment..."
-	@echo "Installing pre-commit hooks..."
-	@command -v pre-commit >/dev/null 2>&1 || { \
-		echo "Installing pre-commit..."; \
-		pip install pre-commit; \
-	}
-	@pre-commit install
-	@echo "Development environment setup complete ✓"
+dev-setup: pre-commit-setup ## Set up development environment
 
 pre-commit-setup: ## Install and configure pre-commit hooks
-	@echo "Installing pre-commit..."
-	@command -v pre-commit >/dev/null 2>&1 || { \
-		echo "Installing pre-commit..."; \
-		pip install pre-commit; \
-	}
+	@command -v pre-commit >/dev/null 2>&1 || pip install pre-commit
 	@pre-commit install
-	@echo "Pre-commit hooks installed ✓"
 
 # Release targets
 release-dry-run: ## Test release process without creating artifacts
-	@echo "Testing release process..."
 	@VERSION=$$(git describe --tags --exact-match 2>/dev/null || echo "v0.0.0-dev"); \
 	echo "Building version: $$VERSION"; \
-	go build -ldflags "-X github.com/ivuorinen/f2b/cmd.version=$$VERSION" -o f2b-test .
-	@rm -f f2b-test
-	@echo "Release dry-run complete ✓"
+	go build -ldflags "-X github.com/ivuorinen/f2b/cmd.version=$$VERSION" -o f2b-test . && rm -f f2b-test
 
-release: ## Create a new release using GoReleaser
-	@echo "Creating release with GoReleaser..."
-	@$(MAKE) _check-tag
-	@goreleaser release --clean
+release: _check-tag ## Create a new release using GoReleaser
+	go run github.com/goreleaser/goreleaser/v2@$(GORELEASER_VERSION) release --clean
 
 _check-tag: ## Internal: Check if a git tag exists
 	@if [ -z "$$(git describe --exact-match 2>/dev/null)" ]; then \
@@ -228,10 +127,7 @@ _check-tag: ## Internal: Check if a git tag exists
 	fi
 
 release-snapshot: ## Create a snapshot release (no tag required)
-	@echo "Creating snapshot release with GoReleaser..."
-	goreleaser release --snapshot --clean
+	go run github.com/goreleaser/goreleaser/v2@$(GORELEASER_VERSION) release --snapshot --clean
 
 release-check: ## Check if GoReleaser configuration is valid
-	@echo "Checking GoReleaser configuration..."
-	goreleaser check
-	@echo "GoReleaser configuration is valid ✓"
+	go run github.com/goreleaser/goreleaser/v2@$(GORELEASER_VERSION) check

@@ -3,7 +3,7 @@
 Thank you for your interest in contributing to **f2b**! Your help is appreciated,
 whether you are fixing bugs, adding features, improving documentation, or helping others.
 
----
+______________________________________________________________________
 
 ## How to Contribute
 
@@ -48,7 +48,7 @@ go test ./...
 - Describe your changes, reference related issues, and explain any design decisions.
 - Be ready to discuss and revise your code based on feedback.
 
----
+______________________________________________________________________
 
 ## Code Style
 
@@ -61,7 +61,7 @@ go test ./...
 - Handle sudo privileges securely - validate before escalation, use mocks in tests.
 - Use argument arrays for command execution, never shell string concatenation.
 
----
+______________________________________________________________________
 
 ## Security & Testing Guidelines
 
@@ -78,7 +78,7 @@ For comprehensive security guidelines, testing patterns, and examples, see:
 - [docs/testing.md](docs/testing.md) - Testing strategies and mock patterns
 - [AGENTS.md](AGENTS.md) - AI/LLM contributor guidelines
 
----
+______________________________________________________________________
 
 ## Communication
 
@@ -86,7 +86,7 @@ For comprehensive security guidelines, testing patterns, and examples, see:
 - Review the [Code of Conduct](CODE_OF_CONDUCT.md).
 - For large or breaking changes, open an issue to discuss your approach before submitting a PR.
 
----
+______________________________________________________________________
 
 ## Additional Notes
 
@@ -95,9 +95,10 @@ For comprehensive security guidelines, testing patterns, and examples, see:
 - If you are an AI/LLM agent, please see [AGENTS.md](AGENTS.md) for additional guidelines.
 - By contributing, you agree that your contributions will be licensed under the MIT License.
 
----
+______________________________________________________________________
 
 Thank you for helping make **f2b** better!
 
-[effective_go]: https://golang.org/doc/effective_go.html
 [contributing](CONTRIBUTING.md)
+
+[effective_go]: https://golang.org/doc/effective_go.html

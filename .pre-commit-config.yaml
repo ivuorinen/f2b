@@ -25,13 +25,13 @@ repos:
     hooks:
       - id: golangci-lint
         name: golangci-lint
-        entry: golangci-lint run
+        entry: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.10.1 run
         language: system
         types: [go]
         pass_filenames: false
 
   - repo: https://github.com/google/yamlfmt
-    rev: v0.20.0
+    rev: v0.21.0
     hooks:
       - id: yamlfmt
 
@@ -48,7 +48,7 @@ repos:
         args: [-q, -c, .markdown-link-check.json]
 
   - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.9
+    rev: v1.7.11
     hooks:
       - id: actionlint
         args: ["-shellcheck="]
@@ -59,26 +59,34 @@ repos:
       - id: shfmt
 
   - repo: https://github.com/checkmake/checkmake
-    rev: 0.2.2
+    rev: v0.3.0
     hooks:
       - id: checkmake
         name: Makefile Linter
         files: ^Makefile$
 
   - repo: https://github.com/bridgecrewio/checkov.git
-    rev: "3.2.495"
+    rev: "3.2.506"
     hooks:
       - id: checkov
         args:
           - "--quiet"
 
   - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.36.0
+    rev: 0.37.0
     hooks:
       - id: check-github-workflows
         args: ["--verbose"]
 
   - repo: https://github.com/editorconfig-checker/editorconfig-checker
-    rev: v3.6.0
+    rev: v3.6.1
     hooks:
       - id: editorconfig-checker
+
+  - repo: https://github.com/hukkin/mdformat
+    rev: 1.0.0
+    hooks:
+      - id: mdformat
+        additional_dependencies:
+          - mdformat-gfm
+        exclude: ^\.serena/

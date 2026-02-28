@@ -179,7 +179,7 @@ func BenchmarkGlobalStateAccess(b *testing.B) {
 					fail2ban.GetLogDir()
 				} else {
 					// 50% writes
-					fail2ban.SetLogDir("/tmp/test-" + string(rune(b.N)))
+					fail2ban.SetLogDir("/tmp/test-" + string(rune(b.N))) //nolint:gosec // test code, intentional
 				}
 			}
 		})

@@ -239,14 +239,14 @@ const (
 
 The configuration system supports the following environment variables:
 
-| Variable | Description | Default |
-| -------- | ----------- | ------- |
-| `F2B_LOG_DIR` | Log directory path | `/var/log` |
-| `F2B_FILTER_DIR` | Filter directory path | `/etc/fail2ban/filter.d` |
-| `F2B_LOG_LEVEL` | Log level | `info` |
-| `F2B_COMMAND_TIMEOUT` | Command timeout | `30s` |
-| `F2B_FILE_TIMEOUT` | File operation timeout | `10s` |
-| `F2B_PARALLEL_TIMEOUT` | Parallel operation timeout | `60s` |
+| Variable               | Description                | Default                  |
+| ---------------------- | -------------------------- | ------------------------ |
+| `F2B_LOG_DIR`          | Log directory path         | `/var/log`               |
+| `F2B_FILTER_DIR`       | Filter directory path      | `/etc/fail2ban/filter.d` |
+| `F2B_LOG_LEVEL`        | Log level                  | `info`                   |
+| `F2B_COMMAND_TIMEOUT`  | Command timeout            | `30s`                    |
+| `F2B_FILE_TIMEOUT`     | File operation timeout     | `10s`                    |
+| `F2B_PARALLEL_TIMEOUT` | Parallel operation timeout | `60s`                    |
 
 ### Path Security
 
@@ -550,30 +550,30 @@ func (h *HTTPHandler) writeError(w http.ResponseWriter, code int, err error) {
 ### Error Handling Best Practices
 
 1. Always use contextual errors for user-facing messages
-2. Provide remediation hints where possible
-3. Log errors with appropriate context
-4. Use error categories for systematic handling
+1. Provide remediation hints where possible
+1. Log errors with appropriate context
+1. Use error categories for systematic handling
 
 ### Context Usage
 
 1. Always use context for operations that can timeout
-2. Propagate context through the call chain
-3. Add relevant context values for logging
-4. Use context cancellation for cleanup
+1. Propagate context through the call chain
+1. Add relevant context values for logging
+1. Use context cancellation for cleanup
 
 ### Testing
 
 1. Use the fluent testing framework for command tests
-2. Always use mock environments for integration tests
-3. Test both success and failure scenarios
-4. Include timeout testing for long-running operations
+1. Always use mock environments for integration tests
+1. Test both success and failure scenarios
+1. Include timeout testing for long-running operations
 
 ### Performance
 
 1. Use the metrics system to monitor performance
-2. Implement proper caching where appropriate
-3. Use object pooling for frequently allocated objects
-4. Profile and optimize hot paths
+1. Implement proper caching where appropriate
+1. Use object pooling for frequently allocated objects
+1. Profile and optimize hot paths
 
 This documentation provides a comprehensive overview of the f2b internal APIs and patterns.
 For specific implementation details, refer to the source code and inline documentation.

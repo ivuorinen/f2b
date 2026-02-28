@@ -57,13 +57,13 @@ f2b intelligently manages sudo requirements through a comprehensive privilege ch
 ### Privilege Escalation Process
 
 1. **Pre-flight Check**: Determine user capabilities before command execution
-2. **Context Creation**: Create context with timeout for the operation
-3. **Command Classification**: Identify if the operation requires privileges
-4. **Smart Escalation**: Only add sudo when necessary for specific commands
-5. **Validation**: Ensure privilege escalation succeeded with timeout protection
-6. **Execution**: Run command with appropriate privileges and context
-7. **Timeout Handling**: Gracefully handle hanging operations with cancellation
-8. **Audit**: Log privileged operations with context information
+1. **Context Creation**: Create context with timeout for the operation
+1. **Command Classification**: Identify if the operation requires privileges
+1. **Smart Escalation**: Only add sudo when necessary for specific commands
+1. **Validation**: Ensure privilege escalation succeeded with timeout protection
+1. **Execution**: Run command with appropriate privileges and context
+1. **Timeout Handling**: Gracefully handle hanging operations with cancellation
+1. **Audit**: Log privileged operations with context information
 
 ### Error Handling
 
@@ -358,10 +358,10 @@ func setupSecureTestEnvironment(t *testing.T) {
 - **Issue**: Insufficient path validation against sophisticated attacks
 - **Impact**: Access to files outside intended directories
 - **Fix**: Comprehensive path traversal protection with extensive test cases covering:
-  - Unicode normalization attacks (\u002e\u002e)
+  - Unicode normalization attacks (\\u002e\\u002e)
   - Mixed case traversal (/var/LOG/../../../etc/passwd)
   - Multiple slashes (/var/log////../../etc/passwd)
-  - Windows-style paths on Unix (/var/log\..\..\..\etc\passwd)
+  - Windows-style paths on Unix (/var/log......\\etc\\passwd)
   - URL encoding variants (%2e%2e%2f)
   - Null byte injection attacks
 
@@ -382,15 +382,15 @@ func setupSecureTestEnvironment(t *testing.T) {
 ### Defense in Depth
 
 1. **Input Validation**: First line of defense against malicious input with caching
-2. **Advanced Path Traversal Protection**: Extensive sophisticated attack vector protection
-3. **Privilege Validation**: Ensure user has necessary permissions with timeout protection
-4. **Context-Aware Execution**: Use argument arrays with timeout and cancellation support
-5. **Safe Execution**: Never use shell strings, always use context-aware operations
-6. **Error Handling**: Fail safely without information leakage, include context information
-7. **Audit Logging**: Track privileged operations with contextual information
-8. **Test Isolation**: Prevent test-time security compromises with comprehensive mocks
-9. **Performance Security**: Validation caching prevents DoS through repeated validation
-10. **Timeout Protection**: Prevent resource exhaustion through hanging operations
+1. **Advanced Path Traversal Protection**: Extensive sophisticated attack vector protection
+1. **Privilege Validation**: Ensure user has necessary permissions with timeout protection
+1. **Context-Aware Execution**: Use argument arrays with timeout and cancellation support
+1. **Safe Execution**: Never use shell strings, always use context-aware operations
+1. **Error Handling**: Fail safely without information leakage, include context information
+1. **Audit Logging**: Track privileged operations with contextual information
+1. **Test Isolation**: Prevent test-time security compromises with comprehensive mocks
+1. **Performance Security**: Validation caching prevents DoS through repeated validation
+1. **Timeout Protection**: Prevent resource exhaustion through hanging operations
 
 ### Security Boundaries
 
@@ -403,13 +403,13 @@ User Input → Context → Validation → Path Traversal → Privilege Check →
 **Enhanced Security Flow:**
 
 1. **Context Creation**: Establish timeout and cancellation context
-2. **Input Sanitization**: Clean and validate all user input
-3. **Cache Validation**: Check validation cache for performance and DoS protection
-4. **Path Traversal Protection**: Block extensive sophisticated attack vectors
-5. **Privilege Verification**: Confirm user permissions with timeout protection
-6. **Context-Aware Execution**: Execute with timeout and cancellation support
-7. **Timeout Handling**: Gracefully handle hanging operations
-8. **Comprehensive Auditing**: Log all operations with context information
+1. **Input Sanitization**: Clean and validate all user input
+1. **Cache Validation**: Check validation cache for performance and DoS protection
+1. **Path Traversal Protection**: Block extensive sophisticated attack vectors
+1. **Privilege Verification**: Confirm user permissions with timeout protection
+1. **Context-Aware Execution**: Execute with timeout and cancellation support
+1. **Timeout Handling**: Gracefully handle hanging operations
+1. **Comprehensive Auditing**: Log all operations with context information
 
 ## Incident Response
 
@@ -418,17 +418,17 @@ User Input → Context → Validation → Path Traversal → Privilege Check →
 **For security vulnerabilities:**
 
 1. **Do not** open public GitHub issues
-2. Email: `ismo@ivuorinen.net` with subject "SECURITY: f2b vulnerability"
-3. Include: Description, impact assessment, reproduction steps
-4. Expect: Acknowledgment within 48 hours
+1. Email: `ismo@ivuorinen.net` with subject "SECURITY: f2b vulnerability"
+1. Include: Description, impact assessment, reproduction steps
+1. Expect: Acknowledgment within 48 hours
 
 ### Security Update Process
 
 1. **Assessment**: Evaluate impact and affected versions
-2. **Development**: Create fix with security tests
-3. **Testing**: Comprehensive security testing
-4. **Release**: Coordinated disclosure with security advisory
-5. **Communication**: Notify users via GitHub security advisories
+1. **Development**: Create fix with security tests
+1. **Testing**: Comprehensive security testing
+1. **Release**: Coordinated disclosure with security advisory
+1. **Communication**: Notify users via GitHub security advisories
 
 ## Security Best Practices
 

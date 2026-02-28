@@ -8,7 +8,7 @@
 extensible, and user-friendly alternative to Bash scripts for interacting with Fail2Ban, with automatic sudo
 privilege management, shell completion, and comprehensive security features.
 
----
+______________________________________________________________________
 
 ## Installation & Setup
 
@@ -34,7 +34,7 @@ Or install globally:
 go install github.com/ivuorinen/f2b@latest
 ```
 
----
+______________________________________________________________________
 
 ## Usage
 
@@ -171,7 +171,7 @@ f2b --command-timeout=45s ban 192.168.1.100
 f2b --parallel-timeout=120s banned all
 ```
 
----
+______________________________________________________________________
 
 ## Troubleshooting
 
@@ -193,9 +193,9 @@ f2b --parallel-timeout=120s banned all
 This means you need elevated privileges for the operation you're trying to perform:
 
 1. **Check your privileges:** Run `f2b --log-level=debug version` to see your privilege status
-2. **Add sudo:** Try `sudo f2b [command]`
-3. **Join sudo group:** Ask your admin to add you to the sudo group
-4. **Test sudo access:** Run `sudo -n true` to check if you can use sudo
+1. **Add sudo:** Try `sudo f2b [command]`
+1. **Join sudo group:** Ask your admin to add you to the sudo group
+1. **Test sudo access:** Run `sudo -n true` to check if you can use sudo
 
 ### The CLI says "permission denied" or "operation not permitted"
 
@@ -265,7 +265,7 @@ ls -la /etc/fail2ban/
 sudo fail2ban-client ping
 ```
 
----
+______________________________________________________________________
 
 ## Development
 
@@ -279,11 +279,11 @@ go test ./...
 
 See the `CONTRIBUTING.md` and the Contributing section in the README.
 
----
+______________________________________________________________________
 
 ## Still need help?
 
 - Open an issue on GitHub: https://github.com/ivuorinen/f2b/issues
 - Contact the maintainer: ismo@ivuorinen.net
 
----
+______________________________________________________________________
