@@ -35,7 +35,7 @@ jobs:
           node-version: 24.x
 
       - name: Set up Go
-        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
         with:
           go-version-file: go.mod
           cache: true
@@ -58,7 +58,7 @@ jobs:
           go test -race -covermode=atomic -coverprofile=coverage.out ./...
 
       - name: Upload coverage report
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: coverage-report
           path: coverage.out
@@ -66,4 +66,4 @@ jobs:
       - name: Run PR Lint
         # Custom PR linting action that performs additional PR-specific checks
         # https://github.com/ivuorinen/actions
-        uses: ivuorinen/actions/pr-lint@f98ae7cd7d0feb1f9d6b01de0addbb11414cfc73 # v2026.01.21
+        uses: ivuorinen/actions/pr-lint@8faacf8a1cae049c1471708dcb408a167e91afaf # v2026.02.24
