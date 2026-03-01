@@ -361,7 +361,7 @@ func setupSecureTestEnvironment(t *testing.T) {
   - Unicode normalization attacks (\\u002e\\u002e)
   - Mixed case traversal (/var/LOG/../../../etc/passwd)
   - Multiple slashes (/var/log////../../etc/passwd)
-  - Windows-style paths on Unix (/var/log......\\etc\\passwd)
+  - Windows-style paths on Unix (/var/log\\..\\..\\etc\\passwd)
   - URL encoding variants (%2e%2e%2f)
   - Null byte injection attacks
 

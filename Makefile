@@ -69,7 +69,7 @@ fmt: ## Format Go code
 	gofmt -w .
 
 fmt-md: ## Format Markdown files
-	npx --yes mdformat *.md docs/*.md
+	@pre-commit run mdformat --all-files
 
 lint: ## Run all linters using pre-commit (preferred method)
 	@pre-commit run --all-files
@@ -79,7 +79,7 @@ lint-go: ## Run only Go linters
 	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --timeout=5m
 
 lint-md: ## Run only Markdown linter
-	npx --yes markdownlint-cli2 "*.md" "**/*.md"
+	npx --yes markdownlint-cli2@0.21.0 "*.md" "**/*.md"
 
 lint-yaml: ## Run only YAML linter
 	go run github.com/google/yamlfmt/cmd/yamlfmt@$(YAMLFMT_VERSION) -lint .

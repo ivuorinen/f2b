@@ -34,7 +34,7 @@ func main() {
 			// Check if this is a sudo privilege error
 			if strings.Contains(err.Error(), "fail2ban operations require sudo privileges") {
 				fmt.Fprintln(os.Stderr, "Hint: Try running with 'sudo' or ensure your user is in the sudo group")
-				//nolint:gosec // stderr hint, not user-facing HTML
+				// #nosec G705 -- stderr hint, not user-facing HTML
 				fmt.Fprintln(
 					os.Stderr,
 					"Example: sudo",

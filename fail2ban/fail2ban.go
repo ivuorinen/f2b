@@ -74,7 +74,7 @@ func (r *OSRunner) CombinedOutputWithContext(ctx context.Context, name string, a
 	if err := validateCommandExecution(ctx, name, args); err != nil {
 		return nil, err
 	}
-	//nolint:gosec // command validated by validateCommandExecution
+	// #nosec G204 -- command validated by validateCommandExecution
 	return exec.CommandContext(ctx, name, args...).CombinedOutput()
 }
 
@@ -93,7 +93,7 @@ func (r *OSRunner) CombinedOutputWithSudoContext(ctx context.Context, name strin
 
 	// If already root, no need for sudo
 	if checker.IsRoot() {
-		return exec.CommandContext(ctx, name, args...).CombinedOutput() //nolint:gosec // command validated above
+		return exec.CommandContext(ctx, name, args...).CombinedOutput() // #nosec G204 -- command validated above
 	}
 
 	// If command requires sudo and user has privileges, use sudo
@@ -105,7 +105,7 @@ func (r *OSRunner) CombinedOutputWithSudoContext(ctx context.Context, name strin
 	}
 
 	// Otherwise run without sudo
-	return exec.CommandContext(ctx, name, args...).CombinedOutput() //nolint:gosec // command validated above
+	return exec.CommandContext(ctx, name, args...).CombinedOutput() // #nosec G204 -- command validated above
 }
 
 // runnerManager provides thread-safe access to the global Runner.
