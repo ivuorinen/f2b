@@ -1,23 +1,36 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["github>ivuorinen/renovate-config", "schedule:weekly"],
+  "extends": [
+    "github>ivuorinen/renovate-config",
+    "schedule:weekly"
+  ],
   "customManagers": [
     {
       "customType": "regex",
-      "managerFilePatterns": ["^Makefile$", ".*\\.mk$"],
+      "managerFilePatterns": [
+        "^Makefile$",
+        ".*\\.mk$"
+      ],
       "matchStrings": [
         "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)\\n[A-Z_]+\\s*:?=\\s*(?<currentValue>v?\\d+\\.\\d+\\.\\d+\\S*)"
       ],
       "versioningTemplate": "semver"
     }
   ],
-  "stabilityDays": 3,
+  "minimumReleaseAge": "3 days",
   "packageRules": [
     {
-      "matchManagers": ["custom.regex"],
-      "matchFileNames": ["Makefile", "**/*.mk"],
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchFileNames": [
+        "Makefile",
+        "**/*.mk"
+      ],
       "groupName": "development tools",
-      "schedule": ["before 6am on monday"]
+      "schedule": [
+        "before 6am on monday"
+      ]
     }
   ]
 }
