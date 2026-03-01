@@ -4,7 +4,6 @@ about: Create a report to help us improve
 title: ''
 labels: bug
 assignees: ivuorinen
-
 ---
 
 **Describe the bug**
@@ -14,9 +13,9 @@ A clear and concise description of what the bug is.
 Steps to reproduce the behavior:
 
 1. Run command: `f2b [command]`
-2. With arguments: `[arguments]`
-3. Expected behavior: `[what should happen]`
-4. Actual result: `[what actually happened]`
+1. With arguments: `[arguments]`
+1. Expected behavior: `[what should happen]`
+1. Actual result: `[what actually happened]`
 
 **Expected behavior**
 A clear and concise description of what you expected to happen.

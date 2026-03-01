@@ -604,11 +604,11 @@ go tool cover -func=coverage.out | grep total
 ### Avoid These Mistakes
 
 1. **Real sudo execution in tests** - Always use MockSudoChecker
-2. **Hardcoded file paths** - Use temporary files or mocks
-3. **Network dependencies** - Mock all external calls
-4. **Race conditions** - Use proper synchronization in concurrent tests
-5. **Leaked goroutines** - Clean up background processes
-6. **Platform dependencies** - Write portable tests
+1. **Hardcoded file paths** - Use temporary files or mocks
+1. **Network dependencies** - Mock all external calls
+1. **Race conditions** - Use proper synchronization in concurrent tests
+1. **Leaked goroutines** - Clean up background processes
+1. **Platform dependencies** - Write portable tests
 
 ### Enhanced Security Testing Checklist
 

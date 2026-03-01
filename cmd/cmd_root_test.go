@@ -513,7 +513,7 @@ func TestPersistentPreRun(t *testing.T) {
 		t.Fatalf("failed to create temp file: %v", err)
 	}
 	defer func() {
-		if err := os.Remove(tmpFile.Name()); err != nil {
+		if err := os.Remove(tmpFile.Name()); err != nil { // #nosec G703 -- test file, path from CreateTemp
 			t.Fatalf("failed to remove temp file: %v", err)
 		}
 	}()

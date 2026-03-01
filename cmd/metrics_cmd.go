@@ -52,46 +52,44 @@ func printMetricsPlain(output io.Writer, snapshot MetricsSnapshot) error {
 
 	// System metrics
 	sb.WriteString("System:\n")
-	sb.WriteString(fmt.Sprintf("  Uptime: %ds\n", snapshot.UptimeSeconds))
-	sb.WriteString(fmt.Sprintf("  Max Memory: %.2f MB\n", float64(snapshot.MaxMemoryUsage)/(1024*1024)))
-	sb.WriteString(fmt.Sprintf("  Goroutines: %d\n\n", snapshot.GoroutineCount))
+	fmt.Fprintf(&sb, "  Uptime: %ds\n", snapshot.UptimeSeconds)
+	fmt.Fprintf(&sb, "  Max Memory: %.2f MB\n", float64(snapshot.MaxMemoryUsage)/(1024*1024))
+	fmt.Fprintf(&sb, "  Goroutines: %d\n\n", snapshot.GoroutineCount)
 
 	// Command metrics
 	sb.WriteString("Commands:\n")
-	sb.WriteString(fmt.Sprintf(shared.MetricsFmtTotalExecutions, snapshot.CommandExecutions))
-	sb.WriteString(fmt.Sprintf(shared.MetricsFmtTotalFailures, snapshot.CommandFailures))
+	fmt.Fprintf(&sb, shared.MetricsFmtTotalExecutions, snapshot.CommandExecutions)
+	fmt.Fprintf(&sb, shared.MetricsFmtTotalFailures, snapshot.CommandFailures)
 	if snapshot.CommandExecutions > 0 {
 		avgLatency := float64(snapshot.CommandTotalDuration) / float64(snapshot.CommandExecutions)
-		sb.WriteString(fmt.Sprintf(shared.MetricsFmtAverageLatencyTop, avgLatency))
+		fmt.Fprintf(&sb, shared.MetricsFmtAverageLatencyTop, avgLatency)
 	}
 	sb.WriteString("\n")
 
 	// Ban/Unban metrics
 	sb.WriteString("Ban Operations:\n")
-	sb.WriteString(fmt.Sprintf("  Ban Operations: %d (failures: %d)\n", snapshot.BanOperations, snapshot.BanFailures))
-	sb.WriteString(
-		fmt.Sprintf("  Unban Operations: %d (failures: %d)\n", snapshot.UnbanOperations, snapshot.UnbanFailures),
-	)
+	fmt.Fprintf(&sb, shared.MetricsFmtBanOperations, snapshot.BanOperations, snapshot.BanFailures)
+	fmt.Fprintf(&sb, shared.MetricsFmtUnbanOperations, snapshot.UnbanOperations, snapshot.UnbanFailures)
 	sb.WriteString("\n")
 
 	// Client metrics
 	sb.WriteString("Client Operations:\n")
-	sb.WriteString(fmt.Sprintf(shared.MetricsFmtTotalOperations, snapshot.ClientOperations))
-	sb.WriteString(fmt.Sprintf(shared.MetricsFmtTotalFailures, snapshot.ClientFailures))
+	fmt.Fprintf(&sb, shared.MetricsFmtTotalOperations, snapshot.ClientOperations)
+	fmt.Fprintf(&sb, shared.MetricsFmtTotalFailures, snapshot.ClientFailures)
 	if snapshot.ClientOperations > 0 {
 		avgLatency := float64(snapshot.ClientTotalDuration) / float64(snapshot.ClientOperations)
-		sb.WriteString(fmt.Sprintf(shared.MetricsFmtAverageLatencyTop, avgLatency))
+		fmt.Fprintf(&sb, shared.MetricsFmtAverageLatencyTop, avgLatency)
 	}
 	sb.WriteString("\n")
 
 	// Validation metrics
 	sb.WriteString("Validation:\n")
-	sb.WriteString(fmt.Sprintf("  Cache Hits: %d\n", snapshot.ValidationCacheHits))
-	sb.WriteString(fmt.Sprintf("  Cache Misses: %d\n", snapshot.ValidationCacheMiss))
-	sb.WriteString(fmt.Sprintf("  Failures: %d\n", snapshot.ValidationFailures))
+	fmt.Fprintf(&sb, "  Cache Hits: %d\n", snapshot.ValidationCacheHits)
+	fmt.Fprintf(&sb, "  Cache Misses: %d\n", snapshot.ValidationCacheMiss)
+	fmt.Fprintf(&sb, "  Failures: %d\n", snapshot.ValidationFailures)
 	if total := snapshot.ValidationCacheHits + snapshot.ValidationCacheMiss; total > 0 {
 		hitRate := float64(snapshot.ValidationCacheHits) / float64(total) * 100
-		sb.WriteString(fmt.Sprintf("  Cache Hit Rate: %.2f%%\n", hitRate))
+		fmt.Fprintf(&sb, "  Cache Hit Rate: %.2f%%\n", hitRate)
 	}
 	sb.WriteString("\n")
 

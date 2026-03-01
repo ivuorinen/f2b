@@ -225,11 +225,11 @@ Both workflows now use unified pre-commit:
 ### Before Committing
 
 1. **Read configuration files first**: `.editorconfig`, `.golangci.yml`,
-  `.markdownlint.json`, `.yamlfmt.yaml`, `.pre-commit-config.yaml`
-2. **Apply configuration rules** during development
-3. **Run pre-commit checks**: `pre-commit run --all-files`
-4. **Fix all issues** across the project
-5. **Run tests**: `go test ./...`
+   `.markdownlint.json`, `.yamlfmt.yaml`, `.pre-commit-config.yaml`
+1. **Apply configuration rules** during development
+1. **Run pre-commit checks**: `pre-commit run --all-files`
+1. **Fix all issues** across the project
+1. **Run tests**: `go test ./...`
 
 ### Recommended IDE Setup
 
@@ -303,19 +303,19 @@ All YAML files include schema references for better IDE support:
 ### Debugging Tips
 
 1. **Run individual hooks** to isolate issues
-2. **Use `--verbose` flag** with pre-commit
-3. **Check configuration files** for rule customizations
-4. **Verify tool versions** match CI environment
+1. **Use `--verbose` flag** with pre-commit
+1. **Check configuration files** for rule customizations
+1. **Verify tool versions** match CI environment
 
 ## Adding New Linting Rules
 
 ### Process
 
 1. Update configuration files (`.markdownlint.json`, `.yamlfmt.yaml`, etc.)
-2. Test changes locally: `pre-commit run --all-files`
-3. Update `.pre-commit-config.yaml` if adding new hooks
-4. Document changes in this file
-5. Consider backward compatibility
+1. Test changes locally: `pre-commit run --all-files`
+1. Update `.pre-commit-config.yaml` if adding new hooks
+1. Document changes in this file
+1. Consider backward compatibility
 
 ### Best Practices
 

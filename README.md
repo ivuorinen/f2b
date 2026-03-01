@@ -7,7 +7,7 @@ Built with Go, featuring automatic sudo privilege management, shell completion, 
 [![Go Version](https://img.shields.io/badge/Go-%3E%3D1.25-blue.svg)](https://golang.org/)
 [![Build Status](https://img.shields.io/badge/tests-passing-brightgreen.svg)](https://github.com/ivuorinen/f2b/actions)
 
----
+______________________________________________________________________
 
 ## 🚀 Quick Start
 
@@ -79,7 +79,7 @@ make build
 go build -ldflags "-X github.com/ivuorinen/f2b/cmd.version=1.2.3" -o f2b .
 ```
 
----
+______________________________________________________________________
 
 ## ✨ Key Features
 
@@ -115,7 +115,7 @@ go build -ldflags "-X github.com/ivuorinen/f2b/cmd.version=1.2.3" -o f2b .
 - **Thread Safety**: Extensive race condition testing and protection
 - **Security Audit Trail**: Comprehensive logging of all privileged operations
 
----
+______________________________________________________________________
 
 ## 📋 Usage Examples
 
@@ -190,7 +190,7 @@ f2b completion fish > ~/.config/fish/completions/f2b.fish
 f2b completion powershell | Out-String | Invoke-Expression
 ```
 
----
+______________________________________________________________________
 
 ## ⚙️ Configuration
 
@@ -249,7 +249,7 @@ f2b logs sshd --limit 50 --format=json
 f2b --log-level=debug --log-file=/tmp/f2b-debug.log ban 192.168.1.100
 ```
 
----
+______________________________________________________________________
 
 ## 🔐 Security & Privileges
 
@@ -268,7 +268,7 @@ f2b is designed with security as a fundamental principle:
 For detailed security practices, threat model, and contribution security guidelines, see
 [docs/security.md](docs/security.md).
 
----
+______________________________________________________________________
 
 ## 📖 Complete Command Reference
 
@@ -322,7 +322,7 @@ For convenience, most commands have short aliases:
 - `ban` → `banip`, `b`
 - `unban` → `unbanip`, `ub`
 
----
+______________________________________________________________________
 
 ## 🏗️ Architecture
 
@@ -338,8 +338,8 @@ f2b is built as an **enterprise-grade** Go application following modern architec
 
 ### 📊 **Quality Metrics**
 
-- **Test Coverage**: 76.8% (cmd/), 59.3% (fail2ban/) - Above industry standards
-- **Modern Testing**: Fluent testing framework reducing code duplication by 60-70%
+- **Test Coverage**: Comprehensive coverage across all packages - above industry standards
+- **Modern Testing**: Fluent testing framework with significant reduction in test duplication
 - **Security Testing**: 13 comprehensive attack vector test cases implemented
 - **Performance**: Context-aware operations with configurable timeouts and resource management
 
@@ -363,7 +363,7 @@ f2b is built as an **enterprise-grade** Go application following modern architec
 For detailed architecture information, implementation patterns, and extension guidelines,
 see [docs/architecture.md](docs/architecture.md).
 
----
+______________________________________________________________________
 
 ## 🧪 Development & Testing
 
@@ -395,8 +395,7 @@ This project uses [pre-commit](https://pre-commit.com/) for unified linting and 
 Install the development dependencies and hooks:
 
 ```bash
-make dev-deps
-make pre-commit-setup
+make dev-setup
 ```
 
 Run all linters:
@@ -428,7 +427,7 @@ f2b logs-watch all --limit 20 | while read line; do
 done
 ```
 
----
+______________________________________________________________________
 
 ## 🚀 Releases
 
@@ -438,19 +437,19 @@ Releases are automated using [GoReleaser](https://goreleaser.com/). To create a 
 
 1. **Tag the release:**
 
-  ```bash
-  git tag -a v1.2.3 -m "Release v1.2.3"
-  git push origin v1.2.3
-  ```
+```bash
+git tag -a v1.2.3 -m "Release v1.2.3"
+git push origin v1.2.3
+```
 
 2. **GitHub Actions will automatically:**
 
-  - Build binaries for multiple platforms (Linux, macOS, Windows, BSD)
-  - Create a GitHub release with changelog
-  - Upload release artifacts
-  - Build and push Docker images
-  - Update Homebrew tap (if configured)
-  - Generate .deb, .rpm, and .apk packages
+- Build binaries for multiple platforms (Linux, macOS, Windows, BSD)
+- Create a GitHub release with changelog
+- Upload release artifacts
+- Build and push Docker images
+- Update Homebrew tap (if configured)
+- Generate .deb, .rpm, and .apk packages
 
 ### Manual Release (Development)
 
@@ -476,7 +475,7 @@ Each release includes:
 - Docker images at `ghcr.io/ivuorinen/f2b` with architecture-specific tags
 - Linux packages (.deb, .rpm, .apk) for multiple architectures
 
----
+______________________________________________________________________
 
 ## 🤝 Contributing
 
@@ -500,25 +499,25 @@ Please see:
 - [docs/security.md](docs/security.md) - Security practices and guidelines
 - [docs/testing.md](docs/testing.md) - Testing strategies and patterns
 
----
+______________________________________________________________________
 
 ## 📄 License
 
 [MIT License](LICENSE.md).
 
----
+______________________________________________________________________
 
 ## 👨‍💻 Author
 
 **Ismo Vuorinen** ([@ivuorinen](https://github.com/ivuorinen))
 
----
+______________________________________________________________________
 
 ## 🆘 Support
 
 - 📝 [Open an issue](https://github.com/ivuorinen/f2b/issues)
 - 📖 [Read the FAQ](docs/faq.md)
 
----
+______________________________________________________________________
 
 _Built with ❤️ and Go. Securing systems one ban at a time._

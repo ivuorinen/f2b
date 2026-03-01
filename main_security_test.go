@@ -4,7 +4,9 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/ivuorinen/f2b/fail2ban"
@@ -378,24 +380,28 @@ func TestSecurityAudit_ConcurrentSafety(t *testing.T) {
 
 		// Multiple goroutines modifying global state should not cause races
 		// This is tested by running with -race flag in CI
-		for i := 0; i < 10; i++ {
-			go func(id int) {
-				fail2ban.SetLogDir("/tmp/test-" + string(rune(id)))
+		var wg sync.WaitGroup
+		for i := range 10 {
+			wg.Go(func() {
+				fail2ban.SetLogDir("/tmp/test-" + strconv.Itoa(i))
 				fail2ban.GetLogDir()
-			}(i)
+			})
 		}
+		wg.Wait()
 	})
 
 	t.Run("CacheStatisticsSafety", func(_ *testing.T) {
 		processor := fail2ban.NewOptimizedLogProcessor()
 
 		// Multiple goroutines accessing cache statistics should be safe
-		for i := 0; i < 10; i++ {
-			go func() {
+		var wg sync.WaitGroup
+		for range 10 {
+			wg.Go(func() {
 				processor.GetCacheStats()
 				processor.ClearCaches()
-			}()
+			})
 		}
+		wg.Wait()
 	})
 }
 

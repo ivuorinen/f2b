@@ -35,17 +35,21 @@ validation caching, and parallel processing capabilities for enterprise-grade re
 ### fail2ban/ Package
 
 - **Purpose**: Core business logic and system interaction
+
 - **Key Interfaces**:
+
   - `Client`: Main interface for fail2ban operations with context support
   - `Runner`: Command execution interface
   - `SudoChecker`: Privilege validation interface
 
 - **Implementations**:
+
   - `RealClient`: Production fail2ban client with timeout handling
   - `MockClient`: Comprehensive test double with thread-safe operations
   - `NoOpClient`: Safe fallback implementation
 
 - **Advanced Features**:
+
   - Context-aware operations with timeout and cancellation support
   - Validation caching system with thread-safe operations
   - Optimized ban record parsing with object pooling
@@ -105,14 +109,14 @@ validation caching, and parallel processing capabilities for enterprise-grade re
 ### Command Execution Flow
 
 1. **CLI Parsing**: Cobra processes command-line arguments
-2. **Context Creation**: Create context with timeout for operation
-3. **Validation**: Input validation with caching and sanitization
-4. **Privilege Check**: Determine if sudo is required
-5. **Metrics Start**: Begin performance metrics collection
-6. **Business Logic**: Execute fail2ban operations via Client interface with context
-7. **Parallel Processing**: Use parallel workers for multi-jail operations
-8. **Metrics End**: Record operation timing and success/failure
-9. **Output**: Format and display results (plain or JSON)
+1. **Context Creation**: Create context with timeout for operation
+1. **Validation**: Input validation with caching and sanitization
+1. **Privilege Check**: Determine if sudo is required
+1. **Metrics Start**: Begin performance metrics collection
+1. **Business Logic**: Execute fail2ban operations via Client interface with context
+1. **Parallel Processing**: Use parallel workers for multi-jail operations
+1. **Metrics End**: Record operation timing and success/failure
+1. **Output**: Format and display results (plain or JSON)
 
 ### Dependency Flow
 
@@ -170,25 +174,25 @@ fail2ban/client.go
 ### Adding New Commands
 
 1. Create new file in `cmd/` package
-2. Implement command using established patterns with context support
-3. Use dependency injection for testability
-4. Add performance metrics collection
-5. Implement fluent testing framework patterns
-6. Add comprehensive tests with mocks and context-aware operations
+1. Implement command using established patterns with context support
+1. Use dependency injection for testability
+1. Add performance metrics collection
+1. Implement fluent testing framework patterns
+1. Add comprehensive tests with mocks and context-aware operations
 
 ### Adding New Backends
 
 1. Implement the `Client` interface
-2. Add any new required interfaces (Runner, etc.)
-3. Update main.go to support new backend
-4. Add configuration options
+1. Add any new required interfaces (Runner, etc.)
+1. Update main.go to support new backend
+1. Add configuration options
 
 ### Adding New Output Formats
 
 1. Extend output formatting helpers
-2. Update command implementations
-3. Add format validation
-4. Test with existing commands
+1. Update command implementations
+1. Add format validation
+1. Test with existing commands
 
 ## Testing Architecture
 
