@@ -29,6 +29,8 @@ REVIVE_VERSION := v1.14.0
 CHECKMAKE_VERSION := v0.3.2
 # renovate: datasource=go depName=github.com/segmentio/golines
 GOLINES_VERSION := v0.13.0
+# renovate: datasource=npm depName=markdownlint-cli2
+MARKDOWNLINT_CLI2_VERSION := 0.21.0
 
 # Default target
 help: ## Show this help message
@@ -79,7 +81,7 @@ lint-go: ## Run only Go linters
 	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION) run --timeout=5m
 
 lint-md: ## Run only Markdown linter
-	npx --yes markdownlint-cli2@0.21.0 "*.md" "**/*.md"
+	npx --yes markdownlint-cli2@$(MARKDOWNLINT_CLI2_VERSION) "*.md" "**/*.md"
 
 lint-yaml: ## Run only YAML linter
 	go run github.com/google/yamlfmt/cmd/yamlfmt@$(YAMLFMT_VERSION) -lint .
