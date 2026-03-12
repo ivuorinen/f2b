@@ -23,4 +23,4 @@ jobs:
       contents: read
       issues: write
     steps:
-      - uses: ivuorinen/actions/sync-labels@6e8f2aae9d0846d901d9eba15b8e94a2900573dc # v2026.03.02
+      - uses: ivuorinen/actions/sync-labels@4360ea39c744dbd52bf1d624bf058ba4dd81245a # v2026.03.09
