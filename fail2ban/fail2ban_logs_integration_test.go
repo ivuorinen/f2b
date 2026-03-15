@@ -418,6 +418,7 @@ func BenchmarkLogParsing(b *testing.B) {
 	if err != nil {
 		b.Fatalf("Failed to read test file: %v", err)
 	}
+	// #nosec G703 -- mainLog is constructed from b.TempDir() and a literal string, not user input
 	if err := os.WriteFile(mainLog, data, 0600); err != nil {
 		b.Fatalf("Failed to create test log: %v", err)
 	}

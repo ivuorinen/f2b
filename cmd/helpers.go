@@ -28,6 +28,7 @@ func createTimeoutContext(base context.Context, config *Config) (context.Context
 	if config != nil && config.CommandTimeout > 0 {
 		timeout = config.CommandTimeout
 	}
+	// #nosec G118 -- cancel is returned to callers who are responsible for calling it
 	return context.WithTimeout(base, timeout)
 }
 
