@@ -58,6 +58,7 @@ func setupBenchmarkLogEnvironment(b *testing.B, source string) func() {
 
 	tempDir := b.TempDir()
 	dest := filepath.Join(tempDir, "fail2ban.log")
+	// #nosec G703 -- dest is constructed from b.TempDir() and a literal string, not user input
 	if err := os.WriteFile(dest, data, 0o600); err != nil {
 		b.Fatalf("failed to create benchmark log file: %v", err)
 	}

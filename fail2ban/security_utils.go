@@ -57,14 +57,6 @@ func ContainsPathTraversal(input string) bool {
 // The returned patterns include both production patterns (real attack signatures)
 // and test sentinels (used exclusively in test fixtures for validation).
 func GetDangerousCommandPatterns() []string {
-	// Production patterns: Real command injection and SQL injection signatures
-	productionPatterns := []string{
-		"rm -rf",                     // Destructive file operations
-		"drop table",                 // SQL injection attempts
-		"'; cat",                     // Command injection with file reads
-		"/etc/passwd", "/etc/shadow", // Specific sensitive file access
-	}
-
 	// Test sentinels: Markers used exclusively in test fixtures
 	// These help verify pattern detection logic in tests
 	testSentinels := []string{
@@ -83,6 +75,16 @@ func GetDangerousCommandPatterns() []string {
 		"DANGEROUS_SYSTEM_FUNCTION",
 		"DANGEROUS_EVAL_FUNCTION",
 	}
+
+	// Production patterns: Real command injection and SQL injection signatures
+	// Preallocate with combined capacity to avoid reallocation when appending testSentinels
+	productionPatterns := make([]string, 0, 5+len(testSentinels))
+	productionPatterns = append(productionPatterns,
+		"rm -rf",                     // Destructive file operations
+		"drop table",                 // SQL injection attempts
+		"'; cat",                     // Command injection with file reads
+		"/etc/passwd", "/etc/shadow", // Specific sensitive file access
+	)
 
 	// Combine both lists for backward compatibility
 	return append(productionPatterns, testSentinels...)
