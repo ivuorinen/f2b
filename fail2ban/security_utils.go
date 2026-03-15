@@ -77,15 +77,15 @@ func GetDangerousCommandPatterns() []string {
 	}
 
 	// Production patterns: Real command injection and SQL injection signatures
-	// Preallocate with combined capacity to avoid reallocation when appending testSentinels
-	productionPatterns := make([]string, 0, 5+len(testSentinels))
-	productionPatterns = append(productionPatterns,
+	productionPatterns := []string{
 		"rm -rf",                     // Destructive file operations
 		"drop table",                 // SQL injection attempts
 		"'; cat",                     // Command injection with file reads
 		"/etc/passwd", "/etc/shadow", // Specific sensitive file access
-	)
+	}
 
-	// Combine both lists for backward compatibility
-	return append(productionPatterns, testSentinels...)
+	// Combine both lists for backward compatibility; preallocate to avoid reallocation
+	combined := make([]string, 0, len(productionPatterns)+len(testSentinels))
+	combined = append(combined, productionPatterns...)
+	return append(combined, testSentinels...)
 }
