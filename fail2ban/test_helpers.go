@@ -45,7 +45,7 @@ func setupTestLogEnvironment(t *testing.T, testDataFile string) (cleanup func())
 	if err != nil {
 		t.Fatalf("Failed to read test file: %v", err)
 	}
-	if err := os.WriteFile(mainLog, data, shared.DefaultFilePermissions); err != nil {
+	if err := os.WriteFile(mainLog, data, shared.DefaultFilePermissions); err != nil { // #nosec G703 -- path is constructed from t.TempDir() and a literal string, not user input
 		t.Fatalf("Failed to create test log: %v", err)
 	}
 

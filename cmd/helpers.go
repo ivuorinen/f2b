@@ -28,7 +28,7 @@ func createTimeoutContext(base context.Context, config *Config) (context.Context
 	if config != nil && config.CommandTimeout > 0 {
 		timeout = config.CommandTimeout
 	}
-	return context.WithTimeout(base, timeout)
+	return context.WithTimeout(base, timeout) // #nosec G118 -- cancel is returned to callers who are responsible for calling it
 }
 
 // IsCI detects if we're running in a CI environment
