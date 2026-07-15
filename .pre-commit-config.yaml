@@ -3,9 +3,10 @@
 # Require at least the feature set shipped with pre-commit 3.4
 minimum_pre_commit_version: "3.4.0"
 
-# Generated API docs (produced by `make docs-api`) must not be linted,
+# Generated API docs (produced by `make docs-api`) and the vendored graphify
+# skill (a third-party tool install under .claude/skills/) must not be linted,
 # reformatted, or whitespace-fixed by any hook.
-exclude: ^docs/api/
+exclude: ^(docs/api/|\.claude/skills/)
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
