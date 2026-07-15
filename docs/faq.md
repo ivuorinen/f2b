@@ -14,7 +14,7 @@ ______________________________________________________________________
 
 ### What are the prerequisites for running `f2b`?
 
-- Go 1.25 or newer (for building from source)
+- Go 1.26 or newer (for building from source)
 - Fail2Ban installed and running on your system
 - Appropriate privileges (root, sudo group membership, or sudo capability) for ban/unban operations
 
@@ -40,18 +40,19 @@ ______________________________________________________________________
 
 ### Why do some commands require root or sudo?
 
-Fail2Ban operations (like banning/unbanning IPs or controlling the service) often require elevated privileges.
-f2b automatically detects your privilege level and escalates to sudo only when necessary. Commands like `status`,
-`list-jails`, and `logs` typically don't require sudo.
+Fail2Ban's control socket (`/var/run/fail2ban/fail2ban.sock`) is root-only, so every command that talks to
+fail2ban — including read-only ones like `status`, `list-jails`, `banned`, and `logs` — needs sudo/root.
+f2b automatically detects your privilege level and escalates to sudo when needed.
 
 ### Do I need to run everything with sudo?
 
-No! f2b is smart about privileges:
+Effectively yes for any fail2ban operation:
 
-- **Commands that need sudo:** `ban`, `unban`, `service` operations
-- **Commands that don't need sudo:** `status`, `list-jails`, `test`, `logs`, `version`, `completion`
-- **Automatic detection:** f2b checks if you're root, in sudo group, or can use sudo
-- **Smart escalation:** Only adds sudo when the specific command requires it
+- **Need sudo/root:** `ban`, `unban`, `status`, `list-jails`, `banned`, `test`, `logs`, `logs-watch`,
+  `test-filter`, `service` (all use the root-only socket)
+- **No privilege check:** `version`, `completion`, `help` (never contact fail2ban)
+- **Automatic detection:** f2b checks if you're root, in the sudo group, or can use sudo
+- **Smart escalation:** Adds sudo automatically when you are not already root
 
 ### What if I don't have sudo privileges?
 
@@ -136,25 +137,17 @@ F2B_LOG_FILE=/tmp/f2b.log f2b ban 192.168.1.100
 
 ### How do I monitor f2b performance?
 
-f2b includes comprehensive performance monitoring:
+f2b does not expose a dedicated metrics command, but it emits structured logs
+you can follow in real time:
 
 ```bash
-# View performance metrics
-f2b metrics
-
-# Get detailed metrics in JSON format
-f2b metrics --format=json
-
-# Monitor with real-time log watching
+# Follow fail2ban activity as it happens
 f2b logs-watch all 192.168.1.100
 ```
 
-The metrics command shows:
-
-- Operation counts and timing
-- Cache hit/miss ratios
-- Memory usage and optimization
-- System performance statistics
+Each command run emits structured logs carrying a shared `request_id` for
+correlation, so a single operation can be traced end to end in your log
+aggregator.
 
 ### How do I configure timeouts?
 

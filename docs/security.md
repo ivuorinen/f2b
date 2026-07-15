@@ -48,18 +48,22 @@ f2b intelligently manages sudo requirements through a comprehensive privilege ch
 - `service` control commands
 - Configuration modifications
 
-**No sudo needed:**
+**No privilege check:**
 
-- `status`, `list-jails`, `test`
-- `logs`, `version`, `completion`
-- Read-only operations
+- `version`, `completion`, `help`
+- These never contact the fail2ban server socket
+
+Note: read operations such as `status`, `list-jails`, `banned`, and `logs`
+DO require sudo/root, because fail2ban's control socket
+(`/var/run/fail2ban/fail2ban.sock`) is root-only.
 
 ### Privilege Escalation Process
 
 1. **Pre-flight Check**: Determine user capabilities before command execution
 1. **Context Creation**: Create context with timeout for the operation
 1. **Command Classification**: Identify if the operation requires privileges
-1. **Smart Escalation**: Only add sudo when necessary for specific commands
+1. **Escalation**: Add sudo for every command that touches the root-only server
+   socket — all `fail2ban-client` subcommands except `-V`/no-args version output
 1. **Validation**: Ensure privilege escalation succeeded with timeout protection
 1. **Execution**: Run command with appropriate privileges and context
 1. **Timeout Handling**: Gracefully handle hanging operations with cancellation
@@ -80,27 +84,25 @@ Example: sudo f2b ban 192.168.1.100
 
 ### IP Address Validation
 
-Comprehensive validation with caching prevents injection attacks:
+Comprehensive validation prevents injection attacks.
+The snippet below is a simplified illustration; the authoritative
+implementation is `ValidateIP` in `fail2ban/validation.go`:
 
 ```go
 func ValidateIP(ip string) error {
     if ip == "" {
-        return fmt.Errorf("IP address cannot be empty")
-    }
-
-    // Check validation cache first for performance
-    if IsIPValidCached(ip) {
-        return nil
+        return ErrIPRequiredError
     }
 
     // Check for valid IPv4 or IPv6 address
     parsed := net.ParseIP(ip)
     if parsed == nil {
-        return fmt.Errorf("invalid IP address: %s", ip)
+        // Don't echo potentially malicious input back in the error
+        if containsCommandInjectionPatterns(ip) || len(ip) > constants.MaxIPAddressLength {
+            return fmt.Errorf("invalid IP address format")
+        }
+        return NewInvalidIPError(ip)
     }
-
-    // Cache successful validation
-    CacheIPValidation(ip, true)
     return nil
 }
 ```
@@ -111,11 +113,14 @@ func ValidateIP(ip string) error {
 - Path traversal attempts
 - Buffer overflow attacks
 - Format string vulnerabilities
-- Performance degradation through validation caching
 
 ### Jail Name Validation
 
-Prevents directory traversal and command injection:
+Prevents directory traversal and command injection. Simplified illustration;
+the authoritative implementation is `ValidateJail` in `fail2ban/validation.go`,
+which additionally enforces a maximum length of 64 characters, requires the
+first character to be a letter or digit, and accepts Unicode letters/digits
+plus dash, underscore, and dot:
 
 ```go
 func ValidateJail(jail string) error {
@@ -135,7 +140,11 @@ func ValidateJail(jail string) error {
 
 ### Advanced Path Traversal Protection
 
-Comprehensive protection against sophisticated path traversal attacks:
+Comprehensive protection against sophisticated path traversal attacks. The
+snippet below is a simplified illustration; the authoritative implementation is
+`ValidateFilter` in `fail2ban/validation.go`, which delegates to the exported
+`ContainsPathTraversal` helper (`fail2ban/security_utils.go`) alongside
+command-injection and per-character filter checks:
 
 ```go
 func ValidateFilter(filter string) error {
@@ -381,7 +390,7 @@ func setupSecureTestEnvironment(t *testing.T) {
 
 ### Defense in Depth
 
-1. **Input Validation**: First line of defense against malicious input with caching
+1. **Input Validation**: First line of defense against malicious input
 1. **Advanced Path Traversal Protection**: Extensive sophisticated attack vector protection
 1. **Privilege Validation**: Ensure user has necessary permissions with timeout protection
 1. **Context-Aware Execution**: Use argument arrays with timeout and cancellation support
@@ -389,7 +398,6 @@ func setupSecureTestEnvironment(t *testing.T) {
 1. **Error Handling**: Fail safely without information leakage, include context information
 1. **Audit Logging**: Track privileged operations with contextual information
 1. **Test Isolation**: Prevent test-time security compromises with comprehensive mocks
-1. **Performance Security**: Validation caching prevents DoS through repeated validation
 1. **Timeout Protection**: Prevent resource exhaustion through hanging operations
 
 ### Security Boundaries
@@ -397,14 +405,13 @@ func setupSecureTestEnvironment(t *testing.T) {
 ```text
 User Input → Context → Validation → Path Traversal → Privilege Check → Safe Execution → Timeout → Audit
     ↓          ↓         ↓            ↓               ↓              ↓             ↓        ↓
-  Sanitize → Create → Cache Check → Block Attack → Verify Perms → Exec w/Context → Cancel → Log
+  Sanitize → Create → Validate → Block Attack → Verify Perms → Exec w/Context → Cancel → Log
 ```
 
 **Enhanced Security Flow:**
 
 1. **Context Creation**: Establish timeout and cancellation context
 1. **Input Sanitization**: Clean and validate all user input
-1. **Cache Validation**: Check validation cache for performance and DoS protection
 1. **Path Traversal Protection**: Block extensive sophisticated attack vectors
 1. **Privilege Verification**: Confirm user permissions with timeout protection
 1. **Context-Aware Execution**: Execute with timeout and cancellation support
@@ -482,5 +489,5 @@ logger.WithFields(logrus.Fields{
 This comprehensive security model ensures f2b can be used safely in production environments
 while maintaining the flexibility needed for effective Fail2Ban management. The enhanced security
 features include context-aware timeout handling, sophisticated path traversal protection with
-extensive attack vector coverage, performance-optimized validation caching, and comprehensive
+extensive attack vector coverage, argument-array command execution, and comprehensive
 audit logging for enterprise-grade security monitoring.

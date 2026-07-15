@@ -8,8 +8,6 @@ Claude Code **MUST** follow ALL instructions in [AGENTS.md](AGENTS.md) when work
 
 - **Security guidelines** - Never execute real sudo in tests, use mocks
 - **Code standards** - Follow .editorconfig, linting rules, testing patterns
-- **Tool preferences** - Use Serena tools when available for semantic operations
-- **TODO management** - Use memory-based todo system, not file-based TODO.md
 - **Development workflow** - Read config files first, run pre-commit checks
 
 ## Key References
@@ -19,16 +17,30 @@ Claude Code **MUST** follow ALL instructions in [AGENTS.md](AGENTS.md) when work
 - **Security Guidelines**: [docs/security.md](docs/security.md)
 - **Testing Patterns**: [docs/testing.md](docs/testing.md)
 
-## Current Project Status (2025-09-13)
+## Current Project Status
 
-- **Go Version**: 1.25.0 (latest stable)
-- **Test Coverage**: Comprehensive coverage across all packages - Above industry standards
-- **Build Status**: ✅ All tests passing, 0 linting issues
-- **Dependencies**: ✅ All updated to latest versions
-- **Security**: ✅ All validation tests passing
+Run `make ci` (or check the CI badges in the README) for the current build,
+lint, coverage, and test status. Avoid hard-coding point-in-time numbers here.
 
-**The f2b project is in production-ready state** with all critical infrastructure completed.
+- **Go Version**: see `go.mod` for the authoritative version.
 
 ______________________________________________________________________
 
 **📋 For all development work, refer to [AGENTS.md](AGENTS.md) for complete instructions.**
+
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+
+- For codebase questions, first run `graphify query "<question>"` when
+  graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for
+  relationships and `graphify explain "<concept>"` for focused concepts. These
+  return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw
+  grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of
+  raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when
+  query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).

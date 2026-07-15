@@ -11,7 +11,7 @@ who want to contribute to the project or integrate with its components.
 - [Command Package](#command-package)
 - [Error Handling](#error-handling)
 - [Configuration](#configuration)
-- [Logging and Metrics](#logging-and-metrics)
+- [Logging](#logging)
 - [Testing Framework](#testing-framework)
 - [Examples](#examples)
 
@@ -23,23 +23,33 @@ The core interface for interacting with fail2ban operations.
 
 ```go
 type Client interface {
-    // Basic operations
+    // Jail and status operations
+    ListJails() ([]string, error)
+    StatusAll() (string, error)
+    StatusJail(string) (string, error)
+
+    // Ban operations
     BanIP(ip, jail string) (int, error)
     UnbanIP(ip, jail string) (int, error)
+    BannedIn(ip string) ([]string, error)
+    GetBanRecords(jails []string) ([]BanRecord, error)
+
+    // Log and filter operations
+    GetLogLines(jail, ip string) ([]string, error)
+    ListFilters() ([]string, error)
+    TestFilter(filter string) (string, error)
+
+    // Context-aware versions for timeout and cancellation support
+    ListJailsWithContext(ctx context.Context) ([]string, error)
+    StatusAllWithContext(ctx context.Context) (string, error)
+    StatusJailWithContext(ctx context.Context, jail string) (string, error)
     BanIPWithContext(ctx context.Context, ip, jail string) (int, error)
     UnbanIPWithContext(ctx context.Context, ip, jail string) (int, error)
-
-    // Information retrieval
-    ListJails() ([]string, error)
-    ListJailsWithContext(ctx context.Context) ([]string, error)
-    StatusAll() (string, error)
-    StatusJail(jail string) (string, error)
-    GetBanRecords(jails []string) ([]BanRecord, error)
-    BannedIn(ip string) ([]string, error)
-
-    // Filter operations
-    ListFilters() ([]string, error)
-    TestFilter(filter, logfile string, verbose bool) ([]string, error)
+    BannedInWithContext(ctx context.Context, ip string) ([]string, error)
+    GetBanRecordsWithContext(ctx context.Context, jails []string) ([]BanRecord, error)
+    GetLogLinesWithContext(ctx context.Context, jail, ip string) ([]string, error)
+    ListFiltersWithContext(ctx context.Context) ([]string, error)
+    TestFilterWithContext(ctx context.Context, filter string) (string, error)
 }
 ```
 
@@ -60,7 +70,7 @@ import (
 
 func banIPExample() error {
     // Create a client
-    client, err := fail2ban.NewClient()
+    client, err := fail2ban.NewClient(logDir, filterDir)
     if err != nil {
         return fmt.Errorf("failed to create client: %w", err)
     }
@@ -87,25 +97,29 @@ The `RealClient` struct implements the `Client` interface for actual fail2ban op
 
 ```go
 type RealClient struct {
-    path          string        // Path to fail2ban-client binary
-    timeout       time.Duration // Default timeout for operations
-    sudoChecker   SudoChecker   // Interface for sudo privilege checking
-    runner        Runner        // Interface for command execution
+    Path      string // Command used to invoke fail2ban-client
+    Jails     []string
+    LogDir    string
+    FilterDir string
 }
 ```
 
 #### Configure RealClient
 
 ```go
-// Create a new client with custom timeout
-client, err := fail2ban.NewClientWithTimeout(45 * time.Second)
+// Create a new client (validates fail2ban is present and running)
+client, err := fail2ban.NewClient(logDir, filterDir)
 if err != nil {
     return err
 }
 
-// Create a client with custom sudo checker
-customSudoChecker := &MyCustomSudoChecker{}
-client, err := fail2ban.NewClientWithSudo(customSudoChecker)
+// Create a client with a deadline/cancellation via context
+ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+defer cancel()
+client, err := fail2ban.NewClientWithContext(ctx, logDir, filterDir)
+
+// Inject a custom sudo checker (package-global) before constructing the client
+fail2ban.SetSudoChecker(&MyCustomSudoChecker{})
 ```
 
 ### Mock Client
@@ -178,7 +192,7 @@ func NewCommand(
 ) *cobra.Command
 
 // Validation helpers
-func ValidateIPArgument(args []string) (string, error)
+func ValidateIPArgumentWithContext(ctx context.Context, args []string) (string, error)
 func ValidateServiceAction(action string) error
 
 // Jail operations
@@ -191,7 +205,8 @@ func GetJailsFromArgsWithContext(
 
 // Error handling
 func HandleClientError(err error) error
-func PrintErrorAndReturn(err error) error
+func HandleValidationError(err error) error
+func PrintError(err error)
 ```
 
 ## Error Handling
@@ -244,6 +259,7 @@ The configuration system supports the following environment variables:
 | `F2B_LOG_DIR`          | Log directory path         | `/var/log`               |
 | `F2B_FILTER_DIR`       | Filter directory path      | `/etc/fail2ban/filter.d` |
 | `F2B_LOG_LEVEL`        | Log level                  | `info`                   |
+| `F2B_LOG_FILE`         | f2b's own log file path    | none (stderr only)       |
 | `F2B_COMMAND_TIMEOUT`  | Command timeout            | `30s`                    |
 | `F2B_FILE_TIMEOUT`     | File operation timeout     | `10s`                    |
 | `F2B_PARALLEL_TIMEOUT` | Parallel operation timeout | `60s`                    |
@@ -264,7 +280,7 @@ This function:
 - Resolves to absolute paths
 - Enforces length limits
 
-## Logging and Metrics
+## Logging
 
 ### Contextual Logging
 
@@ -288,39 +304,19 @@ err := logger.LogOperation(ctx, "ban_operation", func() error {
 })
 ```
 
-### Performance Metrics
-
-The metrics system provides comprehensive performance monitoring:
-
-```go
-// Get global metrics
-metrics := cmd.GetGlobalMetrics()
-
-// Record operations
-metrics.RecordCommandExecution("ban", duration, success)
-metrics.RecordBanOperation("ban", duration, success)
-metrics.RecordValidationCacheHit()
-
-// Get metrics snapshot
-snapshot := metrics.GetSnapshot()
-fmt.Printf("Command executions: %d\n", snapshot.CommandExecutions)
-fmt.Printf("Average latency: %.2fms\n", snapshot.CommandLatencyBuckets["ban"].GetAverageLatency())
-```
-
 ### Timed Operations
 
-Use timed operations for automatic instrumentation:
+Use `TimedOperation` to log the duration and outcome of an operation:
 
 ```go
-func performBanOperation(ctx context.Context, ip, jail string) error {
-    metrics := cmd.GetGlobalMetrics()
-    timer := cmd.NewTimedOperation(ctx, metrics, "ban", "ban_ip")
+func performBanOperation(ip, jail string) error {
+    timer := fail2ban.NewTimedOperation("ban", "ban_ip", ip, jail)
 
     // Perform the operation
     err := client.BanIP(ip, jail)
 
-    // Record timing and success/failure
-    timer.Finish(err == nil)
+    // Log timing and success/failure (pass the error; nil means success)
+    timer.Finish(err)
 
     return err
 }
@@ -405,7 +401,9 @@ func MyCmd(client fail2ban.Client, config *Config) *cobra.Command {
 
             // Validate arguments
             if len(args) < 1 {
-                return PrintErrorAndReturn(fail2ban.ErrActionRequiredError)
+                return HandleValidationError(fail2ban.NewValidationError(
+                    "argument required",
+                    "Provide <arg>. Use --help for usage information."))
             }
 
             // Add context for logging
@@ -570,8 +568,6 @@ func (h *HTTPHandler) writeError(w http.ResponseWriter, code int, err error) {
 
 ### Performance
 
-1. Use the metrics system to monitor performance
-1. Implement proper caching where appropriate
 1. Use object pooling for frequently allocated objects
 1. Profile and optimize hot paths
 

@@ -4,8 +4,8 @@
 
 f2b is designed as a modern, secure Go CLI tool for managing Fail2Ban with a focus on testability, security, and
 extensibility. The architecture follows clean code principles with dependency injection, interface-based design,
-comprehensive testing, and advanced performance monitoring. Built with context-aware operations, timeout handling,
-validation caching, and parallel processing capabilities for enterprise-grade reliability.
+comprehensive testing, and performance-conscious design. Built with context-aware operations, timeout handling,
+object pooling, and parallel processing capabilities for enterprise-grade reliability.
 
 ## Core Components
 
@@ -21,14 +21,13 @@ validation caching, and parallel processing capabilities for enterprise-grade re
 ### cmd/ Package
 
 - **Purpose**: CLI command implementations using Cobra framework
-- **Structure**: Each command has its own file (ban.go, unban.go, status.go, metrics.go, etc.)
+- **Structure**: Each command has its own file (ban.go, unban.go, status.go, logs.go, etc.)
 - **Responsibilities**:
   - Command-line argument parsing and validation
   - Input sanitization and security checks
   - Business logic orchestration with context-aware operations
   - Output formatting (plain/JSON)
   - Error handling and user feedback
-  - Performance metrics collection and monitoring
   - Parallel processing coordination for multi-jail operations
   - Structured logging with contextual information
 
@@ -46,15 +45,22 @@ validation caching, and parallel processing capabilities for enterprise-grade re
 
   - `RealClient`: Production fail2ban client with timeout handling
   - `MockClient`: Comprehensive test double with thread-safe operations
-  - `NoOpClient`: Safe fallback implementation
+  - `lazyClient` (cmd): defers RealClient construction until first use, so
+    commands that need no client (help, version, completion) skip it
 
 - **Advanced Features**:
 
   - Context-aware operations with timeout and cancellation support
-  - Validation caching system with thread-safe operations
   - Optimized ban record parsing with object pooling
-  - Performance metrics collection and monitoring
+  - Bounded caching of parsed ban-record timestamps
   - Parallel processing support for multi-jail operations
+
+### constants/ Package
+
+- **Purpose**: Shared constants used across all packages
+  (`github.com/ivuorinen/f2b/constants`)
+- **Contents**: Default and maximum timeouts, validation limits, environment
+  variable names, error message formats, and output labels
 
 ## Design Patterns
 
@@ -62,7 +68,7 @@ validation caching, and parallel processing capabilities for enterprise-grade re
 
 - All commands receive their dependencies via constructor injection
 - Enables easy testing with mock implementations
-- Supports multiple backends (real, mock, noop)
+- Supports multiple backends (real, mock)
 - Clear separation of concerns
 
 ### Interface-Based Design
@@ -90,11 +96,10 @@ validation caching, and parallel processing capabilities for enterprise-grade re
 
 ### Performance-Optimized Design
 
-- Validation result caching with thread-safe operations
 - Object pooling for memory-intensive operations
+- Bounded caching of parsed ban-record timestamps
 - Optimized parsing algorithms with minimal allocations
 - Parallel processing capabilities for multi-jail scenarios
-- Real-time performance metrics collection and monitoring
 
 ### Mock-Based Testing
 
@@ -110,12 +115,10 @@ validation caching, and parallel processing capabilities for enterprise-grade re
 
 1. **CLI Parsing**: Cobra processes command-line arguments
 1. **Context Creation**: Create context with timeout for operation
-1. **Validation**: Input validation with caching and sanitization
+1. **Validation**: Input validation and sanitization
 1. **Privilege Check**: Determine if sudo is required
-1. **Metrics Start**: Begin performance metrics collection
 1. **Business Logic**: Execute fail2ban operations via Client interface with context
 1. **Parallel Processing**: Use parallel workers for multi-jail operations
-1. **Metrics End**: Record operation timing and success/failure
 1. **Output**: Format and display results (plain or JSON)
 
 ### Dependency Flow
@@ -129,8 +132,7 @@ main.go
 cmd/[command].go
   ├── Receives Client interface and Config
   ├── Creates context with timeout
-  ├── Validates user input with caching
-  ├── Records metrics
+  ├── Validates user input
   ├── Calls Client methods with context
   └── Formats output (plain/JSON)
 
@@ -138,7 +140,6 @@ fail2ban/client.go
   ├── Implements business logic with context support
   ├── Uses Runner for system calls with timeout
   ├── Uses SudoChecker for privileges
-  ├── Uses ValidationCache for performance
   ├── Supports parallel operations
   └── Returns structured data
 ```
@@ -147,7 +148,7 @@ fail2ban/client.go
 
 ### Core Technologies
 
-- **Language**: Go 1.25+
+- **Language**: Go 1.26+
 - **CLI Framework**: [Cobra](https://github.com/spf13/cobra)
 - **Logging**: [Logrus](https://github.com/sirupsen/logrus) with structured output and contextual logging
 - **Testing**: Go's built-in testing with comprehensive mocks and fluent testing framework
@@ -158,15 +159,15 @@ fail2ban/client.go
 - **cobra**: Command-line interface framework
 - **logrus**: Structured logging with context propagation
 - **Standard library**: Extensive use of Go stdlib for reliability
-- **sync/atomic**: Thread-safe operations for metrics and caching
+- **sync/atomic**: Thread-safe counters (parse statistics) and interrupt handling
 - **context**: Timeout and cancellation support throughout
 
 ### Performance Technologies
 
 - **Object Pooling**: Memory-efficient parsing with sync.Pool
-- **Validation Caching**: Thread-safe caching with sync.RWMutex
+- **Bounded Time Cache**: Thread-safe caching of parsed ban-record timestamps
 - **Parallel Processing**: Worker pools for multi-jail operations
-- **Atomic Operations**: Lock-free metrics collection
+- **Atomic Operations**: Lock-free counters (parse statistics, interrupt handling)
 - **Context-Aware Operations**: Timeout handling and graceful cancellation
 
 ## Extension Points
@@ -176,7 +177,6 @@ fail2ban/client.go
 1. Create new file in `cmd/` package
 1. Implement command using established patterns with context support
 1. Use dependency injection for testability
-1. Add performance metrics collection
 1. Implement fluent testing framework patterns
 1. Add comprehensive tests with mocks and context-aware operations
 
@@ -225,8 +225,8 @@ fail2ban/client.go
 
 ### Input Validation
 
-- Comprehensive IP address validation (IPv4/IPv6) with caching
-- Jail name sanitization with validation caching
+- Comprehensive IP address validation (IPv4/IPv6)
+- Jail name sanitization
 - Filter name validation with performance optimization
 - Advanced path traversal prevention (extensive sophisticated test cases)
 - Unicode normalization attack protection
@@ -249,9 +249,13 @@ fail2ban/client.go
 - `F2B_FILTER_DIR`: Filter configuration directory
 - `F2B_LOG_LEVEL`: Application logging level
 - `F2B_LOG_FILE`: Log file destination
-- `F2B_TEST_SUDO`: Enable sudo checking in tests
-- `F2B_VERBOSE_TESTS`: Force verbose logging in CI/tests
-- `ALLOW_DEV_PATHS`: Allow /tmp paths (development only)
+- `F2B_COMMAND_TIMEOUT`: Timeout for individual fail2ban commands (default `30s`)
+- `F2B_FILE_TIMEOUT`: Timeout for file operations (default `10s`)
+- `F2B_PARALLEL_TIMEOUT`: Timeout for parallel operations (default `60s`)
+- `F2B_TEST_SUDO`: Marks a test environment, so `CanUseSudo()` returns false and
+  no real sudo runs (presence-checked: any non-empty value enables, unset disables)
+- `F2B_VERBOSE_TESTS`: Force verbose logging in CI/tests (presence-checked)
+- `ALLOW_DEV_PATHS`: Allow /tmp paths, development only (presence-checked)
 
 ### Runtime Configuration
 
@@ -264,35 +268,31 @@ fail2ban/client.go
 
 ### Performance Features
 
-- **Validation Caching**: Thread-safe caching system with sync.RWMutex reducing repeated validations
 - **Object Pooling**: Memory-efficient parsing with sync.Pool for ban record processing
+- **Bounded Time Cache**: Thread-safe caching of parsed ban-record timestamps
 - **Parallel Processing**: Worker pools for multi-jail operations with optimal CPU utilization
 - **Optimized Parsing**: Ultra-fast ban record parsing with minimal allocations
-- **Atomic Metrics**: Lock-free performance metrics collection using atomic operations
+- **Atomic Counters**: Lock-free parse statistics using atomic operations
 
 ### Monitoring and Observability
 
-- **Real-time Metrics**: Comprehensive performance metrics via `f2b metrics` command
 - **Structured Logging**: Contextual logging with request IDs and operation tracking
-- **Cache Analytics**: Cache hit/miss ratios and performance statistics
-- **Operation Timing**: Detailed latency tracking for all operations
-- **System Monitoring**: Memory usage, goroutine counts, and uptime tracking
+- **Operation Timing**: `TimedOperation` logs the duration and outcome of each operation
 
 ### Scalability Design
 
 - **Context-Aware Operations**: All operations support timeout and cancellation
 - **Parallel Processing**: Automatic scaling for multi-jail operations
 - **Memory Optimization**: Object pooling and efficient memory management
-- **Performance Caching**: Intelligent caching reduces repeated computations
+- **Time-Parse Caching**: Bounded cache reduces repeated ban-record timestamp parsing
 - **Resource Management**: Proper cleanup and resource lifecycle management
 
 ### Advanced Performance Features
 
 - **Ultra-Optimized Parsing**: Custom parsing algorithms with zero-allocation techniques
-- **Time Cache**: Intelligent time parsing cache reducing string-to-time conversions
+- **Time Cache**: Bounded time-parsing cache reducing string-to-time conversions
 - **Fast String Operations**: Custom string operations avoiding standard library overhead
 - **Worker Pool Management**: Dynamic worker scaling based on operation load
-- **Latency Buckets**: Detailed latency distribution tracking for performance analysis
 
 This architecture provides enterprise-grade performance, comprehensive monitoring, and scalable design while maintaining
 security, testability, and maintainability. The system is optimized for both single-operation efficiency and

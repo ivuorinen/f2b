@@ -4,8 +4,8 @@ A modern, secure, and extensible Go CLI tool for managing [Fail2Ban](https://www
 Built with Go, featuring automatic sudo privilege management, shell completion, and comprehensive security.
 
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://choosealicense.com/licenses/mit/)
-[![Go Version](https://img.shields.io/badge/Go-%3E%3D1.25-blue.svg)](https://golang.org/)
-[![Build Status](https://img.shields.io/badge/tests-passing-brightgreen.svg)](https://github.com/ivuorinen/f2b/actions)
+[![Go Version](https://img.shields.io/badge/Go-%3E%3D1.26-blue.svg)](https://golang.org/)
+[![Lint][lint-badge]][lint-ci]
 
 ______________________________________________________________________
 
@@ -13,58 +13,21 @@ ______________________________________________________________________
 
 ### Prerequisites
 
-- **Go 1.25+** (for building from source)
+- **Go 1.26+** (for building from source)
 - **Fail2Ban** installed and running
 - **Appropriate privileges** (root, sudo group, or sudo access) for ban operations
 
 ### Installation
 
-#### Download Pre-built Binary
-
-Download the latest release for your platform from the [releases page](https://github.com/ivuorinen/f2b/releases).
-
-```bash
-# Linux (amd64)
-wget https://github.com/ivuorinen/f2b/releases/latest/download/f2b_Linux_x86_64.tar.gz
-tar -xzf f2b_Linux_x86_64.tar.gz
-sudo mv f2b /usr/local/bin/
-
-# macOS (Apple Silicon)
-wget https://github.com/ivuorinen/f2b/releases/latest/download/f2b_Darwin_arm64.tar.gz
-tar -xzf f2b_Darwin_arm64.tar.gz
-sudo mv f2b /usr/local/bin/
-```
-
-#### Using Homebrew (macOS/Linux)
-
-```bash
-brew tap ivuorinen/tap
-brew install f2b
-```
+> No tagged release has been published yet, so pre-built binaries, Docker
+> images, a Homebrew tap, and pinned `@vX.Y.Z` installs are not available.
+> Use `go install ...@latest` or build from source below. The other install
+> methods will be documented once a `v1.x` release is cut.
 
 #### Using Go
 
 ```bash
-# Install latest version
 go install github.com/ivuorinen/f2b@latest
-
-# Install specific version
-go install github.com/ivuorinen/f2b@v1.2.3
-```
-
-#### Using Docker (Multi-Architecture)
-
-```bash
-# Pull latest multi-architecture image
-docker pull ghcr.io/ivuorinen/f2b:latest
-
-# Run with mounted fail2ban directory
-docker run --rm -v /etc/fail2ban:/etc/fail2ban:ro ghcr.io/ivuorinen/f2b:latest status all
-
-# Architecture-specific images available:
-# ghcr.io/ivuorinen/f2b:latest-amd64
-# ghcr.io/ivuorinen/f2b:latest-arm64
-# ghcr.io/ivuorinen/f2b:latest-armv7
 ```
 
 #### Build from Source
@@ -76,7 +39,7 @@ cd f2b
 make build
 
 # Or with custom version
-go build -ldflags "-X github.com/ivuorinen/f2b/cmd.version=1.2.3" -o f2b .
+go build -ldflags "-X github.com/ivuorinen/f2b/cmd.Version=1.2.3" -o f2b .
 ```
 
 ______________________________________________________________________
@@ -93,7 +56,7 @@ ______________________________________________________________________
 
 ### 🚀 **Modern CLI Experience**
 
-- **Comprehensive Command Set**: From basic `ban`/`unban` to advanced `metrics` and `logs-watch`
+- **Comprehensive Command Set**: From basic `ban`/`unban` to advanced `logs`, `logs-watch`, and `service` management
 - **Multi-Shell Completion**: Full support for bash, zsh, fish, and PowerShell
 - **Intuitive Command Aliases**: `ls-jails`, `st`, `b`, `ub` for faster workflows
 - **Dual Output Formats**: Human-readable plain text and machine-parseable JSON
@@ -101,8 +64,6 @@ ______________________________________________________________________
 
 ### 📊 **Performance & Monitoring**
 
-- **Real-Time Metrics**: Built-in performance monitoring via `f2b metrics` command
-- **Validation Caching**: Intelligent caching reduces repeated computations by up to 70%
 - **Parallel Processing**: Advanced concurrent operations for multi-jail scenarios
 - **Resource Management**: Proper cleanup and timeout handling for enterprise reliability
 - **Performance Optimization**: Context-aware operations with configurable timeouts
@@ -143,10 +104,6 @@ f2b test 192.168.1.100
 ```bash
 # JSON output for scripting and automation
 f2b banned all --format=json | jq '.[] | select(.Remaining | test("^0[01]:"))'
-
-# Real-time performance metrics and monitoring
-f2b metrics                    # Human-readable metrics
-f2b metrics --format=json      # Machine-parseable metrics
 
 # Advanced log monitoring with filtering and real-time watching
 f2b logs sshd --limit 50                    # Recent jail logs
@@ -208,10 +165,13 @@ F2B_COMMAND_TIMEOUT=30s                 # Individual command timeout
 F2B_FILE_TIMEOUT=10s                    # File operation timeout
 F2B_PARALLEL_TIMEOUT=60s                # Parallel operation timeout
 
-# Testing & Development
-F2B_TEST_SUDO=false                     # Enable sudo checking in tests
-F2B_VERBOSE_TESTS=false                 # Force verbose logging in CI/tests
-ALLOW_DEV_PATHS=false                   # Allow /tmp paths (development only)
+# Testing & Development (presence-checked: set to any non-empty value to
+# enable; leave unset to disable — "false" still counts as set)
+F2B_TEST_SUDO=1                         # Mark a test environment; CanUseSudo() returns false
+F2B_TEST=1                              # Mark a test environment; disables real sudo probing
+GO_TEST=1                               # Same as F2B_TEST (checked by IsTestEnvironment())
+F2B_VERBOSE_TESTS=1                     # Force verbose logging in CI/tests
+ALLOW_DEV_PATHS=1                       # Allow /tmp paths (development only)
 ```
 
 ### Global Flags
@@ -262,8 +222,12 @@ f2b is designed with security as a fundamental principle:
 
 ### Command Privilege Requirements
 
-**Require sudo**: `ban`, `unban`, `service` operations
-**No sudo needed**: `status`, `list-jails`, `test`, `logs`, `version`, `completion`
+**Require sudo/root**: all commands that talk to the fail2ban server socket —
+`ban`, `unban`, `status`, `list-jails`, `banned`, `test`, `logs`, `logs-watch`,
+`test-filter`, and `service`. The fail2ban socket is root-only, so f2b escalates
+via sudo automatically when you are not root.
+**No privilege check**: `version`, `completion`, and `help` — these never
+contact fail2ban.
 
 For detailed security practices, threat model, and contribution security guidelines, see
 [docs/security.md](docs/security.md).
@@ -303,10 +267,6 @@ f2b service restart                    # Restart service with context-aware time
 f2b test-filter <jail>                 # Test and validate jail filter configuration
 f2b test-filter sshd                   # Validate sshd filter with comprehensive checks
 
-# Performance Monitoring & Metrics
-f2b metrics                            # Show comprehensive performance metrics
-f2b metrics --format=json              # Detailed metrics in machine-readable format
-
 # Utility & Completion Commands
 f2b version                            # Show version, build info, and system details
 f2b completion <shell>                 # Generate completion for bash/zsh/fish/powershell
@@ -332,7 +292,7 @@ f2b is built as an **enterprise-grade** Go application following modern architec
 
 - **Security-First Architecture**: Automatic privilege management with extensive path traversal protections
 - **Context-Aware Operations**: Comprehensive timeout handling and graceful cancellation throughout
-- **Performance-Optimized**: Validation caching, parallel processing, and optimized parsing algorithms
+- **Performance-Optimized**: Object pooling, parallel processing, and optimized parsing algorithms
 - **Interface-Based Design**: Full dependency injection for testing and extensibility
 - **Thread-Safe Operations**: Proper synchronization and concurrent access protection
 
@@ -340,23 +300,23 @@ f2b is built as an **enterprise-grade** Go application following modern architec
 
 - **Test Coverage**: Comprehensive coverage across all packages - above industry standards
 - **Modern Testing**: Fluent testing framework with significant reduction in test duplication
-- **Security Testing**: 13 comprehensive attack vector test cases implemented
+- **Security Testing**: Comprehensive attack vector test cases implemented
 - **Performance**: Context-aware operations with configurable timeouts and resource management
 
 ### 🛠️ **Technology Stack**
 
-- **Language**: Go 1.25+ with modern idioms and patterns
+- **Language**: Go 1.26+ with modern idioms and patterns
 - **CLI Framework**: Cobra with comprehensive command structure and shell completion
 - **Logging**: Structured logging with Logrus and contextual information
 - **Testing**: Advanced mock patterns with thread-safe implementations
 - **Deployment**: Multi-architecture Docker support (amd64, arm64, armv7) with manifests
-- **Performance**: Object pooling, validation caching, and parallel processing
+- **Performance**: Object pooling and parallel processing
 
 ### 🎪 **Advanced Features**
 
-- **13 Commands**: Comprehensive functionality from basic operations to advanced monitoring
+- **12 Commands**: Comprehensive functionality from basic operations to log monitoring
 - **Parallel Processing**: Automatic concurrent operations for multi-jail scenarios
-- **Real-Time Monitoring**: Live metrics collection and performance analysis
+- **Real-Time Log Monitoring**: Live log following via `f2b logs-watch`
 - **Enterprise Security**: Advanced input validation and privilege management
 - **Cross-Platform**: Full support for Linux, macOS, Windows, and BSD systems
 
@@ -498,6 +458,7 @@ Please see:
 - [docs/architecture.md](docs/architecture.md) - System architecture and design
 - [docs/security.md](docs/security.md) - Security practices and guidelines
 - [docs/testing.md](docs/testing.md) - Testing strategies and patterns
+- [docs/api/](docs/api/index.md) - Public API reference (generated by `make docs-api`)
 
 ______________________________________________________________________
 
@@ -521,3 +482,6 @@ ______________________________________________________________________
 ______________________________________________________________________
 
 _Built with ❤️ and Go. Securing systems one ban at a time._
+
+[lint-badge]: https://github.com/ivuorinen/f2b/actions/workflows/lint.yml/badge.svg
+[lint-ci]: https://github.com/ivuorinen/f2b/actions/workflows/lint.yml
