@@ -12,7 +12,8 @@ import (
 
 // TestProcessBanOperation tests the ProcessBanOperation function
 func TestProcessBanOperation(t *testing.T) {
-	defer fail2ban.WithTestRunner(t, fail2ban.GetRunner())()
+	restoreRunner := fail2ban.WithTestRunner(t, fail2ban.GetRunner())
+	defer restoreRunner()
 
 	tests := []struct {
 		name        string
@@ -140,8 +141,26 @@ func TestParseTimeoutFromEnv(t *testing.T) {
 				t.Setenv(tt.envVarName, tt.envValue)
 			}
 
-			result := parseTimeoutFromEnv(tt.envVarName, tt.defaultValue)
+			// Generous max so these cases exercise parsing/fallback, not clamping.
+			result := parseTimeoutFromEnv(tt.envVarName, tt.defaultValue, time.Hour)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+// TestParseTimeoutFromEnvClamping verifies that values above maxTimeout are
+// clamped to maxTimeout (and that the warning path does not panic), for both
+// the duration and integer-seconds syntaxes.
+func TestParseTimeoutFromEnvClamping(t *testing.T) {
+	t.Run("duration above max is clamped", func(t *testing.T) {
+		t.Setenv("CLAMP_TIMEOUT", "10m")
+		result := parseTimeoutFromEnv("CLAMP_TIMEOUT", time.Second, 5*time.Second)
+		assert.Equal(t, 5*time.Second, result)
+	})
+
+	t.Run("integer seconds above max are clamped", func(t *testing.T) {
+		t.Setenv("CLAMP_TIMEOUT_SECONDS", "600")
+		result := parseTimeoutFromEnv("CLAMP_TIMEOUT_SECONDS", time.Second, 5*time.Second)
+		assert.Equal(t, 5*time.Second, result)
+	})
 }

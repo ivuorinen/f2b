@@ -65,11 +65,3 @@ type SudoChecker interface {
 	// HasSudoPrivileges returns true if user has any form of sudo access
 	HasSudoPrivileges() bool
 }
-
-// MetricsRecorder defines interface for recording metrics
-type MetricsRecorder interface {
-	// RecordValidationCacheHit records validation cache hits
-	RecordValidationCacheHit()
-	// RecordValidationCacheMiss records validation cache misses
-	RecordValidationCacheMiss()
-}

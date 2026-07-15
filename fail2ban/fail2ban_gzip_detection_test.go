@@ -91,7 +91,7 @@ func TestOpenGzipAwareReader(t *testing.T) {
 			if err != nil {
 				t.Fatalf("OpenGzipAwareReader failed: %v", err)
 			}
-			defer reader.Close()
+			defer func() { _ = reader.Close() }()
 
 			content, err := io.ReadAll(reader)
 			if err != nil {
@@ -227,7 +227,7 @@ func TestGlobalFunctions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenGzipAwareReader failed: %v", err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	content, err := io.ReadAll(reader)
 	if err != nil {
@@ -330,9 +330,10 @@ func TestGzipDetectionWithRealTestData(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Skip if test file doesn't exist
+			// The fixtures are checked in: a missing one is a broken tree,
+			// not an environmental precondition, so fail instead of skip.
 			if _, err := os.Stat(tt.file); os.IsNotExist(err) {
-				t.Skipf("Test data file not found: %s", tt.file)
+				t.Fatalf("checked-in test data file missing: %s", tt.file)
 			}
 
 			isGzip, err := detector.IsGzipFile(tt.file)
@@ -352,9 +353,9 @@ func TestReadCompressedRealLogs(t *testing.T) {
 	detector := NewGzipDetector()
 	compressedFile := filepath.Join("testdata", "fail2ban_compressed.log.gz")
 
-	// Skip if test file doesn't exist
+	// Checked-in fixture: missing means broken tree, so fail instead of skip.
 	if _, err := os.Stat(compressedFile); os.IsNotExist(err) {
-		t.Skip("Compressed test data file not found:", compressedFile)
+		t.Fatal("checked-in compressed test data file missing:", compressedFile)
 	}
 
 	// Create scanner for compressed file
@@ -407,7 +408,7 @@ func BenchmarkGzipDetectionWithRealFile(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		isGzip, err := detector.IsGzipFile(compressedFile)
 		if err != nil {
 			b.Fatalf("IsGzipFile failed: %v", err)

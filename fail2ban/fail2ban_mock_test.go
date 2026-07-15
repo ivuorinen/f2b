@@ -500,7 +500,7 @@ func TestMockClientConcurrency(t *testing.T) {
 	errors := make(chan error, 10)
 
 	// Start multiple goroutines performing operations
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		go func(id int) {
 			defer func() { done <- true }()
 
@@ -536,7 +536,7 @@ func TestMockClientConcurrency(t *testing.T) {
 	}
 
 	// Wait for all goroutines to complete
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		<-done
 	}
 
@@ -551,7 +551,7 @@ func BenchmarkMockClientBanUnban(b *testing.B) {
 	client := fail2ban.NewMockClient()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		ip := fmt.Sprintf("192.168.1.%d", i%255)
 		_, _ = client.BanIP(ip, "sshd")
 		_, _ = client.UnbanIP(ip, "sshd")
@@ -562,13 +562,13 @@ func BenchmarkMockClientBannedIn(b *testing.B) {
 	client := fail2ban.NewMockClient()
 
 	// Pre-ban some IPs
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		ip := fmt.Sprintf("192.168.1.%d", i)
 		_, _ = client.BanIP(ip, "sshd")
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		ip := fmt.Sprintf("192.168.1.%d", i%100)
 		_, _ = client.BannedIn(ip)
 	}

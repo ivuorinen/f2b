@@ -28,27 +28,20 @@ func TestRealSudoChecker_InSudoGroup(_ *testing.T) {
 	_ = inSudoGroup // Just ensure it doesn't panic
 }
 
-func TestRealSudoChecker_CanUseSudo(_ *testing.T) {
+func TestRealSudoChecker_CanUseSudo(t *testing.T) {
 	checker := &RealSudoChecker{}
 
-	// We can't easily test this without sudo configuration, but we can verify it doesn't panic
-	canUseSudo := checker.CanUseSudo()
-
-	// This is a basic smoke test - result depends on actual system configuration
-	_ = canUseSudo // Just ensure it doesn't panic
-}
-
-func TestRealSudoChecker_HasSudoPrivileges(t *testing.T) {
-	checker := &RealSudoChecker{}
-
-	hasPrivileges := checker.HasSudoPrivileges()
-
-	// Should be true if any of the individual checks are true
-	expectedHasPrivileges := checker.IsRoot() || checker.InSudoGroup() || checker.CanUseSudo()
-	if hasPrivileges != expectedHasPrivileges {
-		t.Errorf("HasSudoPrivileges() = %v, want %v", hasPrivileges, expectedHasPrivileges)
+	// In the test environment CanUseSudo must not shell out to real sudo and
+	// deterministically returns false.
+	if checker.CanUseSudo() {
+		t.Error("CanUseSudo() should be false in the test environment")
 	}
 }
+
+// HasSudoPrivileges is exercised via injected sub-checks in
+// TestSudoCheckingIntegration / TestMockSudoChecker; a RealSudoChecker test
+// that recomputes IsRoot()||InSudoGroup()||CanUseSudo() would only restate the
+// implementation and pass for any consistent (even entirely broken) version.
 
 func TestMockSudoChecker(t *testing.T) {
 	tests := []struct {
@@ -177,7 +170,8 @@ func TestRequiresSudo(t *testing.T) {
 			name:     "fail2ban-client get other command",
 			command:  "fail2ban-client",
 			args:     []string{"get", "sshd", "status"},
-			expected: false,
+			expected: true, // all fail2ban-client subcommands need the root-only socket
+
 		},
 		{
 			name:     "fail2ban-client reload command",
@@ -207,13 +201,15 @@ func TestRequiresSudo(t *testing.T) {
 			name:     "fail2ban-client status command",
 			command:  "fail2ban-client",
 			args:     []string{"status"},
-			expected: false,
+			expected: true, // status queries the root-only server socket
+
 		},
 		{
 			name:     "fail2ban-client ping command",
 			command:  "fail2ban-client",
 			args:     []string{"ping"},
-			expected: false,
+			expected: true, // ping queries the root-only server socket
+
 		},
 		{
 			name:     "service fail2ban command",
@@ -350,70 +346,6 @@ func TestSetAndGetSudoChecker(t *testing.T) {
 	}
 }
 
-func TestGetCurrentUserInfo(t *testing.T) {
-	info := GetCurrentUserInfo()
-
-	// Check that basic fields exist
-	requiredFields := []string{
-		"uid",
-		"gid",
-		"euid",
-		"egid",
-		"is_root",
-		"in_sudo_group",
-		"can_use_sudo",
-		"has_sudo_privileges",
-	}
-	for _, field := range requiredFields {
-		if _, exists := info[field]; !exists {
-			t.Errorf("expected field %s to exist in user info", field)
-		}
-	}
-
-	// Check that UID fields are integers
-	if uid, ok := info["uid"].(int); !ok || uid < 0 {
-		t.Errorf("expected uid to be a non-negative integer, got %v", info["uid"])
-	}
-
-	// Check that boolean fields are actually boolean
-	boolFields := []string{"is_root", "in_sudo_group", "can_use_sudo", "has_sudo_privileges"}
-	for _, field := range boolFields {
-		if _, ok := info[field].(bool); !ok {
-			t.Errorf("expected field %s to be boolean, got %T", field, info[field])
-		}
-	}
-}
-
-func TestGetCurrentUserInfoWithMockChecker(t *testing.T) {
-	// Modern standardized setup with automatic cleanup
-	_, cleanup := SetupMockEnvironment(t)
-	defer cleanup()
-
-	// Set custom mock checker with known values for this test
-	mock := &MockSudoChecker{
-		MockIsRoot:      true,
-		MockInSudoGroup: true,
-		MockCanUseSudo:  true,
-	}
-	SetSudoChecker(mock)
-
-	info := GetCurrentUserInfo()
-
-	// Verify mock values are reflected
-	if !info["is_root"].(bool) {
-		t.Errorf("expected is_root to be true, got %v", info["is_root"])
-	}
-	if !info["in_sudo_group"].(bool) {
-		t.Errorf("expected in_sudo_group to be true, got %v", info["in_sudo_group"])
-	}
-	if !info["can_use_sudo"].(bool) {
-		t.Errorf("expected can_use_sudo to be true, got %v", info["can_use_sudo"])
-	}
-	if !info["has_sudo_privileges"].(bool) {
-		t.Errorf("expected has_sudo_privileges to be true, got %v", info["has_sudo_privileges"])
-	}
-}
-
 func TestSudoCheckingIntegration(t *testing.T) {
 	// Test the integration between different sudo checking components
 
@@ -485,13 +417,6 @@ func TestSudoCheckingIntegration(t *testing.T) {
 			}
 			if !tt.expectRequiresPass && err == nil {
 				t.Error("CheckSudoRequirements() passed when it should fail")
-			}
-
-			// Test GetCurrentUserInfo reflects the mock
-			info := GetCurrentUserInfo()
-			if info["has_sudo_privileges"] != tt.expectPrivileges {
-				t.Errorf("GetCurrentUserInfo()['has_sudo_privileges'] = %v, want %v",
-					info["has_sudo_privileges"], tt.expectPrivileges)
 			}
 		})
 	}
@@ -599,7 +524,8 @@ func TestRequiresSudoEdgeCases(t *testing.T) {
 			name:     "fail2ban-client get with only jail",
 			command:  "fail2ban-client",
 			args:     []string{"get", "sshd"},
-			expected: false,
+			expected: true, // any get subcommand queries the root-only socket
+
 		},
 		{
 			name:     "service with no args",

@@ -2,17 +2,12 @@ package fail2ban
 
 import (
 	"context"
+	"fmt"
 	"testing"
 )
 
 // Simple tests to boost coverage for easy functions
 func TestSimpleFunctionsCoverage(t *testing.T) {
-	// Test GetFilterDir
-	dir := GetFilterDir()
-	if dir == "" {
-		t.Error("GetFilterDir returned empty string")
-	}
-
 	// Test GetLogDir
 	logDir := GetLogDir()
 	if logDir == "" {
@@ -26,14 +21,6 @@ func TestSimpleFunctionsCoverage(t *testing.T) {
 		t.Error("SetLogDir/GetLogDir not working properly")
 	}
 	SetLogDir(originalLogDir) // Restore
-
-	// Test SetFilterDir and GetFilterDir
-	originalFilterDir := GetFilterDir()
-	SetFilterDir("/tmp/filters")
-	if GetFilterDir() != "/tmp/filters" {
-		t.Error("SetFilterDir/GetFilterDir not working properly")
-	}
-	SetFilterDir(originalFilterDir) // Restore
 
 	// Test NewMockRunner
 	mockRunner := NewMockRunner()
@@ -53,11 +40,12 @@ func TestSimpleFunctionsCoverage(t *testing.T) {
 func TestRunnerFunctions(t *testing.T) {
 	// Set up mock runner for testing
 	mockRunner := NewMockRunner()
-	mockRunner.SetResponse("test-cmd arg1", []byte("test output"))
-	defer WithTestRunner(t, mockRunner)()
+	mockRunner.SetResponse("fail2ban-client status", []byte("test output"))
+	restoreRunner := WithTestRunner(t, mockRunner)
+	defer restoreRunner()
 
 	// Test RunnerCombinedOutput
-	output, err := RunnerCombinedOutput("test-cmd", "arg1")
+	output, err := RunnerCombinedOutput("fail2ban-client", "status")
 	if err != nil {
 		t.Errorf("RunnerCombinedOutput failed: %v", err)
 	}
@@ -66,7 +54,7 @@ func TestRunnerFunctions(t *testing.T) {
 	}
 
 	// Test RunnerCombinedOutputWithSudo - note it may fallback to non-sudo
-	output, err = RunnerCombinedOutputWithSudo("test-cmd", "arg1")
+	output, err = RunnerCombinedOutputWithSudo("fail2ban-client", "status")
 	if err != nil {
 		t.Errorf("RunnerCombinedOutputWithSudo failed: %v", err)
 	}
@@ -77,14 +65,14 @@ func TestRunnerFunctions(t *testing.T) {
 func TestContextRunnerFunctions(t *testing.T) {
 	// Set up mock runner for testing
 	mockRunner := NewMockRunner()
-	mockRunner.SetResponse("test-cmd arg1", []byte("test output"))
-	SetRunner(mockRunner)
-	defer SetRunner(&OSRunner{}) // Restore real runner
+	mockRunner.SetResponse("fail2ban-client status", []byte("test output"))
+	restoreRunner := WithTestRunner(t, mockRunner)
+	defer restoreRunner()
 
 	ctx := context.Background()
 
 	// Test RunnerCombinedOutputWithContext
-	output, err := RunnerCombinedOutputWithContext(ctx, "test-cmd", "arg1")
+	output, err := RunnerCombinedOutputWithContext(ctx, "fail2ban-client", "status")
 	if err != nil {
 		t.Errorf("RunnerCombinedOutputWithContext failed: %v", err)
 	}
@@ -93,7 +81,7 @@ func TestContextRunnerFunctions(t *testing.T) {
 	}
 
 	// Test RunnerCombinedOutputWithSudoContext - may not use sudo
-	output, err = RunnerCombinedOutputWithSudoContext(ctx, "test-cmd", "arg1")
+	output, err = RunnerCombinedOutputWithSudoContext(ctx, "fail2ban-client", "status")
 	if err != nil {
 		t.Errorf("RunnerCombinedOutputWithSudoContext failed: %v", err)
 	}
@@ -101,25 +89,52 @@ func TestContextRunnerFunctions(t *testing.T) {
 	_ = output
 }
 
-func TestMockRunnerMethods(_ *testing.T) {
+func TestMockRunnerMethods(t *testing.T) {
 	mockRunner := NewMockRunner()
 
-	// Test SetResponse and SetError - just call them for coverage
-	mockRunner.SetResponse("cmd1", []byte("response1"))
-	mockRunner.SetError("cmd2", NewInvalidIPError("test error"))
+	mockRunner.SetResponse("fail2ban-client status", []byte("response1"))
+	mockRunner.SetError("fail2ban-client reload", NewInvalidIPError("test error"))
 
-	// Test GetCalls
-	calls := mockRunner.GetCalls()
-	_ = calls // Just call it
+	out, err := mockRunner.CombinedOutput("fail2ban-client", "status")
+	if err != nil || string(out) != "response1" {
+		t.Fatalf("configured response did not round-trip: out=%q err=%v", out, err)
+	}
+	if _, err := mockRunner.CombinedOutput("fail2ban-client", "reload"); err == nil {
+		t.Fatal("configured error was not returned")
+	}
 
-	// Test CombinedOutput - may fail, that's ok
-	_, _ = mockRunner.CombinedOutput("cmd1")
-	_, _ = mockRunner.CombinedOutput("cmd2")
-
-	// Test context methods
 	ctx := context.Background()
-	_, _ = mockRunner.CombinedOutputWithContext(ctx, "cmd1")
-	_, _ = mockRunner.CombinedOutputWithSudoContext(ctx, "cmd1")
+	out, err = mockRunner.CombinedOutputWithContext(ctx, "fail2ban-client", "status")
+	if err != nil || string(out) != "response1" {
+		t.Fatalf("context variant did not round-trip: out=%q err=%v", out, err)
+	}
+	if _, err := mockRunner.CombinedOutputWithSudoContext(ctx, "fail2ban-client", "status"); err != nil {
+		t.Fatalf("sudo context variant failed: %v", err)
+	}
+
+	calls := mockRunner.GetCalls()
+	if len(calls) < 3 {
+		t.Fatalf("expected at least 3 recorded calls, got %d: %v", len(calls), calls)
+	}
+	if calls[0] != "fail2ban-client status" {
+		t.Fatalf("first recorded call = %q, want %q", calls[0], "fail2ban-client status")
+	}
+
+	// A non-allowlisted command must be rejected by the mock's validation.
+	if _, err := mockRunner.CombinedOutput("cmd1"); err == nil {
+		t.Fatal("expected non-allowlisted command to be rejected")
+	}
+}
+
+// recordingT captures Fatalf calls so assert-helper failure paths are
+// testable without failing the real test.
+type recordingT struct {
+	*testing.T
+	fatal string
+}
+
+func (r *recordingT) Fatalf(format string, args ...any) {
+	r.fatal = fmt.Sprintf(format, args...)
 }
 
 func TestTestHelperFunctions(t *testing.T) {
@@ -129,83 +144,71 @@ func TestTestHelperFunctions(t *testing.T) {
 		t.Error("SetupBasicMockClient returned nil")
 	}
 
-	// Test AssertError - may fail validation, that's ok for coverage
+	// Green paths run against the real t: a helper falsely failing here
+	// fails the test. (No recover() wrappers: t.Fatalf exits via
+	// runtime.Goexit, which recover cannot intercept anyway.)
 	err := NewInvalidIPError("test")
-	defer func() { _ = recover() }() // Recover from any panics
 	AssertError(t, err, true, "test error expected")
-
-	// Test AssertErrorContains
 	AssertErrorContains(t, err, "test", "error should contain test")
-
-	// Test AssertCommandSuccess
 	AssertCommandSuccess(t, nil, "output", "output", "test command success")
-
-	// Test AssertCommandError - just call it for coverage
-	defer func() { _ = recover() }() // In case assertion fails
 	AssertCommandError(t, NewInvalidIPError("test error"), "test error", "test error", "test command error")
-}
 
-func TestSimpleGettersSetters(t *testing.T) {
-	// Test ValidationCache methods
-	cache := NewValidationCache()
-
-	// Test Set and Get
-	cache.Set("test", nil)
-	exists, result := cache.Get("test")
-	if !exists {
-		t.Error("Expected cache entry to exist")
+	// Failure paths run against a recording shim: a helper falsely PASSING
+	// (the dangerous regression) is caught here.
+	rt := &recordingT{T: t}
+	AssertError(rt, nil, true, "should record missing error")
+	if rt.fatal == "" {
+		t.Fatal("AssertError(nil, expectError=true) did not fail")
 	}
-	if result != nil {
-		t.Error("Expected nil result")
+	rt = &recordingT{T: t}
+	AssertErrorContains(rt, NewInvalidIPError("test"), "absent-substring", "should record mismatch")
+	if rt.fatal == "" {
+		t.Fatal("AssertErrorContains with absent substring did not fail")
 	}
-
-	// Test Size
-	if cache.Size() != 1 {
-		t.Errorf("Expected cache size 1, got %d", cache.Size())
+	rt = &recordingT{T: t}
+	AssertCommandSuccess(rt, NewInvalidIPError("boom"), "output", "output", "should record command error")
+	if rt.fatal == "" {
+		t.Fatal("AssertCommandSuccess with an error did not fail")
 	}
-
-	// Test Clear
-	cache.Clear()
-	if cache.Size() != 0 {
-		t.Errorf("Expected cache size 0 after clear, got %d", cache.Size())
+	rt = &recordingT{T: t}
+	AssertCommandError(rt, nil, "out", "expected", "should record missing error")
+	if rt.fatal == "" {
+		t.Fatal("AssertCommandError with nil error did not fail")
 	}
-
-	// Test SetMetricsRecorder and getMetricsRecorder
-	originalRecorder := getMetricsRecorder()
-	mockRecorder := &MockMetricsRecorder{}
-	SetMetricsRecorder(mockRecorder)
-
-	retrievedRecorder := getMetricsRecorder()
-	if retrievedRecorder != mockRecorder {
-		t.Error("SetMetricsRecorder/getMetricsRecorder not working properly")
-	}
-
-	SetMetricsRecorder(originalRecorder) // Restore
 }
 
 func TestRealClientHelperMethods(t *testing.T) {
-	// We can't test real client methods without fail2ban installed,
-	// but we can test some safe methods that may exist
-
-	// Test GetLogLines and GetLogLinesWithLimit exist (will fail gracefully)
 	_, cleanup := SetupMockEnvironmentWithSudo(t, false)
 	defer cleanup()
+	StandardMockSetup(MustMockRunner(t)) // NewClient's version check needs a response
 
-	// Use valid temp directories
+	// NewClient against valid temp directories must succeed in the test
+	// environment; skipping here would hide a real NewClient regression
+	// behind a green skip.
+	t.Setenv("ALLOW_DEV_PATHS", "1") // temp dirs live under /tmp
 	tmpDir := t.TempDir()
 	client, err := NewClient(tmpDir, tmpDir)
 	if err != nil {
-		// If client creation fails, skip the rest
-		t.Skipf("NewClient failed (expected): %v", err)
-		return
+		t.Fatalf("NewClient with valid temp dirs failed: %v", err)
 	}
 
-	// These will fail due to no log files, but test the methods exist
-	_, _ = client.GetLogLines("sshd", "192.168.1.1")
-	_, _ = client.GetLogLinesWithLimit("sshd", "192.168.1.1", 10)
+	// An empty log directory yields empty results without error.
+	lines, err := client.GetLogLines("sshd", "192.168.1.1")
+	if err != nil || len(lines) != 0 {
+		t.Fatalf("GetLogLines on empty dir: lines=%v err=%v", lines, err)
+	}
+	lines, err = client.GetLogLinesWithLimit("sshd", "192.168.1.1", 10)
+	if err != nil || len(lines) != 0 {
+		t.Fatalf("GetLogLinesWithLimit on empty dir: lines=%v err=%v", lines, err)
+	}
 
-	// Test context version
 	ctx := context.Background()
-	_, _ = client.GetLogLinesWithContext(ctx, "sshd", "192.168.1.1")
-	_, _ = client.GetLogLinesWithLimitAndContext(ctx, "sshd", "192.168.1.1", 10)
+	lines, err = client.GetLogLinesWithContext(ctx, "sshd", "192.168.1.1")
+	if err != nil || len(lines) != 0 {
+		t.Fatalf("GetLogLinesWithContext on empty dir: lines=%v err=%v", lines, err)
+	}
+	lines, err = client.GetLogLinesWithLimitAndContext(ctx, "sshd", "192.168.1.1", 10)
+	if err != nil || len(lines) != 0 {
+		t.Fatalf("GetLogLinesWithLimitAndContext on empty dir: lines=%v err=%v", lines, err)
+	}
 }

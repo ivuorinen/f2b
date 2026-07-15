@@ -1,8 +1,6 @@
-// Package shared provides constants used across all packages in the f2b project.
+// Package constants provides constants used across all packages in the f2b project.
 // This file consolidates all constants to ensure consistency and maintainability.
-//
-//nolint:revive // Package name 'shared' is intentional for project-wide constants
-package shared
+package constants
 
 import "time"
 
@@ -112,9 +110,6 @@ const (
 const (
 	// DefaultFilePermissions for log files and temporary files
 	DefaultFilePermissions = 0600
-
-	// DefaultDirectoryPermissions for created directories
-	DefaultDirectoryPermissions = 0750
 )
 
 // contextKey is a custom type for context keys to avoid collisions
@@ -140,11 +135,10 @@ const (
 
 // Fail2ban status codes
 const (
-	// Fail2BanStatusSuccess indicates successful operation (ban/unban succeeded)
-	Fail2BanStatusSuccess = "0"
-
-	// Fail2BanStatusAlreadyProcessed indicates IP was already banned/unbanned
-	Fail2BanStatusAlreadyProcessed = "1"
+	// Fail2BanStatusSuccess is the count fail2ban >= 0.11 prints when an IP is
+	// newly banned/unbanned by `set <jail> banip/unbanip` (1 address affected).
+	// Used by test mocks to simulate a successful operation.
+	Fail2BanStatusSuccess = "1"
 )
 
 // Fail2ban command names
@@ -206,17 +200,8 @@ const (
 	// ActionUnbanIP unbans an IP address
 	ActionUnbanIP = "unbanip"
 
-	// ActionReload reloads fail2ban configuration
-	ActionReload = "reload"
-
-	// ActionRestart restarts fail2ban
-	ActionRestart = "restart"
-
 	// ActionStart represents the start action (systemctl start, duration markers)
 	ActionStart = "start"
-
-	// ActionStop stops fail2ban
-	ActionStop = "stop"
 
 	// ActionBanned gets banned IPs
 	ActionBanned = "banned"
@@ -460,49 +445,4 @@ const (
 
 	// MsgInvalidTimeout is the message for invalid timeout values
 	MsgInvalidTimeout = "Invalid timeout value, using default"
-)
-
-// Metrics output format strings
-const (
-	// MetricsFmtOperationHeader is the format for operation headers
-	MetricsFmtOperationHeader = "  %s:\n"
-
-	// MetricsFmtLatencyUnder1ms is the format for <1ms latency bucket
-	MetricsFmtLatencyUnder1ms = "    < 1ms: %d\n"
-
-	// MetricsFmtLatencyUnder10ms is the format for <10ms latency bucket
-	MetricsFmtLatencyUnder10ms = "    < 10ms: %d\n"
-
-	// MetricsFmtLatencyUnder100ms is the format for <100ms latency bucket
-	MetricsFmtLatencyUnder100ms = "    < 100ms: %d\n"
-
-	// MetricsFmtLatencyUnder1s is the format for <1s latency bucket
-	MetricsFmtLatencyUnder1s = "    < 1s: %d\n"
-
-	// MetricsFmtLatencyUnder10s is the format for <10s latency bucket
-	MetricsFmtLatencyUnder10s = "    < 10s: %d\n"
-
-	// MetricsFmtLatencyOver10s is the format for >10s latency bucket
-	MetricsFmtLatencyOver10s = "    > 10s: %d\n"
-
-	// MetricsFmtAverageLatency is the format for average latency in buckets
-	MetricsFmtAverageLatency = "    Average: %.2f ms\n"
-
-	// MetricsFmtTotalFailures is the format for total failures
-	MetricsFmtTotalFailures = "  Total Failures: %d\n"
-
-	// MetricsFmtTotalExecutions is the format for total executions
-	MetricsFmtTotalExecutions = "  Total Executions: %d\n"
-
-	// MetricsFmtTotalOperations is the format for total operations
-	MetricsFmtTotalOperations = "  Total Operations: %d\n"
-
-	// MetricsFmtAverageLatencyTop is the format for average latency (top-level)
-	MetricsFmtAverageLatencyTop = "  Average Latency: %.2f ms\n"
-
-	// MetricsFmtBanOperations is the format for ban operations with failures
-	MetricsFmtBanOperations = "  Ban Operations: %d (failures: %d)\n"
-
-	// MetricsFmtUnbanOperations is the format for unban operations with failures
-	MetricsFmtUnbanOperations = "  Unban Operations: %d (failures: %d)\n"
 )

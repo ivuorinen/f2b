@@ -1,25 +1,24 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/ivuorinen/f2b/constants"
 	"github.com/ivuorinen/f2b/fail2ban"
-	"github.com/ivuorinen/f2b/shared"
 )
 
 // ListJailsCmd returns the list-jails command with injected client and config
 func ListJailsCmd(client fail2ban.Client, config *Config) *cobra.Command {
 	return NewCommand(
-		shared.CLICmdListJails,
+		constants.CLICmdListJails,
 		"List all jails",
 		[]string{"ls-jails", "jails"},
 		func(cmd *cobra.Command, _ []string) error {
 			// Create timeout context for listing jails
-			ctx, cancel := context.WithTimeout(context.Background(), config.CommandTimeout)
+			ctx, cancel := createTimeoutContext(cmd.Context(), config)
 			defer cancel()
 
 			jails, err := client.ListJailsWithContext(ctx)

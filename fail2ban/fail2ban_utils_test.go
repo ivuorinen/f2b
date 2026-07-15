@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivuorinen/f2b/shared"
+	"github.com/ivuorinen/f2b/constants"
 
 	"github.com/ivuorinen/f2b/fail2ban"
 )
@@ -54,13 +54,16 @@ func TestSetRunner(t *testing.T) {
 		Errors:    make(map[string]error),
 	}
 
-	// Set the test runner
+	// Set the test runner (and restore the original afterwards so later
+	// tests don't inherit this mock)
+	orig := fail2ban.GetRunner()
+	t.Cleanup(func() { fail2ban.SetRunner(orig) })
 	fail2ban.SetRunner(testRunner)
 
 	// Test that the runner is used
-	testRunner.SetResponse("test-command arg1 arg2", []byte("test-output"))
+	testRunner.SetResponse("fail2ban-client status sshd", []byte("test-output"))
 
-	output, err := fail2ban.RunnerCombinedOutput("test-command", "arg1", "arg2")
+	output, err := fail2ban.RunnerCombinedOutput("fail2ban-client", "status", "sshd")
 	fail2ban.AssertError(t, err, false, "RunnerCombinedOutput")
 
 	if string(output) != "test-output" {
@@ -68,18 +71,13 @@ func TestSetRunner(t *testing.T) {
 	}
 }
 
-// TestOSRunnerWithoutSudo tests the OS runner without sudo
+// TestOSRunnerWithoutSudo tests that the OS runner enforces the command
+// allowlist: a command outside it must be rejected before any exec.
 func TestOSRunnerWithoutSudo(t *testing.T) {
 	runner := &fail2ban.OSRunner{}
 
-	// Test with a simple command that should work
-	output, err := runner.CombinedOutput("echo", "hello")
-	if err != nil {
-		t.Skipf("echo command not available in test environment: %v", err)
-	}
-
-	if strings.TrimSpace(string(output)) != "hello" {
-		t.Errorf("expected output %q, got %q", "hello", strings.TrimSpace(string(output)))
+	if _, err := runner.CombinedOutput("echo", "hello"); err == nil {
+		t.Fatal("expected non-allowlisted command to be rejected")
 	}
 }
 
@@ -89,14 +87,14 @@ func TestOSRunnerWithSudo(t *testing.T) {
 	orig := fail2ban.GetRunner()
 	t.Cleanup(func() { fail2ban.SetRunner(orig) })
 	mock := &fail2ban.MockRunner{
-		Responses: map[string][]byte{"sudo echo hello": []byte("hello\n")},
+		Responses: map[string][]byte{"sudo fail2ban-client status": []byte("ok\n")},
 		Errors:    map[string]error{},
 	}
 	fail2ban.SetRunner(mock)
-	out, err := fail2ban.RunnerCombinedOutput("sudo", "echo", "hello")
+	out, err := fail2ban.RunnerCombinedOutput("sudo", "fail2ban-client", "status")
 	fail2ban.AssertError(t, err, false, "RunnerCombinedOutput with sudo (mocked)")
-	if strings.TrimSpace(string(out)) != "hello" {
-		t.Fatalf("expected %q, got %q", "hello", strings.TrimSpace(string(out)))
+	if strings.TrimSpace(string(out)) != "ok" {
+		t.Fatalf("expected %q, got %q", "ok", strings.TrimSpace(string(out)))
 	}
 }
 
@@ -345,18 +343,20 @@ func TestBanRecordFormatting(t *testing.T) {
 	mock.SetResponse("fail2ban-client ping", []byte("pong"))
 	mock.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
 
-	// Create a mock ban record with specific times
-	banTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
-	unbanTime := time.Date(2024, 1, 1, 14, 30, 45, 0, time.UTC) // 2 hours, 30 minutes, 45 seconds later
+	// Create a mock ban record with specific times. fail2ban-client emits
+	// zone-less local timestamps and the parser interprets them in the local
+	// zone, so build the expected times in time.Local to match.
+	banTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.Local)
+	unbanTime := time.Date(2024, 1, 1, 14, 30, 45, 0, time.Local) // 2 hours, 30 minutes, 45 seconds later
 
 	mockBanOutput := fmt.Sprintf("192.168.1.100 %s + %s extra field",
 		banTime.Format("2006-01-02 15:04:05"),
 		unbanTime.Format("2006-01-02 15:04:05"))
 	mock.SetResponse("fail2ban-client get sshd banip --with-time", []byte(mockBanOutput))
 
-	fail2ban.SetRunner(mock)
+	t.Cleanup(fail2ban.WithTestRunner(t, mock))
 
-	client, err := fail2ban.NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
+	client, err := fail2ban.NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
 	fail2ban.AssertError(t, err, false, "create client")
 
 	records, err := client.GetBanRecords([]string{"sshd"})
@@ -446,9 +446,9 @@ func TestVersionComparisonEdgeCases(t *testing.T) {
 				mock.SetResponse("fail2ban-client ping", []byte("pong"))
 				mock.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
 			}
-			fail2ban.SetRunner(mock)
+			t.Cleanup(fail2ban.WithTestRunner(t, mock))
 
-			_, err := fail2ban.NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
+			_, err := fail2ban.NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
 
 			fail2ban.AssertError(t, err, tt.expectError, tt.name)
 		})
@@ -509,9 +509,9 @@ func TestClientInitializationEdgeCases(t *testing.T) {
 				Errors:    make(map[string]error),
 			}
 			tt.setupMock(mock)
-			fail2ban.SetRunner(mock)
+			t.Cleanup(fail2ban.WithTestRunner(t, mock))
 
-			_, err := fail2ban.NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
+			_, err := fail2ban.NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
 
 			fail2ban.AssertError(t, err, tt.expectError, tt.name)
 			if tt.expectError && tt.errorMsg != "" {
@@ -533,9 +533,9 @@ func TestConcurrentAccess(t *testing.T) {
 	mock.SetResponse("fail2ban-client ping", []byte("pong"))
 	mock.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
 	mock.SetResponse("fail2ban-client banned 192.168.1.100", []byte(`["sshd"]`))
-	fail2ban.SetRunner(mock)
+	t.Cleanup(fail2ban.WithTestRunner(t, mock))
 
-	client, err := fail2ban.NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
+	client, err := fail2ban.NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
 	fail2ban.AssertError(t, err, false, "create client for concurrency test")
 
 	// Run concurrent operations
@@ -543,7 +543,7 @@ func TestConcurrentAccess(t *testing.T) {
 	errors := make(chan error, 10)
 
 	// Start multiple goroutines
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		go func() {
 			defer func() { done <- true }()
 
@@ -563,7 +563,7 @@ func TestConcurrentAccess(t *testing.T) {
 	}
 
 	// Wait for all goroutines to complete
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		<-done
 	}
 
@@ -583,11 +583,11 @@ func TestMemoryUsage(t *testing.T) {
 	mock.SetResponse("fail2ban-client -V", []byte("0.11.2"))
 	mock.SetResponse("fail2ban-client ping", []byte("pong"))
 	mock.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-	fail2ban.SetRunner(mock)
+	t.Cleanup(fail2ban.WithTestRunner(t, mock))
 
 	// Create and destroy many clients
-	for i := 0; i < 1000; i++ {
-		client, err := fail2ban.NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
+	for range 1000 {
+		client, err := fail2ban.NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
 		fail2ban.AssertError(t, err, false, "create client in memory test")
 
 		// Use the client

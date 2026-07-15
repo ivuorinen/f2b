@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ivuorinen/f2b/shared"
+	"github.com/ivuorinen/f2b/constants"
 )
 
 // parseTimestamp extracts and parses timestamp from log line
@@ -114,6 +114,26 @@ func TestParseLogLineWithRealData(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			testLogLineParsing(t, tt.line, tt.wantJail, tt.wantIP, tt.wantEvent, tt.wantTime, tt.wantErr)
+
+			// Exercise the PRODUCTION filter path (passesFilters / containsIPToken),
+			// not just the test-local extractors above — this is what GetLogLines
+			// actually uses to decide whether a line matches a jail/IP query.
+			if tt.wantJail != "" {
+				if !passesFilters(tt.line, LogReadConfig{JailFilter: tt.wantJail}) {
+					t.Errorf("passesFilters(jail=%q) = false, want true for line %q", tt.wantJail, tt.line)
+				}
+				if passesFilters(tt.line, LogReadConfig{JailFilter: "no-such-jail"}) {
+					t.Errorf("passesFilters(jail=no-such-jail) = true, want false for line %q", tt.line)
+				}
+			}
+			if tt.wantIP != "" {
+				if !containsIPToken(tt.line, tt.wantIP) {
+					t.Errorf("containsIPToken(%q) = false, want true for line %q", tt.wantIP, tt.line)
+				}
+				if containsIPToken(tt.line, "203.0.113.255") {
+					t.Errorf("containsIPToken(absent IP) = true, want false for line %q", tt.line)
+				}
+			}
 		})
 	}
 }
@@ -348,7 +368,7 @@ func TestLogFileRotationPatterns(t *testing.T) {
 
 	for _, file := range testFiles {
 		path := filepath.Join(tempDir, file)
-		if strings.HasSuffix(file, shared.GzipExtension) {
+		if strings.HasSuffix(file, constants.GzipExtension) {
 			// Create compressed file
 			content := []byte("test log content")
 			createTestGzipFile(t, path, content)
@@ -360,20 +380,35 @@ func TestLogFileRotationPatterns(t *testing.T) {
 		}
 	}
 
-	// Get log files (simulate the GetLogFiles function)
 	files, err := filepath.Glob(filepath.Join(tempDir, "fail2ban*"))
 	if err != nil {
-		t.Fatalf("GetLogFiles failed: %v", err)
+		t.Fatalf("glob failed: %v", err)
 	}
 
-	// Should get all files in order
-	if len(files) != len(testFiles) {
-		t.Errorf("Expected %d files, got %d", len(testFiles), len(files))
+	// Drive the PRODUCTION rotation parser, not a filepath.Glob stand-in.
+	currentLog, rotated := parseLogFiles(files)
+
+	// The active log must be identified as the current log.
+	if filepath.Base(currentLog) != constants.LogFileName {
+		t.Errorf("currentLog = %q, want base %q", currentLog, constants.LogFileName)
 	}
 
-	// Verify fail2ban.log is first
-	if len(files) > 0 && !strings.HasSuffix(files[0], "fail2ban.log") {
-		t.Errorf("Expected fail2ban.log to be first, got %s", files[0])
+	// Rotated logs are ordered oldest-first (num descending). Numbered rotations
+	// .1/.2.gz/.3.gz carry nums 1/2/3; the dateext .20250720 negates to a large
+	// negative key (newest); "fail2ban.log.old" matches no scheme and is dropped.
+	wantRotatedOrder := []string{
+		"fail2ban.log.3.gz",
+		"fail2ban.log.2.gz",
+		"fail2ban.log.1",
+		"fail2ban.log.20250720",
+	}
+	if len(rotated) != len(wantRotatedOrder) {
+		t.Fatalf("rotated count = %d (%v), want %d", len(rotated), rotated, len(wantRotatedOrder))
+	}
+	for i, want := range wantRotatedOrder {
+		if got := filepath.Base(rotated[i].path); got != want {
+			t.Errorf("rotated[%d] = %q, want %q", i, got, want)
+		}
 	}
 }
 
@@ -446,4 +481,87 @@ func TestMultiJailLogParsing(t *testing.T) {
 func isNumeric(s string) bool {
 	_, err := strconv.Atoi(s)
 	return err == nil
+}
+
+// TestParseLogFilesOrdering verifies rotated logs are ordered oldest-first for
+// both logrotate schemes: numbered (higher N = older) and dateext (higher
+// date = newer). A newest-first order would make appendAndTrim keep the
+// oldest rotated lines and drop the newest when MaxLines trims.
+func TestParseLogFilesOrdering(t *testing.T) {
+	t.Run("numbered scheme", func(t *testing.T) {
+		current, rotated := parseLogFiles([]string{
+			"/var/log/fail2ban.log.1",
+			"/var/log/fail2ban.log",
+			"/var/log/fail2ban.log.3.gz",
+			"/var/log/fail2ban.log.2.gz",
+		})
+		if current != "/var/log/fail2ban.log" {
+			t.Fatalf("current = %q", current)
+		}
+		want := []string{
+			"/var/log/fail2ban.log.3.gz",
+			"/var/log/fail2ban.log.2.gz",
+			"/var/log/fail2ban.log.1",
+		}
+		if len(rotated) != len(want) {
+			t.Fatalf("rotated = %d files, want %d", len(rotated), len(want))
+		}
+		for i, r := range rotated {
+			if r.path != want[i] {
+				t.Errorf("rotated[%d] = %q, want %q", i, r.path, want[i])
+			}
+		}
+	})
+
+	t.Run("dateext scheme oldest first", func(t *testing.T) {
+		current, rotated := parseLogFiles([]string{
+			"/var/log/fail2ban.log-20240301",
+			"/var/log/fail2ban.log",
+			"/var/log/fail2ban.log-20240101.gz",
+			"/var/log/fail2ban.log-20240201",
+		})
+		if current != "/var/log/fail2ban.log" {
+			t.Fatalf("current = %q", current)
+		}
+		want := []string{
+			"/var/log/fail2ban.log-20240101.gz",
+			"/var/log/fail2ban.log-20240201",
+			"/var/log/fail2ban.log-20240301",
+		}
+		if len(rotated) != len(want) {
+			t.Fatalf("rotated = %d files, want %d", len(rotated), len(want))
+		}
+		for i, r := range rotated {
+			if r.path != want[i] {
+				t.Errorf("rotated[%d] = %q, want %q", i, r.path, want[i])
+			}
+		}
+	})
+}
+
+// TestContainsIPToken covers whole-token matching including IPv4-mapped IPv6
+// and IP:port forms, which a strict "no adjacent ':'" boundary would miss.
+func TestContainsIPToken(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+		ip   string
+		want bool
+	}{
+		{"exact token", "Ban 192.168.1.100", "192.168.1.100", true},
+		{"longer address suffix", "Ban 192.168.1.100", "192.168.1.10", false},
+		{"longer address prefix", "Ban 1192.168.1.100", "192.168.1.100", false},
+		{"ipv4-mapped ipv6", "Ban ::ffff:192.168.1.100", "192.168.1.100", true},
+		{"ipv4 with port", "connection from 192.168.1.100:2222", "192.168.1.100", true},
+		{"ipv4-mapped longer address", "Ban ::ffff:192.168.1.100", "92.168.1.100", false},
+		{"ipv6 token", "Ban 2001:db8::1", "2001:db8::1", true},
+		{"ipv6 inside longer address", "Ban 2001:db8::12", "2001:db8::1", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := containsIPToken(tt.line, tt.ip); got != tt.want {
+				t.Errorf("containsIPToken(%q, %q) = %v, want %v", tt.line, tt.ip, got, tt.want)
+			}
+		})
+	}
 }

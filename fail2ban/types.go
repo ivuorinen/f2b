@@ -16,21 +16,21 @@ type BanRecord struct {
 }
 
 // Fields represents a map of structured log fields (decoupled from logrus)
-type Fields map[string]interface{}
+type Fields map[string]any
 
 // LoggerEntry represents a structured logging entry that can be chained
 type LoggerEntry interface {
-	WithField(key string, value interface{}) LoggerEntry
+	WithField(key string, value any) LoggerEntry
 	WithFields(fields Fields) LoggerEntry
 	WithError(err error) LoggerEntry
-	Debug(args ...interface{})
-	Info(args ...interface{})
-	Warn(args ...interface{})
-	Error(args ...interface{})
-	Debugf(format string, args ...interface{})
-	Infof(format string, args ...interface{})
-	Warnf(format string, args ...interface{})
-	Errorf(format string, args ...interface{})
+	Debug(args ...any)
+	Info(args ...any)
+	Warn(args ...any)
+	Error(args ...any)
+	Debugf(format string, args ...any)
+	Infof(format string, args ...any)
+	Warnf(format string, args ...any)
+	Errorf(format string, args ...any)
 }
 
 // LoggerInterface defines the top-level logging interface (decoupled from logrus).

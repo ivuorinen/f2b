@@ -21,7 +21,7 @@ func setupMockForBannedInTest(ip, mockResponse string) *MockRunner {
 
 func TestBannedInWithContext_SingleJail(t *testing.T) {
 	mock := setupMockForBannedInTest("192.168.1.100", `["sshd"]`)
-	SetRunner(mock)
+	t.Cleanup(WithTestRunner(t, mock))
 
 	client, err := NewClient("/var/log", "/etc/fail2ban/filter.d")
 	if err != nil {
@@ -50,7 +50,7 @@ func TestBannedInWithContext_SingleJail(t *testing.T) {
 
 func TestBannedInWithContext_MultipleJails(t *testing.T) {
 	mock := setupMockForBannedInTest("192.168.1.100", `["sshd", "apache"]`)
-	SetRunner(mock)
+	t.Cleanup(WithTestRunner(t, mock))
 
 	client, err := NewClient("/var/log", "/etc/fail2ban/filter.d")
 	if err != nil {
@@ -80,7 +80,7 @@ func TestBannedInWithContext_MultipleJails(t *testing.T) {
 
 func TestBannedInWithContext_NotBanned(t *testing.T) {
 	mock := setupMockForBannedInTest("192.168.1.100", `[]`)
-	SetRunner(mock)
+	t.Cleanup(WithTestRunner(t, mock))
 
 	client, err := NewClient("/var/log", "/etc/fail2ban/filter.d")
 	if err != nil {
@@ -109,7 +109,7 @@ func TestBannedInWithContext_NotBanned(t *testing.T) {
 
 func TestBannedInWithContext_InvalidIP(t *testing.T) {
 	mock := setupMockForBannedInTest("invalid-ip", "")
-	SetRunner(mock)
+	t.Cleanup(WithTestRunner(t, mock))
 
 	client, err := NewClient("/var/log", "/etc/fail2ban/filter.d")
 	if err != nil {

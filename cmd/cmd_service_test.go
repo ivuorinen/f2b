@@ -119,7 +119,12 @@ func TestServiceCmdValidActions(t *testing.T) {
 			NewCommandTest(t, "service").
 				WithArgs(action).
 				WithServiceSetup(func(mock *fail2ban.MockRunner) {
+					// enable/disable route through systemctl; everything else
+					// through service(8).
 					command := "sudo service fail2ban " + action
+					if action == "enable" || action == "disable" {
+						command = "sudo systemctl " + action + " fail2ban"
+					}
 					mock.SetResponse(command, []byte(wantOutput))
 				}).
 				ExpectSuccess().
@@ -213,7 +218,12 @@ func TestServiceCmdValidActionsOnly(t *testing.T) {
 			NewCommandTest(t, "service").
 				WithArgs(action).
 				WithServiceSetup(func(mock *fail2ban.MockRunner) {
+					// enable/disable route through systemctl; everything else
+					// through service(8).
 					command := "sudo service fail2ban " + action
+					if action == "enable" || action == "disable" {
+						command = "sudo systemctl " + action + " fail2ban"
+					}
 					mock.SetResponse(command, []byte(wantOutput))
 				}).
 				ExpectSuccess().
@@ -248,14 +258,14 @@ func BenchmarkServiceCmd(b *testing.B) {
 	defer cleanup()
 
 	// Get the mock runner and configure it
-	mock := fail2ban.GetRunner().(*fail2ban.MockRunner)
+	mock := fail2ban.MustMockRunner(b)
 	mock.SetResponse("sudo service fail2ban status", []byte("fail2ban is running"))
 
 	// Framework could be used here but benchmark needs manual approach for performance:
 	config := &Config{Format: "plain"}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		cmd := ServiceCmd(config)
 		oldStdout := os.Stdout
 		r, w, err := os.Pipe()

@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/ivuorinen/f2b/shared"
+	"github.com/ivuorinen/f2b/constants"
 )
 
 // TestValidateConfig tests the ValidateConfig method
@@ -87,9 +87,9 @@ func TestValidateConfig(t *testing.T) {
 				LogDir:          "/var/log/fail2ban",
 				FilterDir:       "/etc/fail2ban/filter.d",
 				Format:          PlainFormat,
-				CommandTimeout:  shared.MaxCommandTimeout + time.Second,
+				CommandTimeout:  constants.MaxCommandTimeout + time.Second,
 				FileTimeout:     3 * time.Second,
-				ParallelTimeout: shared.MaxCommandTimeout + time.Second + 1,
+				ParallelTimeout: constants.MaxCommandTimeout + time.Second + 1,
 			},
 			expectError: true,
 			errorMsg:    "command timeout too large",
@@ -114,8 +114,8 @@ func TestValidateConfig(t *testing.T) {
 				FilterDir:       "/etc/fail2ban/filter.d",
 				Format:          PlainFormat,
 				CommandTimeout:  5 * time.Second,
-				FileTimeout:     shared.MaxFileTimeout + time.Second,
-				ParallelTimeout: shared.MaxFileTimeout + time.Second + 1,
+				FileTimeout:     constants.MaxFileTimeout + time.Second,
+				ParallelTimeout: constants.MaxFileTimeout + time.Second + 1,
 			},
 			expectError: true,
 			errorMsg:    "file timeout too large",
@@ -141,7 +141,7 @@ func TestValidateConfig(t *testing.T) {
 				Format:          PlainFormat,
 				CommandTimeout:  5 * time.Second,
 				FileTimeout:     3 * time.Second,
-				ParallelTimeout: shared.MaxParallelTimeout + time.Second,
+				ParallelTimeout: constants.MaxParallelTimeout + time.Second,
 			},
 			expectError: true,
 			errorMsg:    "parallel timeout too large",

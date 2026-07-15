@@ -77,25 +77,6 @@ func TestCommandTestFrameworkCoverage(t *testing.T) {
 
 // TestStringHelpers tests the new string helper functions for code deduplication
 func TestStringHelpers(t *testing.T) {
-	t.Run("TrimmedString", func(t *testing.T) {
-		tests := []struct {
-			input    string
-			expected string
-		}{
-			{"  hello  ", "hello"},
-			{"\n\tworld\t\n", "world"},
-			{"", ""},
-			{"   ", ""},
-		}
-
-		for _, tt := range tests {
-			result := TrimmedString(tt.input)
-			if result != tt.expected {
-				t.Errorf("TrimmedString(%q) = %q, want %q", tt.input, result, tt.expected)
-			}
-		}
-	})
-
 	t.Run("IsEmptyString", func(t *testing.T) {
 		tests := []struct {
 			input    string
@@ -112,26 +93,6 @@ func TestStringHelpers(t *testing.T) {
 			result := IsEmptyString(tt.input)
 			if result != tt.expected {
 				t.Errorf("IsEmptyString(%q) = %v, want %v", tt.input, result, tt.expected)
-			}
-		}
-	})
-
-	t.Run("NonEmptyString", func(t *testing.T) {
-		tests := []struct {
-			input    string
-			expected bool
-		}{
-			{"", false},
-			{"   ", false},
-			{"\n\t  \n", false},
-			{"hello", true},
-			{"  hello  ", true},
-		}
-
-		for _, tt := range tests {
-			result := NonEmptyString(tt.input)
-			if result != tt.expected {
-				t.Errorf("NonEmptyString(%q) = %v, want %v", tt.input, result, tt.expected)
 			}
 		}
 	})
@@ -208,6 +169,7 @@ func TestCommandTestBuilder_Run(t *testing.T) {
 
 	if result == nil {
 		t.Fatal("Run should return a non-nil result")
+		return
 	}
 
 	if result.name != "version" {
@@ -253,7 +215,10 @@ func TestCommandTestBuilder_MethodChaining(t *testing.T) {
 	}
 }
 
-// TestCommandTestResult_AssertExactOutput tests exact output matching
+// TestCommandTestResult_AssertExactOutput tests exact output matching in both
+// directions: the green path must pass, and a mismatch must call Fatalf — the
+// regression a green-path-only test can never catch is an assert that passes
+// unconditionally.
 func TestCommandTestResult_AssertExactOutput(t *testing.T) {
 	result := &CommandTestResult{
 		Output: "exact output",
@@ -261,12 +226,18 @@ func TestCommandTestResult_AssertExactOutput(t *testing.T) {
 		t:      t,
 		name:   "exact-test",
 	}
-
-	// This should not panic since output matches exactly
 	result.AssertExactOutput("exact output")
+
+	mock := &MockTestingT{}
+	bad := &CommandTestResult{Output: "actual", t: mock, name: "exact-mismatch"}
+	bad.AssertExactOutput("expected")
+	if !mock.fatalfCalled {
+		t.Fatal("AssertExactOutput did not fail on mismatching output")
+	}
 }
 
-// TestCommandTestResult_AssertContains tests substring matching
+// TestCommandTestResult_AssertContains tests substring matching in both
+// directions.
 func TestCommandTestResult_AssertContains(t *testing.T) {
 	result := &CommandTestResult{
 		Output: "this is test output",
@@ -274,12 +245,18 @@ func TestCommandTestResult_AssertContains(t *testing.T) {
 		t:      t,
 		name:   "contains-test",
 	}
-
-	// This should not panic since output contains the substring
 	result.AssertContains("test")
+
+	mock := &MockTestingT{}
+	bad := &CommandTestResult{Output: "this is test output", t: mock, name: "contains-mismatch"}
+	bad.AssertContains("absent-substring")
+	if !mock.fatalfCalled {
+		t.Fatal("AssertContains did not fail on a missing substring")
+	}
 }
 
 // TestCommandTestResult_AssertNotContains tests negative substring matching
+// in both directions.
 func TestCommandTestResult_AssertNotContains(t *testing.T) {
 	result := &CommandTestResult{
 		Output: "this is test output",
@@ -287,9 +264,14 @@ func TestCommandTestResult_AssertNotContains(t *testing.T) {
 		t:      t,
 		name:   "not-contains-test",
 	}
-
-	// This should not panic since output doesn't contain "error"
 	result.AssertNotContains("error")
+
+	mock := &MockTestingT{}
+	bad := &CommandTestResult{Output: "this is test output", t: mock, name: "not-contains-mismatch"}
+	bad.AssertNotContains("test")
+	if !mock.fatalfCalled {
+		t.Fatal("AssertNotContains did not fail on a present substring")
+	}
 }
 
 // TestEnvironmentCleanup tests the environment cleanup functionality
@@ -370,7 +352,8 @@ func TestMockClientBuilder_WithBannedIP(t *testing.T) {
 		t.Error("BanResults should be initialized")
 	}
 
-	if status, ok := client.BanResults["192.168.1.100"]["sshd"]; !ok || status != 1 {
+	// BanResults is jail-major (jail -> ip -> code); 1 = already banned.
+	if status, ok := client.BanResults["sshd"]["192.168.1.100"]; !ok || status != 1 {
 		t.Error("IP should be marked as banned in jail")
 	}
 }

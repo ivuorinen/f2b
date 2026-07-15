@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivuorinen/f2b/shared"
+	"github.com/ivuorinen/f2b/constants"
 
 	"github.com/ivuorinen/f2b/fail2ban"
 )
@@ -98,20 +98,17 @@ func TestLogsWatchCmd(t *testing.T) {
 				return
 			}
 
-			// For success cases, test that the command can be set up without error
-			// We can't easily test the actual watching behavior in unit tests
-			// without complex goroutine management, so we test the setup
-			cmd.SetArgs(tt.args)
-
-			// Test that we can create the command and it has the expected structure
-			if cmd.Use != "logs-watch [jail] [ip]" {
-				t.Errorf("unexpected command use: %s", cmd.Use)
+			// Success cases: run the command with an already-canceled context so
+			// it prints the initial (jail/IP-filtered, limit-tailed) lines and
+			// then exits the watch loop at <-ctx.Done() instead of blocking.
+			watchCtx, cancel := context.WithCancel(context.Background())
+			cancel()
+			if err := cmd.ExecuteContext(watchCtx); err != nil {
+				t.Fatalf("unexpected error: %v", err)
 			}
-
-			// Test that the limit flag exists
-			limitFlag := cmd.Flags().Lookup("limit")
-			if limitFlag == nil {
-				t.Fatalf("limit flag should exist")
+			got := strings.TrimRight(outBuf.String(), "\n")
+			if got != tt.wantOutput {
+				t.Errorf("output = %q, want %q", got, tt.wantOutput)
 			}
 		})
 	}
@@ -128,22 +125,31 @@ func TestLogsWatchCmdJSON(t *testing.T) {
 
 	var outBuf bytes.Buffer
 	cmd.SetOut(&outBuf)
-
-	// Test that the command is properly set up for JSON output
 	cmd.SetArgs([]string{})
 
-	// Check that the command structure is correct
-	if cmd.Use != "logs-watch [jail] [ip]" {
-		t.Errorf("unexpected command use: %s", cmd.Use)
+	// Run to completion with a canceled context; assert the initial line is
+	// actually emitted in JSON form (quoted), not merely that the flag exists.
+	watchCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := cmd.ExecuteContext(watchCtx); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	out := outBuf.String()
+	if !strings.Contains(out, "192.168.1.100") {
+		t.Errorf("JSON output missing log line content: %q", out)
+	}
+	if !strings.Contains(out, "\"") {
+		t.Errorf("JSON output is not quoted/serialized: %q", out)
 	}
 
-	// Test that the limit flag exists and has correct default
+	// Default limit flag is still asserted.
 	limitFlag := cmd.Flags().Lookup("limit")
 	if limitFlag == nil {
 		t.Fatalf("limit flag should exist")
+		return
 	}
-	if limitFlag.DefValue != fmt.Sprintf("%d", shared.DefaultLogLinesLimit) {
-		t.Errorf("expected default limit of %d, got %s", shared.DefaultLogLinesLimit, limitFlag.DefValue)
+	if limitFlag.DefValue != fmt.Sprintf("%d", constants.DefaultLogLinesLimit) {
+		t.Errorf("expected default limit of %d, got %s", constants.DefaultLogLinesLimit, limitFlag.DefValue)
 	}
 }
 
@@ -156,87 +162,86 @@ func TestLogsWatchCmdLimit(t *testing.T) {
 	config := &Config{Format: "plain"}
 	cmd := LogsWatchCmd(context.Background(), mock, config)
 
-	// Set limit flag
 	if err := cmd.Flags().Set("limit", "3"); err != nil {
 		t.Fatalf("failed to set limit flag: %v", err)
 	}
 
 	var outBuf bytes.Buffer
 	cmd.SetOut(&outBuf)
+	cmd.SetArgs([]string{})
 
-	// Test that the limit flag can be set properly
-	err := cmd.Flags().Set("limit", "3")
-	if err != nil {
-		t.Errorf("failed to set limit flag: %v", err)
+	// Run to completion; with a limit of 3 over 5 lines, the command must emit
+	// exactly the last three lines — this asserts the tailing behavior, not the
+	// flag round-trip.
+	watchCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := cmd.ExecuteContext(watchCtx); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-
-	// Check that the command structure is correct
-	if cmd.Use != "logs-watch [jail] [ip]" {
-		t.Errorf("unexpected command use: %s", cmd.Use)
-	}
-
-	// Test that the limit flag was set correctly
-	limitFlag := cmd.Flags().Lookup("limit")
-	if limitFlag == nil {
-		t.Errorf("limit flag should exist")
-	}
-
-	// Get the limit value
-	limitValue, err := cmd.Flags().GetInt("limit")
-	if err != nil {
-		t.Errorf("failed to get limit value: %v", err)
-	}
-	if limitValue != 3 {
-		t.Errorf("expected limit value 3, got %d", limitValue)
+	got := strings.TrimRight(outBuf.String(), "\n")
+	if want := "line3\nline4\nline5"; got != want {
+		t.Errorf("limited output = %q, want %q", got, want)
 	}
 }
 
-func TestComputeHashEquivalence(t *testing.T) {
+func TestNewTailLines(t *testing.T) {
 	tests := []struct {
 		name     string
-		a        []string
-		b        []string
-		expected bool
+		prev     []string
+		curr     []string
+		expected []string
 	}{
 		{
-			name:     "equal slices",
-			a:        []string{"a", "b", "c"},
-			b:        []string{"a", "b", "c"},
-			expected: true,
+			name:     "one appended line",
+			prev:     []string{"a", "b", "c"},
+			curr:     []string{"a", "b", "c", "d"},
+			expected: []string{"d"},
 		},
 		{
-			name:     "different lengths",
-			a:        []string{"a", "b"},
-			b:        []string{"a", "b", "c"},
-			expected: false,
+			name:     "tail window shifted by two",
+			prev:     []string{"a", "b", "c"},
+			curr:     []string{"c", "d", "e"},
+			expected: []string{"d", "e"},
 		},
 		{
-			name:     "different content",
-			a:        []string{"a", "b", "c"},
-			b:        []string{"a", "b", "d"},
-			expected: false,
+			name:     "no change",
+			prev:     []string{"a", "b", "c"},
+			curr:     []string{"a", "b", "c"},
+			expected: []string{},
 		},
 		{
-			name:     "empty slices",
-			a:        []string{},
-			b:        []string{},
-			expected: true,
+			name:     "empty prev returns all",
+			prev:     []string{},
+			curr:     []string{"a", "b"},
+			expected: []string{"a", "b"},
 		},
 		{
-			name:     "one empty, one not",
-			a:        []string{},
-			b:        []string{"a"},
-			expected: false,
+			name:     "no overlap (rotation) returns all",
+			prev:     []string{"a", "b"},
+			curr:     []string{"x", "y"},
+			expected: []string{"x", "y"},
+		},
+		{
+			// fail2ban repeats identical lines: a bare last-line match would
+			// anchor on the new copy of "L" and silently drop "A" and "L".
+			name:     "appended duplicate of last line",
+			prev:     []string{"a", "b", "L"},
+			curr:     []string{"a", "b", "L", "A", "L"},
+			expected: []string{"A", "L"},
+		},
+		{
+			name:     "duplicate last line in shifted window",
+			prev:     []string{"b", "c", "L"},
+			curr:     []string{"c", "L", "A", "L"},
+			expected: []string{"A", "L"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			hashA := computeHash(tt.a)
-			hashB := computeHash(tt.b)
-			result := hashA == hashB
-			if result != tt.expected {
-				t.Errorf("computeHash equivalence for (%v, %v) = %v, want %v", tt.a, tt.b, result, tt.expected)
+			got := newTailLines(tt.prev, tt.curr)
+			if strings.Join(got, "\n") != strings.Join(tt.expected, "\n") {
+				t.Errorf("newTailLines(%v, %v) = %v, want %v", tt.prev, tt.curr, got, tt.expected)
 			}
 		})
 	}
@@ -255,26 +260,32 @@ func TestLogsWatchCmdFlags(t *testing.T) {
 	limitFlag := cmd.Flags().Lookup("limit")
 	if limitFlag == nil {
 		t.Fatal("limit flag should be defined")
+		return
 	}
 	if limitFlag.Shorthand != "n" {
 		t.Errorf("expected limit flag shorthand to be 'n', got %q", limitFlag.Shorthand)
 	}
-	if limitFlag.DefValue != fmt.Sprintf("%d", shared.DefaultLogLinesLimit) {
-		t.Errorf("expected limit flag default value to be %d, got %q", shared.DefaultLogLinesLimit, limitFlag.DefValue)
+	if limitFlag.DefValue != fmt.Sprintf("%d", constants.DefaultLogLinesLimit) {
+		t.Errorf(
+			"expected limit flag default value to be %d, got %q",
+			constants.DefaultLogLinesLimit,
+			limitFlag.DefValue,
+		)
 	}
 
 	// Test that the interval flag is properly defined
 	intervalFlag := cmd.Flags().Lookup("interval")
 	if intervalFlag == nil {
 		t.Fatal("interval flag should be defined")
+		return
 	}
 	if intervalFlag.Shorthand != "i" {
 		t.Errorf("expected interval flag shorthand to be 'i', got %q", intervalFlag.Shorthand)
 	}
-	if intervalFlag.DefValue != shared.DefaultPollingInterval.String() {
+	if intervalFlag.DefValue != constants.DefaultPollingInterval.String() {
 		t.Errorf(
 			"expected interval flag default value to be %q, got %q",
-			shared.DefaultPollingInterval.String(),
+			constants.DefaultPollingInterval.String(),
 			intervalFlag.DefValue,
 		)
 	}

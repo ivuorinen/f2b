@@ -14,6 +14,7 @@ func BanCmd(client fail2ban.Client, config *Config) *cobra.Command {
 		Description:   "Ban an IP address",
 		Aliases:       []string{"banip", "b"},
 		OperationName: "ban_command",
-		Processor:     &BanProcessor{},
+		SingleOp:      ProcessBanOperationWithContext,
+		ParallelOp:    ProcessBanOperationParallelWithContext,
 	})
 }

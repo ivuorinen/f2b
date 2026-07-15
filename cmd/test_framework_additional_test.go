@@ -111,7 +111,8 @@ func TestValidateConfigPath(t *testing.T) {
 // TestLogsWatchCmdCreation tests LogsWatchCmd creation
 func TestLogsWatchCmdCreation(t *testing.T) {
 	mockRunner := fail2ban.NewMockRunner()
-	defer fail2ban.WithTestRunner(t, mockRunner)()
+	restoreRunner := fail2ban.WithTestRunner(t, mockRunner)
+	defer restoreRunner()
 	mockRunner.SetResponse("fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
 	mockRunner.SetResponse("sudo fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
 	mockRunner.SetResponse("fail2ban-client ping", []byte("Server replied: pong"))
@@ -139,7 +140,8 @@ func TestLogsWatchCmdCreation(t *testing.T) {
 // TestGetLogLinesWithLimitAndContext_Function tests the function
 func TestGetLogLinesWithLimitAndContext_Function(t *testing.T) {
 	mockRunner := fail2ban.NewMockRunner()
-	defer fail2ban.WithTestRunner(t, mockRunner)()
+	restoreRunner := fail2ban.WithTestRunner(t, mockRunner)
+	defer restoreRunner()
 	mockRunner.SetResponse("fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
 	mockRunner.SetResponse("sudo fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
 	mockRunner.SetResponse("fail2ban-client ping", []byte("Server replied: pong"))
@@ -196,29 +198,34 @@ func TestGetLogLinesWithLimitAndContext_Function(t *testing.T) {
 // TestOutputResults_DifferentFormats tests OutputResults with various data types
 func TestOutputResults_DifferentFormats(t *testing.T) {
 	tests := []struct {
-		name    string
-		results interface{}
-		config  *Config
+		name        string
+		results     any
+		config      *Config
+		wantContain []string
 	}{
 		{
-			name:    "json format with array",
-			results: []string{"result1", "result2"},
-			config:  &Config{Format: JSONFormat},
+			name:        "json format with array",
+			results:     []string{"result1", "result2"},
+			config:      &Config{Format: JSONFormat},
+			wantContain: []string{"result1", "result2"},
 		},
 		{
-			name:    "plain format with string",
-			results: "plain text output",
-			config:  &Config{Format: PlainFormat},
+			name:        "plain format with string",
+			results:     "plain text output",
+			config:      &Config{Format: PlainFormat},
+			wantContain: []string{"plain text output"},
 		},
 		{
-			name:    "nil config uses default",
-			results: "test output",
-			config:  nil,
+			name:        "nil config uses default",
+			results:     "test output",
+			config:      nil,
+			wantContain: []string{"test output"},
 		},
 		{
-			name:    "json format with map",
-			results: map[string]interface{}{"key": "value", "count": 5},
-			config:  &Config{Format: JSONFormat},
+			name:        "json format with map",
+			results:     map[string]any{"key": "value", "count": 5},
+			config:      &Config{Format: JSONFormat},
+			wantContain: []string{`"key"`, `"value"`, `"count"`, "5"},
 		},
 	}
 
@@ -228,12 +235,13 @@ func TestOutputResults_DifferentFormats(t *testing.T) {
 			var buf bytes.Buffer
 			cmd.SetOut(&buf)
 
-			// Should not panic
 			OutputResults(cmd, tt.results, tt.config)
 
-			// Verify output was written
+			// Assert the rendered content, not merely that something was written.
 			output := buf.String()
-			assert.NotEmpty(t, output)
+			for _, want := range tt.wantContain {
+				assert.Contains(t, output, want)
+			}
 		})
 	}
 }

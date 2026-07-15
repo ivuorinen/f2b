@@ -26,10 +26,10 @@ func TestMain(m *testing.M) {
 type testingT struct{}
 
 func (t *testingT) Helper() {}
-func (t *testingT) Fatalf(format string, args ...interface{}) {
+func (t *testingT) Fatalf(format string, args ...any) {
 	fmt.Printf("TestMain setup fatal: "+format+"\n", args...)
 }
-func (t *testingT) Skipf(format string, args ...interface{}) {
+func (t *testingT) Skipf(format string, args ...any) {
 	fmt.Printf("TestMain setup skip: "+format+"\n", args...)
 }
 func (t *testingT) TempDir() string { return os.TempDir() }
@@ -195,16 +195,46 @@ func TestBannedCommand(t *testing.T) {
 	}
 }
 
+// ipCommandTestCase describes a ban/unban command test scenario.
+type ipCommandTestCase struct {
+	name        string
+	args        []string
+	jails       []string
+	banResults  map[string]map[string]int
+	setupBanned bool
+	wantOutput  string
+	wantError   bool
+}
+
+// runIPCommandTests runs the shared ban/unban command test harness for the
+// given command ("ban" or "unban").
+func runIPCommandTests(t *testing.T, command string, tests []ipCommandTestCase) {
+	t.Helper()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			builder := NewCommandTest(t, command).
+				WithArgs(tt.args...).
+				WithSetup(func(mock *fail2ban.MockClient) {
+					setMockJails(mock, tt.jails)
+					mock.BanResults = tt.banResults
+					if tt.setupBanned {
+						_, _ = mock.BanIP("192.168.1.100", "sshd")
+					}
+				})
+
+			if tt.wantError {
+				builder.ExpectError().ExpectOutput(tt.wantOutput)
+			} else {
+				builder.ExpectSuccess().ExpectOutput(tt.wantOutput)
+			}
+
+			builder.Run()
+		})
+	}
+}
+
 func TestBanCommand(t *testing.T) {
-	tests := []struct {
-		name        string
-		args        []string
-		jails       []string
-		banResults  map[string]map[string]int
-		setupBanned bool
-		wantOutput  string
-		wantError   bool
-	}{
+	tests := []ipCommandTestCase{
 		{
 			name:       "ban IP without jail specified",
 			args:       []string{"192.168.1.100"},
@@ -237,39 +267,11 @@ func TestBanCommand(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			builder := NewCommandTest(t, "ban").
-				WithArgs(tt.args...).
-				WithSetup(func(mock *fail2ban.MockClient) {
-					setMockJails(mock, tt.jails)
-					mock.BanResults = tt.banResults
-					if tt.setupBanned {
-						_, _ = mock.BanIP("192.168.1.100", "sshd")
-					}
-				})
-
-			if tt.wantError {
-				builder.ExpectError().ExpectOutput(tt.wantOutput)
-			} else {
-				builder.ExpectSuccess().ExpectOutput(tt.wantOutput)
-			}
-
-			builder.Run()
-		})
-	}
+	runIPCommandTests(t, "ban", tests)
 }
 
 func TestUnbanCommand(t *testing.T) {
-	tests := []struct {
-		name        string
-		args        []string
-		jails       []string
-		banResults  map[string]map[string]int
-		setupBanned bool
-		wantOutput  string
-		wantError   bool
-	}{
+	tests := []ipCommandTestCase{
 		{
 			name:        "unban IP with specific jail",
 			args:        []string{"192.168.1.100", "sshd"},
@@ -294,27 +296,7 @@ func TestUnbanCommand(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			builder := NewCommandTest(t, "unban").
-				WithArgs(tt.args...).
-				WithSetup(func(mock *fail2ban.MockClient) {
-					setMockJails(mock, tt.jails)
-					mock.BanResults = tt.banResults
-					if tt.setupBanned {
-						_, _ = mock.BanIP("192.168.1.100", "sshd")
-					}
-				})
-
-			if tt.wantError {
-				builder.ExpectError().ExpectOutput(tt.wantOutput)
-			} else {
-				builder.ExpectSuccess().ExpectOutput(tt.wantOutput)
-			}
-
-			builder.Run()
-		})
-	}
+	runIPCommandTests(t, "unban", tests)
 }
 
 func TestTestIPCommand(t *testing.T) {
@@ -434,9 +416,25 @@ func TestLogsCommand(t *testing.T) {
 }
 
 func TestTestFilterCommand(t *testing.T) {
-	// This test would need a test-filter command implementation
-	// For now, skipping this test as it appears to test functionality not yet implemented
-	t.Skip("test-filter command not implemented yet")
+	t.Run("configured filter succeeds", func(t *testing.T) {
+		mock := NewMockClient()
+		mock.FilterTests = map[string]string{"sshd": "Success: 3 matched"}
+		NewCommandTest(t, "test-filter").
+			WithArgs("sshd").
+			WithMockClient(mock).
+			ExpectSuccess().
+			ExpectOutput("Success: 3 matched").
+			Run()
+	})
+
+	t.Run("unknown filter errors", func(t *testing.T) {
+		mock := NewMockClient()
+		NewCommandTest(t, "test-filter").
+			WithArgs("nosuchfilter").
+			WithMockClient(mock).
+			ExpectError().
+			Run()
+	})
 }
 
 func TestVersionCommand(t *testing.T) {

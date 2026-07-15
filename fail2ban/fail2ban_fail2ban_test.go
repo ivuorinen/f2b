@@ -6,11 +6,12 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/ivuorinen/f2b/shared"
+	"github.com/ivuorinen/f2b/constants"
 )
 
 func TestListJails(t *testing.T) {
@@ -58,18 +59,18 @@ func TestListJails(t *testing.T) {
 			defer cleanup()
 
 			// Configure specific responses for this test
-			mock := GetRunner().(*MockRunner)
+			mock := MustMockRunner(t)
 			mock.SetResponse("fail2ban-client status", []byte(tt.statusOutput))
 			mock.SetResponse("sudo fail2ban-client status", []byte(tt.statusOutput))
 
 			if tt.expectError {
 				// For error cases, we expect NewClient to fail
-				_, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
+				_, err := NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
 				AssertError(t, err, true, tt.name)
 				return
 			}
 
-			client, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
+			client, err := NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
 			AssertError(t, err, false, "create client")
 
 			jails, err := client.ListJails()
@@ -95,11 +96,11 @@ func TestStatusAll(t *testing.T) {
 
 	// Configure specific responses for this test
 	expectedOutput := "Status\n|- Number of jail: 1\n`- Jail list: sshd"
-	mock := GetRunner().(*MockRunner)
+	mock := MustMockRunner(t)
 	mock.SetResponse("fail2ban-client status", []byte(expectedOutput))
 	mock.SetResponse("sudo fail2ban-client status", []byte(expectedOutput))
 
-	client, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
+	client, err := NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
 	AssertError(t, err, false, "create client")
 
 	output, err := client.StatusAll()
@@ -116,13 +117,13 @@ func TestStatusJail(t *testing.T) {
 	defer cleanup()
 
 	// Configure specific responses for this test
-	mock := GetRunner().(*MockRunner)
+	mock := MustMockRunner(t)
 	expectedOutput := "Status for the jail: sshd\n|- Filter\n" +
 		"|- Currently failed: 0\n|- Total failed: 5\n|- Currently banned: 1\n|- Total banned: 1"
 	mock.SetResponse("fail2ban-client status sshd", []byte(expectedOutput))
 	mock.SetResponse("sudo fail2ban-client status sshd", []byte(expectedOutput))
 
-	client, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
+	client, err := NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
 	AssertError(t, err, false, "create client")
 
 	output, err := client.StatusJail("sshd")
@@ -146,7 +147,7 @@ func TestBanIP(t *testing.T) {
 			name:         "successful ban",
 			ip:           "192.168.1.100",
 			jail:         "sshd",
-			mockResponse: "0",
+			mockResponse: "1", // fail2ban prints the count banned: 1 = newly banned
 			expectedCode: 0,
 			expectError:  false,
 		},
@@ -154,7 +155,7 @@ func TestBanIP(t *testing.T) {
 			name:         "already banned",
 			ip:           "192.168.1.100",
 			jail:         "sshd",
-			mockResponse: "1",
+			mockResponse: "0", // 0 = the IP was already banned
 			expectedCode: 1,
 			expectError:  false,
 		},
@@ -175,7 +176,7 @@ func TestBanIP(t *testing.T) {
 			defer cleanup()
 
 			// Configure specific responses for this test
-			mock := GetRunner().(*MockRunner)
+			mock := MustMockRunner(t)
 			if tt.expectError {
 				mock.SetError(
 					fmt.Sprintf("sudo fail2ban-client set %s banip %s", tt.jail, tt.ip),
@@ -188,7 +189,7 @@ func TestBanIP(t *testing.T) {
 				)
 			}
 
-			client, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
+			client, err := NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
 			AssertError(t, err, false, "create client")
 
 			code, err := client.BanIP(tt.ip, tt.jail)
@@ -218,7 +219,7 @@ func TestUnbanIP(t *testing.T) {
 			name:         "successful unban",
 			ip:           "192.168.1.100",
 			jail:         "sshd",
-			mockResponse: "0",
+			mockResponse: "1", // fail2ban prints the count unbanned: 1 = newly unbanned
 			expectedCode: 0,
 			expectError:  false,
 		},
@@ -226,7 +227,7 @@ func TestUnbanIP(t *testing.T) {
 			name:         "already unbanned",
 			ip:           "192.168.1.100",
 			jail:         "sshd",
-			mockResponse: "1",
+			mockResponse: "0", // 0 = the IP was already unbanned
 			expectedCode: 1,
 			expectError:  false,
 		},
@@ -239,13 +240,13 @@ func TestUnbanIP(t *testing.T) {
 			defer cleanup()
 
 			// Configure specific responses for this test
-			mock := GetRunner().(*MockRunner)
+			mock := MustMockRunner(t)
 			mock.SetResponse(
 				fmt.Sprintf("sudo fail2ban-client set %s unbanip %s", tt.jail, tt.ip),
 				[]byte(tt.mockResponse),
 			)
 
-			client, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
+			client, err := NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
 			AssertError(t, err, false, "create client")
 
 			code, err := client.UnbanIP(tt.ip, tt.jail)
@@ -307,11 +308,11 @@ func TestBannedIn(t *testing.T) {
 			defer cleanup()
 
 			// Configure specific responses for this test
-			mock := GetRunner().(*MockRunner)
+			mock := MustMockRunner(t)
 			mock.SetResponse(fmt.Sprintf("fail2ban-client banned %s", tt.ip), []byte(tt.mockResponse))
 			mock.SetResponse(fmt.Sprintf("sudo fail2ban-client banned %s", tt.ip), []byte(tt.mockResponse))
 
-			client, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
+			client, err := NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
 			AssertError(t, err, false, "create client")
 
 			jails, err := client.BannedIn(tt.ip)
@@ -340,7 +341,7 @@ func TestGetBanRecords(t *testing.T) {
 	defer cleanup()
 
 	// Configure specific responses for this test
-	mock := GetRunner().(*MockRunner)
+	mock := MustMockRunner(t)
 	// Mock ban records response
 	banTime := time.Now().Add(-1 * time.Hour)
 	unbanTime := time.Now().Add(1 * time.Hour)
@@ -349,7 +350,7 @@ func TestGetBanRecords(t *testing.T) {
 		unbanTime.Format("2006-01-02 15:04:05"))
 	mock.SetResponse("sudo fail2ban-client get sshd banip --with-time", []byte(mockBanOutput))
 
-	client, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
+	client, err := NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
 	AssertError(t, err, false, "create client")
 
 	records, err := client.GetBanRecords([]string{"sshd"})
@@ -503,7 +504,7 @@ func TestListFilters(t *testing.T) {
 	SetRunner(mock)
 
 	// Create client with the temporary filter directory
-	client, err := NewClient(shared.DefaultLogDir, filterDir)
+	client, err := NewClient(constants.DefaultLogDir, filterDir)
 	AssertError(t, err, false, "create client")
 
 	// Test ListFilters with the temporary directory
@@ -518,13 +519,7 @@ func TestListFilters(t *testing.T) {
 
 	// Check that all expected filters are present (order may vary)
 	for _, expected := range expectedFilters {
-		found := false
-		for _, actual := range filters {
-			if actual == expected {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(filters, expected)
 		if !found {
 			t.Errorf("Expected filter %q not found in %v", expected, filters)
 		}
@@ -553,13 +548,13 @@ logpath = /var/log/auth.log`
 	defer cleanup()
 
 	// Configure specific responses for this test
-	mock := GetRunner().(*MockRunner)
+	mock := MustMockRunner(t)
 	expectedOutput := "Running tests on fail2ban-regex\nResults: 5 matches found"
 	mock.SetResponse("fail2ban-regex /var/log/auth.log "+filterPath, []byte(expectedOutput))
 	mock.SetResponse("sudo fail2ban-regex /var/log/auth.log "+filterPath, []byte(expectedOutput))
 
 	// Create client with the temp directory as the filter directory
-	client, err := NewClient(shared.DefaultLogDir, tempDir)
+	client, err := NewClient(constants.DefaultLogDir, tempDir)
 	AssertError(t, err, false, "create client")
 
 	// Test the actual created filter
@@ -613,7 +608,7 @@ func TestVersionComparison(t *testing.T) {
 			_, cleanup := SetupMockEnvironmentWithSudo(t, true)
 			defer cleanup()
 
-			mock := GetRunner().(*MockRunner)
+			mock := MustMockRunner(t)
 			mock.SetResponse("fail2ban-client -V", []byte(tt.versionOutput))
 			mock.SetResponse("sudo fail2ban-client -V", []byte(tt.versionOutput))
 
@@ -625,7 +620,7 @@ func TestVersionComparison(t *testing.T) {
 				mock.SetResponse("sudo fail2ban-client status", statusOutput)
 			}
 
-			_, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
+			_, err := NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
 
 			AssertError(t, err, tt.expectError, tt.name)
 			if tt.expectError && tt.errorSubstring != "" {
@@ -688,30 +683,6 @@ func TestExtractFail2BanVersion(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestSetFilterDir(_ *testing.T) {
-	originalDir := "/etc/fail2ban/filter.d" // Assume this is the default
-	testDir := "/custom/filter/dir"
-
-	// Set a custom filter directory
-	SetFilterDir(testDir)
-
-	// Test that the directory change affects filter operations
-	// Since SetFilterDir doesn't return anything, we test indirectly
-	// by checking that it doesn't panic and can be called multiple times
-	SetFilterDir(testDir)
-	SetFilterDir("/another/dir")
-	SetFilterDir(originalDir)
-
-	// Test with empty string
-	SetFilterDir("")
-
-	// Test with relative path
-	SetFilterDir("./filters")
-
-	// No assertions needed as SetFilterDir is a simple setter
-	// The fact that it doesn't panic is sufficient
 }
 
 func TestIsValidFilter(t *testing.T) {
@@ -784,6 +755,24 @@ func TestCompareVersions(t *testing.T) {
 			v2:       "1.0.0+build.2",
 			expected: 0, // build metadata should be ignored in semantic versioning
 		},
+		{
+			name:     "numeric prerelease identifiers compare numerically",
+			v1:       "0.11.0-rc.9",
+			v2:       "0.11.0-rc.10",
+			expected: -1,
+		},
+		{
+			name:     "numeric prerelease sorts before alphanumeric",
+			v1:       "1.0.0-alpha.1",
+			v2:       "1.0.0-alpha.beta",
+			expected: -1,
+		},
+		{
+			name:     "shorter prerelease sorts first",
+			v1:       "1.0.0-alpha",
+			v2:       "1.0.0-alpha.1",
+			expected: -1,
+		},
 	}
 
 	for _, tt := range tests {
@@ -802,7 +791,7 @@ func TestGetBanRecordsWithInvalidTimes(t *testing.T) {
 	defer cleanup()
 
 	// Get mock runner for configuration
-	mockRunner := GetRunner().(*MockRunner)
+	mockRunner := MustMockRunner(t)
 
 	// Create client
 	client := &RealClient{

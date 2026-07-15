@@ -2,6 +2,7 @@ package fail2ban
 
 import (
 	"bufio"
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
@@ -12,8 +13,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
-	"github.com/ivuorinen/f2b/shared"
+	"github.com/ivuorinen/f2b/constants"
 )
 
 /*
@@ -31,7 +33,7 @@ including support for rotated and compressed logs.
 // This function uses streaming to limit memory usage.
 // Context parameter supports timeout and cancellation of file I/O operations.
 func GetLogLines(ctx context.Context, jailFilter string, ipFilter string) ([]string, error) {
-	return GetLogLinesWithLimit(ctx, jailFilter, ipFilter, shared.DefaultLogLinesLimit) // Default limit for safety
+	return GetLogLinesWithLimit(ctx, jailFilter, ipFilter, constants.DefaultLogLinesLimit) // Default limit for safety
 }
 
 // GetLogLinesWithLimit returns log lines with configurable limits for memory management.
@@ -39,38 +41,25 @@ func GetLogLines(ctx context.Context, jailFilter string, ipFilter string) ([]str
 func GetLogLinesWithLimit(ctx context.Context, jailFilter string, ipFilter string, maxLines int) ([]string, error) {
 	// Validate maxLines parameter
 	if maxLines < 0 {
-		return nil, fmt.Errorf(shared.ErrMaxLinesNegative, maxLines)
+		return nil, fmt.Errorf(constants.ErrMaxLinesNegative, maxLines)
 	}
 
-	if maxLines > shared.MaxLogLinesLimit {
-		return nil, fmt.Errorf(shared.ErrMaxLinesExceedsLimit, shared.MaxLogLinesLimit)
+	if maxLines > constants.MaxLogLinesLimit {
+		return nil, fmt.Errorf(constants.ErrMaxLinesExceedsLimit, constants.MaxLogLinesLimit)
 	}
 
 	if maxLines == 0 {
 		return []string{}, nil
 	}
 
-	// Sanitize filter parameters
-	jailFilter = strings.TrimSpace(jailFilter)
-	ipFilter = strings.TrimSpace(ipFilter)
-
-	// Validate jail filter
-	if jailFilter != "" {
-		if err := ValidateJail(jailFilter); err != nil {
-			return nil, fmt.Errorf("invalid jail filter: %w", err)
-		}
-	}
-
-	// Validate IP filter
-	if ipFilter != "" && ipFilter != shared.AllFilter {
-		if net.ParseIP(ipFilter) == nil {
-			return nil, fmt.Errorf(shared.ErrInvalidIPAddress, ipFilter)
-		}
+	jailFilter, ipFilter, err := validateLogFilters(jailFilter, ipFilter)
+	if err != nil {
+		return nil, err
 	}
 
 	config := LogReadConfig{
 		MaxLines:    maxLines,
-		MaxFileSize: shared.DefaultMaxFileSize,
+		MaxFileSize: constants.DefaultMaxFileSize,
 		JailFilter:  jailFilter,
 		IPFilter:    ipFilter,
 		BaseDir:     GetLogDir(),
@@ -79,11 +68,49 @@ func GetLogLinesWithLimit(ctx context.Context, jailFilter string, ipFilter strin
 	return collectLogLines(ctx, GetLogDir(), config)
 }
 
+// validateLogFilters trims and validates the jail/IP filter values shared by
+// every log-read entry point (package-level and RealClient), so an invalid
+// filter errors instead of silently matching nothing.
+func validateLogFilters(jailFilter, ipFilter string) (string, string, error) {
+	jailFilter = strings.TrimSpace(jailFilter)
+	ipFilter = strings.TrimSpace(ipFilter)
+
+	if jailFilter != "" {
+		if err := ValidateJail(jailFilter); err != nil {
+			return "", "", fmt.Errorf("invalid jail filter: %w", err)
+		}
+	}
+
+	if ipFilter != "" && ipFilter != constants.AllFilter {
+		if net.ParseIP(ipFilter) == nil {
+			return "", "", fmt.Errorf(constants.ErrInvalidIPAddress, ipFilter)
+		}
+	}
+
+	return jailFilter, ipFilter, nil
+}
+
+// canonicalizeIPFilter normalizes an IP filter via net.ParseIP so that e.g.
+// the IPv6 query "2001:DB8::1" matches the lowercase canonical form fail2ban
+// writes to its logs. Non-IP values pass through untouched (they are rejected
+// by validation upstream).
+func canonicalizeIPFilter(ip string) string {
+	if ip == "" || ip == constants.AllFilter {
+		return ip
+	}
+	if parsed := net.ParseIP(ip); parsed != nil {
+		return parsed.String()
+	}
+	return ip
+}
+
 // collectLogLines reads log files under the provided directory using the supplied configuration.
 func collectLogLines(ctx context.Context, logDir string, baseConfig LogReadConfig) ([]string, error) {
 	if baseConfig.MaxLines == 0 {
 		return []string{}, nil
 	}
+
+	baseConfig.IPFilter = canonicalizeIPFilter(baseConfig.IPFilter)
 
 	pattern := filepath.Join(logDir, "fail2ban.log*")
 	files, err := filepath.Glob(pattern)
@@ -109,40 +136,46 @@ func collectLogLines(ctx context.Context, logDir string, baseConfig LogReadConfi
 		}
 	}
 
-	for _, rotatedFile := range rotated {
-		fileLines, err := readLogLinesFromFile(ctx, rotatedFile.path, baseConfig)
+	// readAndAppend reads one log file and appends its lines. A context
+	// cancellation is fatal (returned); any other read error is logged and the
+	// file skipped.
+	readAndAppend := func(path string, isCurrent bool) error {
+		fileLines, err := readLogLinesFromFile(ctx, path, baseConfig, isCurrent)
 		if err != nil {
 			if ctx != nil && errors.Is(err, ctx.Err()) {
-				return nil, err
+				return err
 			}
-			getLogger().WithError(err).
-				WithField(shared.LogFieldFile, rotatedFile.path).
-				Error("Failed to read rotated log file")
-			continue
+			getLogger().WithError(err).WithField(constants.LogFieldFile, path).Error("Failed to read log file")
+			return nil
 		}
 		appendAndTrim(fileLines)
+		return nil
 	}
 
+	// Rotated logs are read oldest-first, then the current log last.
+	for _, rotatedFile := range rotated {
+		if err := readAndAppend(rotatedFile.path, false); err != nil {
+			return nil, err
+		}
+	}
 	if currentLog != "" {
-		fileLines, err := readLogLinesFromFile(ctx, currentLog, baseConfig)
-		if err != nil {
-			if ctx != nil && errors.Is(err, ctx.Err()) {
-				return nil, err
-			}
-			getLogger().WithError(err).
-				WithField(shared.LogFieldFile, currentLog).
-				Error("Failed to read current log file")
-		} else {
-			appendAndTrim(fileLines)
+		if err := readAndAppend(currentLog, true); err != nil {
+			return nil, err
 		}
 	}
 
 	return allLines, nil
 }
 
-func readLogLinesFromFile(ctx context.Context, path string, baseConfig LogReadConfig) ([]string, error) {
+func readLogLinesFromFile(
+	ctx context.Context, path string, baseConfig LogReadConfig, isCurrent bool,
+) ([]string, error) {
 	fileConfig := baseConfig
+	// ponytail: unbounded per-file line buffer (MaxFileSize caps it at 100MB
+	// of input); switch to a per-file ring of MaxLines if transient RSS on
+	// large all-matching logs ever matters.
 	fileConfig.MaxLines = 0
+	fileConfig.TailOversized = isCurrent
 
 	if ctx != nil {
 		return streamLogFileWithContext(ctx, path, fileConfig)
@@ -158,16 +191,16 @@ func parseLogFiles(files []string) (string, []rotatedLog) {
 
 	for _, path := range files {
 		base := filepath.Base(path)
-		if base == shared.LogFileName {
+		if base == constants.LogFileName {
 			currentLog = path
-		} else if strings.HasPrefix(base, shared.LogFilePrefix) {
-			if num := extractLogNumber(base); num >= 0 {
-				rotated = append(rotated, rotatedLog{num: num, path: path})
-			}
+			continue
+		}
+		if num, ok := extractLogNumber(base); ok {
+			rotated = append(rotated, rotatedLog{num: num, path: path})
 		}
 	}
 
-	// Sort rotated logs by number descending (highest number = oldest log)
+	// Sort rotated logs by key descending (highest key = oldest log)
 	sort.Slice(rotated, func(i, j int) bool {
 		return rotated[i].num > rotated[j].num
 	})
@@ -175,14 +208,41 @@ func parseLogFiles(files []string) (string, []rotatedLog) {
 	return currentLog, rotated
 }
 
-// extractLogNumber extracts the rotation number from a log file name (e.g., "fail2ban.log.2.gz" -> 2).
-func extractLogNumber(base string) int {
-	numPart := strings.TrimPrefix(base, "fail2ban.log.")
-	numPart = strings.TrimSuffix(numPart, shared.GzipExtension)
-	if n, err := strconv.Atoi(numPart); err == nil {
-		return n
+// extractLogNumber extracts an ordering key from a rotated log file name,
+// where a higher key means an older log (parseLogFiles sorts descending).
+// It handles both logrotate schemes:
+//   - numbered:  fail2ban.log.<N>[.gz]      -> N        (higher N = older)
+//   - dateext:   fail2ban.log-YYYYMMDD[.gz] -> -YYYYMMDD (higher date = newer,
+//     so the date is negated to keep the higher-key-is-older invariant)
+//
+// Returns ok=false for names matching neither scheme (previously such files,
+// e.g. RHEL/Fedora dateext logs, were silently dropped from `f2b log` output).
+func extractLogNumber(base string) (int, bool) {
+	if rest, ok := strings.CutPrefix(base, constants.LogFilePrefix); ok {
+		rest = strings.TrimSuffix(rest, constants.GzipExtension)
+		if rest == "" || rest == "gz" {
+			return 0, true // fail2ban.log.gz (compressed, unnumbered)
+		}
+		if n, err := strconv.Atoi(rest); err == nil {
+			// logrotate `dateformat .%Y%m%d` produces fail2ban.log.20240102:
+			// an 8-digit rest that parses as a date is a dateext date, not a
+			// rotation number, so negate it (higher date = newer log) to keep
+			// the higher-key-is-older invariant.
+			if len(rest) == 8 {
+				if _, dateErr := time.Parse("20060102", rest); dateErr == nil {
+					return -n, true
+				}
+			}
+			return n, true
+		}
 	}
-	return -1
+	if rest, ok := strings.CutPrefix(base, "fail2ban.log-"); ok {
+		rest = strings.TrimSuffix(rest, constants.GzipExtension)
+		if n, err := strconv.Atoi(rest); err == nil {
+			return -n, true
+		}
+	}
+	return 0, false
 }
 
 // rotatedLog represents a rotated log file with its rotation number.
@@ -198,6 +258,11 @@ type LogReadConfig struct {
 	JailFilter  string // Filter by jail name (empty = no filter)
 	IPFilter    string // Filter by IP address (empty = no filter)
 	BaseDir     string // Base directory for log validation
+	// TailOversized reads the newest MaxFileSize bytes of an oversized file
+	// instead of skipping it. Set only for the active (plain-text) log: it is
+	// the file most likely to exceed the cap, and skipping it would drop the
+	// newest events; rotated files are still skipped.
+	TailOversized bool
 }
 
 // resolveBaseDir returns the base directory from config or falls back to GetLogDir()
@@ -229,6 +294,9 @@ func streamLogFileWithContext(ctx context.Context, path string, config LogReadCo
 		return nil, err
 	}
 
+	if config.TailOversized && isOversizedFile(cleanPath, config.MaxFileSize) {
+		return scanOversizedTail(ctx, cleanPath, config)
+	}
 	if shouldSkipFile(cleanPath, config.MaxFileSize) {
 		return []string{}, nil
 	}
@@ -242,9 +310,48 @@ func streamLogFileWithContext(ctx context.Context, path string, config LogReadCo
 	return scanLogLinesWithContext(ctx, scanner, config)
 }
 
-// validateLogPath validates and sanitizes the log file path with comprehensive security checks
-func validateLogPath(path string) (string, error) {
-	return validateLogPathForDir(context.Background(), path, GetLogDir())
+// isOversizedFile reports whether path exceeds maxFileSize (0 = no limit).
+func isOversizedFile(path string, maxFileSize int64) bool {
+	if maxFileSize <= 0 {
+		return false
+	}
+	info, err := os.Stat(path)
+	return err == nil && info.Size() > maxFileSize
+}
+
+// scanOversizedTail reads the newest config.MaxFileSize bytes of an oversized
+// plain-text log. The caller only sets TailOversized for the active
+// fail2ban.log, which is never gzip-compressed. The first line after the seek
+// is discarded as likely partial.
+func scanOversizedTail(ctx context.Context, path string, config LogReadConfig) ([]string, error) {
+	f, err := os.Open(path) // #nosec G304 -- path validated by the caller
+	if err != nil {
+		return nil, fmt.Errorf("error opening log file: %w", err)
+	}
+	defer func() {
+		if cerr := f.Close(); cerr != nil {
+			getLogger().WithError(cerr).WithField(constants.LogFieldFile, path).
+				Debug("closing log file failed")
+		}
+	}()
+
+	info, err := f.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("error inspecting log file: %w", err)
+	}
+	if _, err := f.Seek(info.Size()-config.MaxFileSize, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("error seeking log file: %w", err)
+	}
+
+	getLogger().WithField(constants.LogFieldFile, path).WithField("size", info.Size()).
+		Warn("Active log exceeds size limit; reading only the newest bytes within the limit")
+
+	const maxLineSize = 64 * 1024 // matches createLogScanner
+	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), maxLineSize)
+	scanner.Scan() // discard the first, likely partial, line
+
+	return scanLogLinesWithContext(ctx, scanner, config)
 }
 
 func validateLogPathForDir(ctx context.Context, path string, baseDir string) (string, error) {
@@ -259,7 +366,7 @@ func shouldSkipFile(path string, maxFileSize int64) bool {
 
 	if info, err := os.Stat(path); err == nil {
 		if info.Size() > maxFileSize {
-			getLogger().WithField(shared.LogFieldFile, path).WithField("size", info.Size()).
+			getLogger().WithField(constants.LogFieldFile, path).WithField("size", info.Size()).
 				Warn("Skipping large log file due to size limit")
 			return true
 		}
@@ -298,10 +405,30 @@ func scanLogLines(scanner *bufio.Scanner, config LogReadConfig) ([]string, error
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf(shared.ErrScanLogFile, err)
+		return salvageScannedLines(lines, err)
 	}
 
 	return lines, nil
+}
+
+// salvageScannedLines decides what to keep when a log scan stops with an
+// error. Lines already read are valid data: a single oversized line or a
+// truncated/corrupt (e.g. mid-logrotate) gzip must not discard every line
+// already read from the file — the scanner cannot continue past the defect,
+// so the rest of the file is dropped with a warning instead of failing
+// silently. Any other error is a real read failure and is returned as-is.
+func salvageScannedLines(lines []string, err error) ([]string, error) {
+	switch {
+	case errors.Is(err, bufio.ErrTooLong):
+		getLogger().WithField("lines_read", len(lines)).
+			Warn("Log line exceeds scan buffer; returning lines read so far and dropping the rest of this file")
+		return lines, nil
+	case errors.Is(err, io.ErrUnexpectedEOF), errors.Is(err, gzip.ErrHeader), errors.Is(err, gzip.ErrChecksum):
+		getLogger().WithField("lines_read", len(lines)).WithField("error", err.Error()).
+			Warn("Log file truncated or corrupt; returning lines read so far and dropping the rest of this file")
+		return lines, nil
+	}
+	return nil, fmt.Errorf(constants.ErrScanLogFile, err)
 }
 
 // scanLogLinesWithContext scans log lines with context support for timeout handling
@@ -339,7 +466,7 @@ func scanLogLinesWithContext(ctx context.Context, scanner *bufio.Scanner, config
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf(shared.ErrScanLogFile, err)
+		return salvageScannedLines(lines, err)
 	}
 
 	return lines, nil
@@ -347,15 +474,15 @@ func scanLogLinesWithContext(ctx context.Context, scanner *bufio.Scanner, config
 
 // passesFilters checks if a log line passes the configured filters
 func passesFilters(line string, config LogReadConfig) bool {
-	if config.JailFilter != "" && config.JailFilter != shared.AllFilter {
+	if config.JailFilter != "" && config.JailFilter != constants.AllFilter {
 		jailPattern := fmt.Sprintf("[%s]", config.JailFilter)
 		if !strings.Contains(line, jailPattern) {
 			return false
 		}
 	}
 
-	if config.IPFilter != "" && config.IPFilter != shared.AllFilter {
-		if !strings.Contains(line, config.IPFilter) {
+	if config.IPFilter != "" && config.IPFilter != constants.AllFilter {
+		if !containsIPToken(line, config.IPFilter) {
 			return false
 		}
 	}
@@ -363,23 +490,43 @@ func passesFilters(line string, config LogReadConfig) bool {
 	return true
 }
 
-// readLogFile reads the contents of a log file, handling gzip compression if necessary.
-// DEPRECATED: Use streamLogFile instead for better memory efficiency.
-func readLogFile(path string) ([]byte, error) {
-	// Validate path for security using comprehensive validation
-	cleanPath, err := validateLogPath(path)
-	if err != nil {
-		return nil, err
+// containsIPToken reports whether ip appears in line as a whole token, i.e. not
+// as a substring of a longer address. A plain substring match for "10.0.0.1"
+// wrongly matches "10.0.0.100" (and "110.0.0.1"), attributing other hosts'
+// events to the requested IP.
+//
+// For an IPv4 query, ':' is treated as a separator rather than an address
+// byte, so IPv4-mapped IPv6 forms ("::ffff:10.0.0.1") and "IP:port" forms
+// still match the plain IPv4 address.
+func containsIPToken(line, ip string) bool {
+	ipv4 := strings.Contains(ip, ".") && !strings.Contains(ip, ":")
+	isIPByte := func(b byte) bool {
+		switch {
+		case b >= '0' && b <= '9',
+			b >= 'a' && b <= 'f',
+			b >= 'A' && b <= 'F',
+			b == '.':
+			return true
+		case b == ':':
+			return !ipv4
+		default:
+			return false
+		}
 	}
-
-	// Use consolidated gzip detection utility
-	reader, err := OpenGzipAwareReader(cleanPath)
-	if err != nil {
-		return nil, err
+	for idx := 0; ; {
+		i := strings.Index(line[idx:], ip)
+		if i < 0 {
+			return false
+		}
+		start := idx + i
+		end := start + len(ip)
+		beforeOK := start == 0 || !isIPByte(line[start-1])
+		afterOK := end == len(line) || !isIPByte(line[end])
+		if beforeOK && afterOK {
+			return true
+		}
+		idx = start + 1
 	}
-	defer safeCloseReader(reader, cleanPath)
-
-	return io.ReadAll(reader)
 }
 
 // OptimizedLogProcessor is a thin wrapper maintained for backwards compatibility
@@ -397,11 +544,11 @@ func NewOptimizedLogProcessor() *OptimizedLogProcessor {
 func (olp *OptimizedLogProcessor) GetLogLinesOptimized(jailFilter, ipFilter string, maxLines int) ([]string, error) {
 	// Validate maxLines parameter
 	if maxLines < 0 {
-		return nil, fmt.Errorf(shared.ErrMaxLinesNegative, maxLines)
+		return nil, fmt.Errorf(constants.ErrMaxLinesNegative, maxLines)
 	}
 
-	if maxLines > shared.MaxLogLinesLimit {
-		return nil, fmt.Errorf(shared.ErrMaxLinesExceedsLimit, shared.MaxLogLinesLimit)
+	if maxLines > constants.MaxLogLinesLimit {
+		return nil, fmt.Errorf(constants.ErrMaxLinesExceedsLimit, constants.MaxLogLinesLimit)
 	}
 
 	// Sanitize filter parameters
@@ -410,25 +557,13 @@ func (olp *OptimizedLogProcessor) GetLogLinesOptimized(jailFilter, ipFilter stri
 
 	config := LogReadConfig{
 		MaxLines:    maxLines,
-		MaxFileSize: shared.DefaultMaxFileSize,
+		MaxFileSize: constants.DefaultMaxFileSize,
 		JailFilter:  jailFilter,
 		IPFilter:    ipFilter,
 		BaseDir:     GetLogDir(),
 	}
 
 	return collectLogLines(context.Background(), GetLogDir(), config)
-}
-
-// GetCacheStats is a no-op maintained for test compatibility.
-// No caching is actually performed by this processor.
-func (olp *OptimizedLogProcessor) GetCacheStats() (hits, misses int64) {
-	return 0, 0
-}
-
-// ClearCaches is a no-op maintained for test compatibility.
-// No caching is actually performed by this processor.
-func (olp *OptimizedLogProcessor) ClearCaches() {
-	// No-op: no cache state to clear
 }
 
 var optimizedLogProcessor = NewOptimizedLogProcessor()

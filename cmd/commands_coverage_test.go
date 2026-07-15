@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"testing"
 	"time"
 
@@ -13,7 +14,8 @@ import (
 // TestTestFilterCmdCreation tests TestFilterCmd command creation
 func TestTestFilterCmdCreation(t *testing.T) {
 	mockRunner := fail2ban.NewMockRunner()
-	defer fail2ban.WithTestRunner(t, mockRunner)()
+	restoreRunner := fail2ban.WithTestRunner(t, mockRunner)
+	defer restoreRunner()
 	fail2ban.StandardMockSetup(mockRunner)
 
 	client, err := fail2ban.NewClient("/var/log/fail2ban", "/etc/fail2ban/filter.d")
@@ -37,34 +39,29 @@ func TestTestFilterCmdCreation(t *testing.T) {
 func TestTestFilterCmdExecution(t *testing.T) {
 	tests := []struct {
 		name        string
-		setupMock   func(*fail2ban.MockRunner)
+		setup       func(*fail2ban.MockClient)
 		args        []string
 		expectError bool
+		wantOutput  string
 	}{
 		{
 			name: "successful filter test",
-			setupMock: func(m *fail2ban.MockRunner) {
-				fail2ban.StandardMockSetup(m)
-				m.SetResponse("fail2ban-client get sshd logpath", []byte("/var/log/auth.log"))
-				m.SetResponse("sudo fail2ban-client get sshd logpath", []byte("/var/log/auth.log"))
+			setup: func(m *fail2ban.MockClient) {
+				m.SetFilterTest("sshd", "Filter sshd: 3 matches in /var/log/auth.log")
 			},
 			args:        []string{"sshd"},
 			expectError: false,
+			wantOutput:  "Filter sshd: 3 matches in /var/log/auth.log",
 		},
 		{
-			name: "no filter provided - lists available",
-			setupMock: func(m *fail2ban.MockRunner) {
-				fail2ban.StandardMockSetup(m)
-				// Mock ListFiltersWithContext response
-			},
+			name:        "no filter provided - lists available",
+			setup:       func(_ *fail2ban.MockClient) {},
 			args:        []string{},
 			expectError: true, // Should error saying filter required
 		},
 		{
-			name: "invalid filter name",
-			setupMock: func(m *fail2ban.MockRunner) {
-				fail2ban.StandardMockSetup(m)
-			},
+			name:        "invalid filter name (path traversal)",
+			setup:       func(_ *fail2ban.MockClient) {},
 			args:        []string{"../../../etc/passwd"},
 			expectError: true,
 		},
@@ -72,12 +69,11 @@ func TestTestFilterCmdExecution(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockRunner := fail2ban.NewMockRunner()
-			defer fail2ban.WithTestRunner(t, mockRunner)()
-			tt.setupMock(mockRunner)
-
-			client, err := fail2ban.NewClient("/var/log/fail2ban", "/etc/fail2ban/filter.d")
-			require.NoError(t, err)
+			// A MockClient makes the success path deterministic: its
+			// TestFilterWithContext returns the configured output, so the
+			// happy path can assert real output without a filesystem fixture.
+			client := fail2ban.NewMockClient()
+			tt.setup(client)
 
 			config := &Config{
 				Format:      PlainFormat,
@@ -85,16 +81,18 @@ func TestTestFilterCmdExecution(t *testing.T) {
 			}
 
 			cmd := TestFilterCmd(client, config)
+			var out bytes.Buffer
+			cmd.SetOut(&out)
 			cmd.SetArgs(tt.args)
 
-			err = cmd.Execute()
+			err := cmd.Execute()
 
 			if tt.expectError {
 				assert.Error(t, err)
-			} else {
-				// Note: Might error if filter doesn't exist, which is ok for this test
-				_ = err
+				return
 			}
+			assert.NoError(t, err)
+			assert.Contains(t, out.String(), tt.wantOutput)
 		})
 	}
 }

@@ -20,7 +20,7 @@ func BenchmarkGetBanRecordsSequential(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		for _, jail := range jails {
 			_ = workFunc(jail) // Simulate work without storing results
 		}
@@ -42,47 +42,8 @@ func BenchmarkGetBanRecordsParallel(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = ProcessJailsParallel(ctx, jails, workFunc)
-	}
-}
-
-// BenchmarkBanOperationsSequential simulates sequential ban operations
-func BenchmarkBanOperationsSequential(b *testing.B) {
-	jails := []string{"sshd", "apache", "nginx", "postfix", "dovecot"}
-
-	// Simulate ban operation delay
-	banFunc := func(_ string) error {
-		time.Sleep(5 * time.Millisecond) // Simulate 5ms ban operation
-		return nil
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		for _, jail := range jails {
-			_ = banFunc(jail)
-		}
-	}
-}
-
-// BenchmarkBanOperationsParallel simulates parallel ban operations
-func BenchmarkBanOperationsParallel(b *testing.B) {
-	jails := []string{"sshd", "apache", "nginx", "postfix", "dovecot"}
-
-	// Create a worker pool for ban operations
-	pool := NewWorkerPool[string, error](4)
-	ctx := context.Background()
-
-	banFunc := func(_ context.Context, _ string) (error, error) {
-		time.Sleep(5 * time.Millisecond) // Simulate 5ms ban operation
-		// Return success result (nil error means ban succeeded) and no processing error
-		var banResult error // nil indicates successful ban
-		return banResult, nil
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, _ = pool.Process(ctx, jails, banFunc)
 	}
 }
 

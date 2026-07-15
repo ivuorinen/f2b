@@ -10,10 +10,11 @@ import (
 	"github.com/ivuorinen/f2b/fail2ban"
 )
 
-// TestUnbanProcessorProcessParallel tests the ProcessParallel method
-func TestUnbanProcessorProcessParallel(t *testing.T) {
+// TestUnbanParallelOperation tests the multi-jail parallel unban path.
+func TestUnbanParallelOperation(t *testing.T) {
 	mockRunner := fail2ban.NewMockRunner()
-	defer fail2ban.WithTestRunner(t, mockRunner)()
+	restoreRunner := fail2ban.WithTestRunner(t, mockRunner)
+	defer restoreRunner()
 	fail2ban.StandardMockSetup(mockRunner)
 	mockRunner.SetResponse("fail2ban-client set sshd unbanip 192.168.1.1", []byte("1"))
 	mockRunner.SetResponse("sudo fail2ban-client set sshd unbanip 192.168.1.1", []byte("1"))
@@ -23,7 +24,6 @@ func TestUnbanProcessorProcessParallel(t *testing.T) {
 	client, err := fail2ban.NewClient("/var/log/fail2ban", "/etc/fail2ban/filter.d")
 	require.NoError(t, err)
 
-	processor := &UnbanProcessor{}
 	ctx := context.Background()
 
 	tests := []struct {
@@ -48,7 +48,13 @@ func TestUnbanProcessorProcessParallel(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			results, err := processor.ProcessParallel(ctx, client, tt.ip, tt.jails)
+			results, err := processWithValidation(
+				ctx,
+				client,
+				tt.ip,
+				tt.jails,
+				ProcessUnbanOperationParallelWithContext,
+			)
 
 			if tt.expectError {
 				assert.Error(t, err)

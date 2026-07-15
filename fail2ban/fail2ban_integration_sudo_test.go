@@ -1,10 +1,11 @@
 package fail2ban
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
-	"github.com/ivuorinen/f2b/shared"
+	"github.com/ivuorinen/f2b/constants"
 )
 
 // setupMockRunnerForPrivilegedTest configures mock responses for privileged tests
@@ -65,11 +66,11 @@ func TestSudoIntegrationWithClient(t *testing.T) {
 		defer cleanup()
 
 		// Get the mock runner and configure additional responses
-		mockRunner := GetRunner().(*MockRunner)
+		mockRunner := MustMockRunner(t)
 		setupMockRunnerForPrivilegedTest(mockRunner)
 
 		// Test client creation
-		client, err := NewClient(shared.DefaultLogDir, shared.DefaultFilterDir)
+		client, err := NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
 		if err != nil {
 			t.Fatalf("unexpected client creation error: %v", err)
 		}
@@ -119,7 +120,7 @@ func TestSudoRequirementsIntegration(t *testing.T) {
 			defer cleanup()
 
 			// Get the mock sudo checker and configure based on test case
-			mockChecker := GetSudoChecker().(*MockSudoChecker)
+			mockChecker := MustMockSudoChecker(t)
 			mockChecker.MockIsRoot = tt.isRoot
 			if tt.isRoot {
 				// Root user always has privileges
@@ -211,25 +212,18 @@ func TestSudoCommandSelection(t *testing.T) {
 			SetSudoChecker(mock)
 
 			// Get the mock runner and configure responses
-			mockRunner := GetRunner().(*MockRunner)
+			mockRunner := MustMockRunner(t)
 			mockRunner.SetResponse(tt.expectedCommand, []byte("success"))
 
 			// Test command selection logic using mock runner directly
 			_, err := mockRunner.CombinedOutputWithSudo(tt.command, tt.args...)
 
-			// Test that our mock runner received the expected command
+			// The escalation decision is the whole point of this test: assert
+			// the runner actually received the expected (possibly sudo-prefixed)
+			// command, not merely log a mismatch.
 			calls := mockRunner.GetCalls()
-			found := false
-			for _, call := range calls {
-				if call == tt.expectedCommand {
-					found = true
-					break
-				}
-			}
-
-			if !found && len(calls) > 0 {
-				t.Logf("Expected command: %s", tt.expectedCommand)
-				t.Logf("Actual calls: %v", calls)
+			if !slices.Contains(calls, tt.expectedCommand) {
+				t.Errorf("expected command %q in runner calls, got %v", tt.expectedCommand, calls)
 			}
 
 			if err != nil {
@@ -314,11 +308,11 @@ func TestSudoWithDifferentCommands(t *testing.T) {
 			expectedPrefix: "sudo fail2ban-client",
 		},
 		{
-			name:           "fail2ban status command does not require sudo",
+			name:           "fail2ban status command requires sudo",
 			command:        "fail2ban-client",
 			args:           []string{"status"},
-			expectsSudo:    false,
-			expectedPrefix: "fail2ban-client",
+			expectsSudo:    true, // status queries the root-only server socket
+			expectedPrefix: "sudo fail2ban-client",
 		},
 		{
 			name:           "service command requires sudo",
@@ -342,11 +336,14 @@ func TestSudoWithDifferentCommands(t *testing.T) {
 			expectedPrefix: "systemctl",
 		},
 		{
-			name:           "random command does not require sudo",
-			command:        "echo",
-			args:           []string{"hello"},
+			// fail2ban-server is allowlisted but has no RequiresSudo case, so
+			// it exercises the default no-sudo branch (non-allowlisted
+			// commands like `echo` never reach the runner at all).
+			name:           "non-privileged command does not require sudo",
+			command:        "fail2ban-server",
+			args:           []string{"-V"},
 			expectsSudo:    false,
-			expectedPrefix: "echo",
+			expectedPrefix: "fail2ban-server",
 		},
 	}
 
@@ -360,7 +357,7 @@ func TestSudoWithDifferentCommands(t *testing.T) {
 
 			// Configure the mock runner with expected response
 			// Note: Reusing outer mock environment to avoid nested cleanup issues
-			mockRunner := GetRunner().(*MockRunner)
+			mockRunner := MustMockRunner(t)
 			expectedCall := tt.expectedPrefix + " " + strings.Join(tt.args, " ")
 			mockRunner.SetResponse(expectedCall, []byte("mock response"))
 
@@ -415,12 +412,12 @@ func TestSudoPrivilegeEscalation(t *testing.T) {
 			expectedBehavior: "run with sudo",
 		},
 		{
-			name:             "privileged user does not escalate for safe command",
+			name:             "privileged user escalates for status (root-only socket)",
 			initialPrivs:     true,
 			targetCommand:    "fail2ban-client",
 			targetArgs:       []string{"status"},
-			shouldEscalate:   false,
-			expectedBehavior: "run without sudo",
+			shouldEscalate:   true,
+			expectedBehavior: "run with sudo",
 		},
 	}
 
@@ -431,7 +428,7 @@ func TestSudoPrivilegeEscalation(t *testing.T) {
 			defer cleanup()
 
 			// Get the mock runner and configure responses
-			mockRunner := GetRunner().(*MockRunner)
+			mockRunner := MustMockRunner(t)
 
 			// Set up responses for both sudo and non-sudo versions
 			nonSudoCmd := tt.targetCommand + " " + strings.Join(tt.targetArgs, " ")
@@ -447,11 +444,8 @@ func TestSudoPrivilegeEscalation(t *testing.T) {
 			calls := mockRunner.GetCalls()
 
 			var sudoCalled bool
-			for _, call := range calls {
-				if call == sudoCmd {
-					sudoCalled = true
-					break
-				}
+			if slices.Contains(calls, sudoCmd) {
+				sudoCalled = true
 			}
 
 			if tt.shouldEscalate && !sudoCalled {

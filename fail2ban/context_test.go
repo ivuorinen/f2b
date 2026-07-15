@@ -2,6 +2,7 @@ package fail2ban
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -65,10 +66,14 @@ func TestContextWrappersWithTimeout(t *testing.T) {
 
 	wrappedFunc := wrapWithContext0(slowFunc)
 
+	// The context is canceled before the call, so cancellation is deterministic
+	// (not timing-dependent): the wrapper must return the context error.
 	_, err := wrappedFunc(ctx)
 	if err == nil {
-		// The goroutine approach may not always catch cancellation, that's ok
-		t.Skip("Context wrapper timing-dependent test - skipping")
+		t.Fatal("expected a context error for a pre-canceled context")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", err)
 	}
 }
 
@@ -84,9 +89,12 @@ func TestContextWrappersWithCancellation(t *testing.T) {
 
 	wrappedFunc := wrapWithContext1(slowFunc)
 
+	// Context canceled before the call: cancellation is deterministic here.
 	_, err := wrappedFunc(ctx, "test")
 	if err == nil {
-		// The goroutine approach may not always catch cancellation, that's ok
-		t.Skip("Context wrapper timing-dependent test - skipping")
+		t.Fatal("expected a context error for a pre-canceled context")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context.Canceled, got %v", err)
 	}
 }

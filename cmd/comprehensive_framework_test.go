@@ -204,7 +204,7 @@ func BenchmarkFrameworkOverhead(b *testing.B) {
 	setMockJails(mock, []string{"sshd"})
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		// Benchmark just the core client operation without cobra command overhead
 		_, err := mock.ListJails()
 		if err != nil {

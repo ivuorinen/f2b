@@ -2,18 +2,18 @@ package cmd
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"strings"
 	"testing"
 
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
 func TestPrintOutput(t *testing.T) {
 	tests := []struct {
 		name     string
-		data     interface{}
+		data     any
 		format   string
 		expected string
 	}{
@@ -82,7 +82,7 @@ func TestPrintOutput(t *testing.T) {
 func TestPrintOutputTo(t *testing.T) {
 	tests := []struct {
 		name     string
-		data     interface{}
+		data     any
 		format   string
 		expected string
 	}{
@@ -124,7 +124,7 @@ func TestPrintOutputTo_JSONError(t *testing.T) {
 	var buf bytes.Buffer
 
 	// Capture log output
-	oldOutput := Logger.Out
+	oldOutput := Logger.Output()
 	var logBuf bytes.Buffer
 	Logger.SetOutput(&logBuf)
 	defer Logger.SetOutput(oldOutput)
@@ -168,7 +168,7 @@ func TestPrintError(t *testing.T) {
 			os.Stderr = w
 
 			// Capture log output
-			oldOutput := Logger.Out
+			oldOutput := Logger.Output()
 			var logBuf bytes.Buffer
 			Logger.SetOutput(&logBuf)
 
@@ -203,140 +203,43 @@ func TestPrintError(t *testing.T) {
 	}
 }
 
-func TestPrintErrorf(t *testing.T) {
-	// Capture stderr
-	oldStderr := os.Stderr
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("failed to create pipe: %v", err)
-	}
-	os.Stderr = w
-
-	// Capture log output
-	oldOutput := Logger.Out
-	var logBuf bytes.Buffer
-	Logger.SetOutput(&logBuf)
-
-	PrintErrorf("formatted error: %s %d", "test", 42)
-
-	if err := w.Close(); err != nil {
-		t.Fatalf("failed to close pipe writer: %v", err)
-	}
-	os.Stderr = oldStderr
-	Logger.SetOutput(oldOutput)
-
-	var stderrBuf bytes.Buffer
-	if _, err := stderrBuf.ReadFrom(r); err != nil {
-		t.Fatalf("failed to read stderr: %v", err)
-	}
-	stderrOutput := stderrBuf.String()
-	logOutput := logBuf.String()
-
-	expectedStderr := "Error: formatted error: test 42\n"
-	if stderrOutput != expectedStderr {
-		t.Errorf("expected stderr %q, got %q", expectedStderr, stderrOutput)
-	}
-
-	if !strings.Contains(logOutput, "formatted error: test 42") {
-		t.Errorf("expected error to be logged, got: %s", logOutput)
-	}
-}
-
 func TestGetCmdOutput(t *testing.T) {
-	tests := []struct {
-		name         string
-		setupCmd     func() *cobra.Command
-		expectStdout bool
-	}{
-		{
-			name: "command with output set",
-			setupCmd: func() *cobra.Command {
-				cmd := &cobra.Command{}
-				var buf bytes.Buffer
-				cmd.SetOut(&buf)
-				return cmd
-			},
-			expectStdout: false,
-		},
-		{
-			name: "nil command",
-			setupCmd: func() *cobra.Command {
-				return nil
-			},
-			expectStdout: true,
-		},
-		{
-			name: "command without output set",
-			setupCmd: func() *cobra.Command {
-				return &cobra.Command{}
-			},
-			expectStdout: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cmd := tt.setupCmd()
-			output := GetCmdOutput(cmd)
-
-			if tt.expectStdout {
-				if output != os.Stdout {
-					t.Errorf("expected os.Stdout, got different writer")
-				}
-			} else {
-				if output == os.Stdout {
-					t.Errorf("expected custom writer, got os.Stdout")
-				}
-			}
-		})
-	}
+	assertCmdWriter(t, GetCmdOutput, (*cobra.Command).SetOut, os.Stdout, "os.Stdout")
 }
 
-func TestGetCmdError(t *testing.T) {
+// assertCmdWriter verifies that a cmd-writer getter returns the process default
+// (dflt) when no writer is set or the command is nil, and a custom writer
+// otherwise. Currently only GetCmdOutput uses it.
+func assertCmdWriter(
+	t *testing.T,
+	get func(*cobra.Command) io.Writer,
+	set func(*cobra.Command, io.Writer),
+	dflt io.Writer,
+	dfltName string,
+) {
+	t.Helper()
 	tests := []struct {
-		name         string
-		setupCmd     func() *cobra.Command
-		expectStderr bool
+		name       string
+		setupCmd   func() *cobra.Command
+		expectDflt bool
 	}{
-		{
-			name: "command with error output set",
-			setupCmd: func() *cobra.Command {
-				cmd := &cobra.Command{}
-				var buf bytes.Buffer
-				cmd.SetErr(&buf)
-				return cmd
-			},
-			expectStderr: false,
-		},
-		{
-			name: "nil command",
-			setupCmd: func() *cobra.Command {
-				return nil
-			},
-			expectStderr: true,
-		},
-		{
-			name: "command without error output set",
-			setupCmd: func() *cobra.Command {
-				return &cobra.Command{}
-			},
-			expectStderr: true,
-		},
+		{"command with writer set", func() *cobra.Command {
+			cmd := &cobra.Command{}
+			set(cmd, &bytes.Buffer{})
+			return cmd
+		}, false},
+		{"nil command", func() *cobra.Command { return nil }, true},
+		{"command without writer set", func() *cobra.Command { return &cobra.Command{} }, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cmd := tt.setupCmd()
-			output := GetCmdError(cmd)
-
-			if tt.expectStderr {
-				if output != os.Stderr {
-					t.Errorf("expected os.Stderr, got different writer")
-				}
-			} else {
-				if output == os.Stderr {
-					t.Errorf("expected custom writer, got os.Stderr")
-				}
+			got := get(tt.setupCmd())
+			if tt.expectDflt && got != dflt {
+				t.Errorf("expected %s, got a different writer", dfltName)
+			}
+			if !tt.expectDflt && got == dflt {
+				t.Errorf("expected a custom writer, got %s", dfltName)
 			}
 		})
 	}
@@ -344,7 +247,7 @@ func TestGetCmdError(t *testing.T) {
 
 func TestLoggerInitialization(t *testing.T) {
 	// Save and restore logger output
-	oldOut := Logger.Out
+	oldOut := Logger.Output()
 	defer Logger.SetOutput(oldOut)
 	Logger.SetOutput(os.Stderr)
 
@@ -352,13 +255,8 @@ func TestLoggerInitialization(t *testing.T) {
 		t.Fatal("Logger should be initialized")
 	}
 
-	// Test default formatter
-	if _, ok := Logger.Formatter.(*logrus.TextFormatter); !ok {
-		t.Errorf("expected TextFormatter, got %T", Logger.Formatter)
-	}
-
 	// Test default output
-	if Logger.Out != os.Stderr {
+	if Logger.Output() != os.Stderr {
 		t.Errorf("expected Logger output to be os.Stderr")
 	}
 }
@@ -384,7 +282,7 @@ func BenchmarkPrintOutputPlain(b *testing.B) {
 	data := "test message"
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		buf.Reset()
 		PrintOutputTo(&buf, data, "plain")
 	}
@@ -395,7 +293,7 @@ func BenchmarkPrintOutputJSON(b *testing.B) {
 	data := map[string]string{"key": "value"}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		buf.Reset()
 		PrintOutputTo(&buf, data, JSONFormat)
 	}
@@ -406,7 +304,7 @@ func BenchmarkPrintError(b *testing.B) {
 
 	// Suppress output for benchmarking
 	oldStderr := os.Stderr
-	oldOutput := Logger.Out
+	oldOutput := Logger.Output()
 
 	devNull, derr := os.Open(os.DevNull)
 	if derr != nil {
@@ -427,7 +325,7 @@ func BenchmarkPrintError(b *testing.B) {
 	}()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		PrintError(err)
 	}
 }

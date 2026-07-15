@@ -2,12 +2,11 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/spf13/cobra"
+	"github.com/ivuorinen/f2b/constants"
 )
 
 func TestRequireNonEmptyArgument(t *testing.T) {
@@ -114,126 +113,53 @@ func TestFormatBannedResult(t *testing.T) {
 	}
 }
 
-func TestWrapError(t *testing.T) {
+// TestCreateTimeoutContext verifies the base-context and timeout resolution
+// rules of createTimeoutContext.
+func TestCreateTimeoutContext(t *testing.T) {
 	tests := []struct {
-		name         string
-		err          error
-		context      string
-		expectedMsg  string
-		expectNilErr bool
+		name    string
+		nilBase bool
+		config  *Config
+		timeout time.Duration
 	}{
 		{
-			name:         "nil error returns nil",
-			err:          nil,
-			context:      "test context",
-			expectNilErr: true,
+			name:    "nil base and nil config use background and default timeout",
+			nilBase: true,
+			config:  nil,
+			timeout: constants.DefaultCommandTimeout,
 		},
 		{
-			name:        "wraps error with context",
-			err:         errors.New("original error"),
-			context:     "command execution",
-			expectedMsg: "command execution failed:",
+			name:    "zero CommandTimeout falls back to default",
+			config:  &Config{CommandTimeout: 0},
+			timeout: constants.DefaultCommandTimeout,
+		},
+		{
+			name:    "custom CommandTimeout is honored",
+			config:  &Config{CommandTimeout: 5 * time.Second},
+			timeout: 5 * time.Second,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := WrapError(tt.err, tt.context)
-
-			if tt.expectNilErr {
-				if result != nil {
-					t.Errorf("expected nil error, got: %v", result)
-				}
-				return
+			var base context.Context
+			if !tt.nilBase {
+				base = context.Background()
 			}
+			before := time.Now()
+			ctx, cancel := createTimeoutContext(base, tt.config)
+			defer cancel()
 
-			if result == nil {
-				t.Error("expected wrapped error, got nil")
-				return
+			if ctx == nil {
+				t.Fatal("expected non-nil context")
 			}
-
-			if tt.expectedMsg != "" && !strings.Contains(result.Error(), tt.expectedMsg) {
-				t.Errorf("expected error to contain %q, got: %v", tt.expectedMsg, result)
+			deadline, ok := ctx.Deadline()
+			if !ok {
+				t.Fatal("expected context to have a deadline")
 			}
-		})
-	}
-}
-
-func TestNewContextualCommand(t *testing.T) {
-	// Simple test handler
-	testHandler := func(_ context.Context, _ *cobra.Command, _ []string) error {
-		return nil
-	}
-
-	tests := []struct {
-		name         string
-		use          string
-		short        string
-		aliases      []string
-		config       *Config
-		expectFields bool
-	}{
-		{
-			name:         "creates command with all fields",
-			use:          "test",
-			short:        "Test command",
-			aliases:      []string{"t"},
-			config:       &Config{},
-			expectFields: true,
-		},
-		{
-			name:         "creates command with minimal fields",
-			use:          "minimal",
-			short:        "Minimal",
-			aliases:      nil,
-			config:       &Config{},
-			expectFields: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cmd := NewContextualCommand(tt.use, tt.short, tt.aliases, tt.config, testHandler)
-
-			if cmd == nil {
-				t.Fatal("expected command to be created, got nil")
-			}
-
-			if tt.expectFields {
-				if cmd.Use != tt.use {
-					t.Errorf("expected Use to be %q, got %q", tt.use, cmd.Use)
-				}
-				if cmd.Short != tt.short {
-					t.Errorf("expected Short to be %q, got %q", tt.short, cmd.Short)
-				}
-			}
-		})
-	}
-}
-
-func TestAddWatchFlags(t *testing.T) {
-	tests := []struct {
-		name     string
-		command  *cobra.Command
-		interval time.Duration
-	}{
-		{
-			name:     "adds watch flags to command",
-			command:  &cobra.Command{Use: "test"},
-			interval: 5 * time.Second,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// This function modifies the command by adding flags
-			// We can test that it doesn't panic and the command is still valid
-			AddWatchFlags(tt.command, &tt.interval)
-
-			// Check that the interval flag was added
-			flag := tt.command.Flags().Lookup("interval")
-			if flag == nil {
-				t.Error("expected 'interval' flag to be added")
+			expected := before.Add(tt.timeout)
+			if diff := deadline.Sub(expected); diff < -time.Second || diff > time.Second {
+				t.Errorf("deadline %v not within 1s of expected %v", deadline, expected)
 			}
 		})
 	}

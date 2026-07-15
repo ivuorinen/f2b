@@ -4,18 +4,18 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/ivuorinen/f2b/constants"
 	"github.com/ivuorinen/f2b/fail2ban"
-	"github.com/ivuorinen/f2b/shared"
 )
 
 // containsPathTraversal performs comprehensive path traversal detection
@@ -45,17 +45,12 @@ func createPathVariations(path string) []string {
 	return variations
 }
 
-// Cache compiled regex for performance
-var overlongEncodingRegex = regexp.MustCompile(
-	`\xc0[\x80-\xbf]|\xe0[\x80-\x9f][\x80-\xbf]|\xf0[\x80-\x8f][\x80-\xbf][\x80-\xbf]`,
-)
-
 // checkPathVariationsForTraversal checks all path variations against dangerous patterns
 func checkPathVariationsForTraversal(variations []string) bool {
 	allPatterns := getAllDangerousPatterns()
 
 	for _, variant := range variations {
-		if checkSingleVariantForTraversal(variant, allPatterns, overlongEncodingRegex) {
+		if checkSingleVariantForTraversal(variant, allPatterns) {
 			return true
 		}
 	}
@@ -83,7 +78,7 @@ func getAllDangerousPatterns() map[string][]string {
 }
 
 // checkSingleVariantForTraversal checks a single path variant against all patterns
-func checkSingleVariantForTraversal(variant string, patterns map[string][]string, overlongRegex *regexp.Regexp) bool {
+func checkSingleVariantForTraversal(variant string, patterns map[string][]string) bool {
 	lowerVariant := strings.ToLower(variant)
 
 	// Check all pattern categories
@@ -95,17 +90,16 @@ func checkSingleVariantForTraversal(variant string, patterns map[string][]string
 		}
 	}
 
-	// Check for UTF-8 overlong encodings
-	if overlongRegex.MatchString(variant) {
-		return true
-	}
-
 	// Check for null byte injection combined with path traversal
 	if containsNullByteInjection(variant, lowerVariant) {
 		return true
 	}
 
-	// Check for invalid UTF-8 sequences
+	// Check for invalid UTF-8 sequences. This already rejects every genuine
+	// overlong UTF-8 encoding (they decode to U+FFFD and are not valid UTF-8);
+	// a byte-pattern regex over a Go string matches decoded runes, not raw
+	// bytes, so it never caught real overlong input and false-positived on
+	// legitimate accented text.
 	if !utf8.ValidString(variant) {
 		return true
 	}
@@ -169,8 +163,26 @@ func validateConfigPath(path, pathType string) (string, error) {
 func validateConfigPathWithFallback(path, pathType, defaultPath, errorMsg string) string {
 	validated, err := validateConfigPath(path, pathType)
 	if err != nil {
-		Logger.WithError(err).WithField(shared.LogFieldPath, path).Error(errorMsg)
+		Logger.WithError(err).WithField(constants.LogFieldPath, path).Error(errorMsg)
 		return defaultPath
+	}
+	return validated
+}
+
+// resolveDirFromEnv resolves a directory from an environment variable. When the
+// variable is unset it validates the default (which is always valid). When it
+// is explicitly set but invalid, it records a fatal error into cfgErr instead
+// of silently substituting the default, so the user's misconfiguration is not
+// ignored.
+func resolveDirFromEnv(envVar, defaultDir, pathType string, cfgErr *error) string {
+	raw := os.Getenv(envVar)
+	if raw == "" {
+		return validateConfigPathWithFallback(defaultDir, pathType, defaultDir, "Invalid default directory")
+	}
+	validated, err := validateConfigPath(raw, pathType)
+	if err != nil {
+		*cfgErr = errors.Join(*cfgErr, fmt.Errorf("%s=%q is invalid: %w", envVar, raw, err))
+		return defaultDir
 	}
 	return validated
 }
@@ -180,9 +192,9 @@ func isReasonableSystemPath(path, pathType string) bool {
 	// Allow common system directories based on path type
 	var allowedPrefixes []string
 	switch pathType {
-	case shared.PathTypeLog:
+	case constants.PathTypeLog:
 		allowedPrefixes = fail2ban.GetLogAllowedPaths()
-	case shared.PathTypeFilter:
+	case constants.PathTypeFilter:
 		allowedPrefixes = fail2ban.GetFilterAllowedPaths()
 	default:
 		return false
@@ -201,117 +213,133 @@ func isReasonableSystemPath(path, pathType string) bool {
 func NewConfigFromEnv() Config {
 	cfg := Config{}
 
-	// Get and validate log directory
-	logDir := os.Getenv("F2B_LOG_DIR")
-	if logDir == "" {
-		logDir = shared.DefaultLogDir
-	}
-	cfg.LogDir = validateConfigPathWithFallback(
-		logDir, shared.PathTypeLog, shared.DefaultLogDir,
-		"Invalid log directory from environment",
+	// Resolve the log and filter directories. An explicitly-set but invalid env
+	// var is a fatal config error (surfaced by Execute) rather than a silent
+	// fallback to the default, which would operate on the wrong directory.
+	cfg.LogDir = resolveDirFromEnv("F2B_LOG_DIR", constants.DefaultLogDir, constants.PathTypeLog, &cfg.configErr)
+	cfg.FilterDir = resolveDirFromEnv(
+		"F2B_FILTER_DIR", constants.DefaultFilterDir, constants.PathTypeFilter, &cfg.configErr,
 	)
 
-	// Get and validate filter directory
-	filterDir := os.Getenv("F2B_FILTER_DIR")
-	if filterDir == "" {
-		filterDir = shared.DefaultFilterDir
-	}
-	cfg.FilterDir = validateConfigPathWithFallback(
-		filterDir, shared.PathTypeFilter, shared.DefaultFilterDir,
-		"Invalid filter directory from environment",
+	// Configure timeouts from environment variables (clamped to their maxima).
+	cfg.CommandTimeout = parseTimeoutFromEnv(
+		"F2B_COMMAND_TIMEOUT",
+		constants.DefaultCommandTimeout,
+		constants.MaxCommandTimeout,
 	)
-
-	// Configure timeouts from environment variables
-	cfg.CommandTimeout = parseTimeoutFromEnv("F2B_COMMAND_TIMEOUT", shared.DefaultCommandTimeout)
-	cfg.FileTimeout = parseTimeoutFromEnv("F2B_FILE_TIMEOUT", shared.DefaultFileTimeout)
-	cfg.ParallelTimeout = parseTimeoutFromEnv("F2B_PARALLEL_TIMEOUT", shared.DefaultParallelTimeout)
+	cfg.FileTimeout = parseTimeoutFromEnv("F2B_FILE_TIMEOUT", constants.DefaultFileTimeout, constants.MaxFileTimeout)
+	cfg.ParallelTimeout = parseTimeoutFromEnv(
+		"F2B_PARALLEL_TIMEOUT", constants.DefaultParallelTimeout, constants.MaxParallelTimeout,
+	)
 
 	cfg.Format = PlainFormat
 	return cfg
 }
 
-// parseTimeoutFromEnv parses timeout duration from environment variable with fallback
-func parseTimeoutFromEnv(envVar string, defaultTimeout time.Duration) time.Duration {
+// parseTimeoutFromEnv parses timeout duration from environment variable with
+// fallback, clamping any value above maxTimeout so an env override cannot
+// exceed the configured ceiling (previously the Max* limits were unenforced).
+func parseTimeoutFromEnv(envVar string, defaultTimeout, maxTimeout time.Duration) time.Duration {
 	envValue := os.Getenv(envVar)
 	if envValue == "" {
 		return defaultTimeout
 	}
 
+	clamp := func(d time.Duration) time.Duration {
+		if maxTimeout > 0 && d > maxTimeout {
+			Logger.WithField(constants.LogFieldEnvVar, envVar).WithField(constants.LogFieldValue, envValue).
+				Warnf("Timeout exceeds maximum %s, clamping", maxTimeout)
+			return maxTimeout
+		}
+		return d
+	}
+
 	// Try parsing as duration first (e.g., "30s", "1m30s")
 	if duration, err := time.ParseDuration(envValue); err == nil {
 		if duration <= 0 {
-			Logger.WithField(shared.LogFieldEnvVar, envVar).WithField(shared.LogFieldValue, envValue).
-				Warn(shared.MsgInvalidTimeout)
+			Logger.WithField(constants.LogFieldEnvVar, envVar).WithField(constants.LogFieldValue, envValue).
+				Warn(constants.MsgInvalidTimeout)
 			return defaultTimeout
 		}
-		return duration
+		return clamp(duration)
 	}
 
 	// Try parsing as seconds (for backward compatibility)
 	if seconds, err := strconv.Atoi(envValue); err == nil {
 		if seconds <= 0 {
-			Logger.WithField(shared.LogFieldEnvVar, envVar).WithField(shared.LogFieldValue, envValue).
-				Warn(shared.MsgInvalidTimeout)
+			Logger.WithField(constants.LogFieldEnvVar, envVar).WithField(constants.LogFieldValue, envValue).
+				Warn(constants.MsgInvalidTimeout)
 			return defaultTimeout
 		}
-		return time.Duration(seconds) * time.Second
+		// Guard the multiplication: a huge value overflows time.Duration to a
+		// negative that would slip past clamp's upper bound and expire every
+		// context instantly.
+		if maxTimeout > 0 && int64(seconds) > int64(maxTimeout/time.Second) {
+			return clamp(maxTimeout)
+		}
+		return clamp(time.Duration(seconds) * time.Second)
 	}
 
-	Logger.WithField(shared.LogFieldEnvVar, envVar).WithField(shared.LogFieldValue, envValue).
+	Logger.WithField(constants.LogFieldEnvVar, envVar).WithField(constants.LogFieldValue, envValue).
 		Warn("Failed to parse timeout value, using default")
 	return defaultTimeout
 }
 
 // ValidateConfig performs comprehensive validation of the Config struct
 func (c *Config) ValidateConfig() error {
-	var errors []string
+	var problems []string
 
-	// Validate LogDir
-	if c.LogDir == "" {
-		errors = append(errors, "log directory cannot be empty")
-	} else if _, err := validateConfigPath(c.LogDir, shared.PathTypeLog); err != nil {
-		errors = append(errors, fmt.Sprintf("invalid log directory: %v", err))
+	// Validate directories
+	dirs := []struct {
+		label    string
+		value    string
+		pathType string
+	}{
+		{"log", c.LogDir, constants.PathTypeLog},
+		{"filter", c.FilterDir, constants.PathTypeFilter},
 	}
-
-	// Validate FilterDir
-	if c.FilterDir == "" {
-		errors = append(errors, "filter directory cannot be empty")
-	} else if _, err := validateConfigPath(c.FilterDir, shared.PathTypeFilter); err != nil {
-		errors = append(errors, fmt.Sprintf("invalid filter directory: %v", err))
+	for _, d := range dirs {
+		if d.value == "" {
+			problems = append(problems, d.label+" directory cannot be empty")
+			continue
+		}
+		if _, err := validateConfigPath(d.value, d.pathType); err != nil {
+			problems = append(problems, fmt.Sprintf("invalid %s directory: %v", d.label, err))
+		}
 	}
 
 	// Validate Format
-	validFormats := map[string]bool{PlainFormat: true, JSONFormat: true}
-	if !validFormats[c.Format] {
-		errors = append(errors, fmt.Sprintf("invalid format '%s', must be 'plain' or 'json'", c.Format))
+	if c.Format != PlainFormat && c.Format != JSONFormat {
+		problems = append(problems, fmt.Sprintf("invalid format '%s', must be 'plain' or 'json'", c.Format))
 	}
 
-	// Validate Timeouts
-	if c.CommandTimeout <= 0 {
-		errors = append(errors, "command timeout must be positive")
-	} else if c.CommandTimeout > shared.MaxCommandTimeout {
-		errors = append(errors, "command timeout too large (max 10 minutes)")
+	// Validate timeouts (each must be positive and within its ceiling)
+	timeouts := []struct {
+		name    string
+		value   time.Duration
+		max     time.Duration
+		tooLong string
+	}{
+		{"command", c.CommandTimeout, constants.MaxCommandTimeout, "command timeout too large (max 10 minutes)"},
+		{"file", c.FileTimeout, constants.MaxFileTimeout, "file timeout too large (max 5 minutes)"},
+		{"parallel", c.ParallelTimeout, constants.MaxParallelTimeout, "parallel timeout too large (max 30 minutes)"},
 	}
-
-	if c.FileTimeout <= 0 {
-		errors = append(errors, "file timeout must be positive")
-	} else if c.FileTimeout > shared.MaxFileTimeout {
-		errors = append(errors, "file timeout too large (max 5 minutes)")
-	}
-
-	if c.ParallelTimeout <= 0 {
-		errors = append(errors, "parallel timeout must be positive")
-	} else if c.ParallelTimeout > shared.MaxParallelTimeout {
-		errors = append(errors, "parallel timeout too large (max 30 minutes)")
+	for _, t := range timeouts {
+		switch {
+		case t.value <= 0:
+			problems = append(problems, t.name+" timeout must be positive")
+		case t.value > t.max:
+			problems = append(problems, t.tooLong)
+		}
 	}
 
 	// Check timeout relationships
 	if c.ParallelTimeout < c.CommandTimeout {
-		errors = append(errors, "parallel timeout should be >= command timeout")
+		problems = append(problems, "parallel timeout should be >= command timeout")
 	}
 
-	if len(errors) > 0 {
-		return fmt.Errorf("configuration validation failed: %s", strings.Join(errors, "; "))
+	if len(problems) > 0 {
+		return fmt.Errorf("configuration validation failed: %s", strings.Join(problems, "; "))
 	}
 
 	return nil

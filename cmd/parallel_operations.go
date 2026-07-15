@@ -5,284 +5,141 @@ import (
 	"errors"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/ivuorinen/f2b/fail2ban"
 )
 
-// ParallelOperationProcessor handles parallel ban/unban operations across multiple jails
-type ParallelOperationProcessor struct {
-	workerCount int
-}
-
-// NewParallelOperationProcessor creates a new parallel operation processor
-func NewParallelOperationProcessor(workerCount int) *ParallelOperationProcessor {
-	if workerCount <= 0 {
-		workerCount = runtime.NumCPU()
-	}
-	return &ParallelOperationProcessor{
-		workerCount: workerCount,
-	}
-}
-
-// ProcessOperationParallel processes operations across multiple jails in parallel
-func (pop *ParallelOperationProcessor) ProcessOperationParallel(
-	client fail2ban.Client,
-	ip string,
-	jails []string,
-	opType OperationType,
-) ([]OperationResult, error) {
-	if len(jails) <= 1 {
-		// For single jail, use sequential processing to avoid overhead
-		return ProcessOperation(client, ip, jails, opType)
-	}
-
-	return pop.processOperations(
-		context.Background(),
-		client,
-		ip,
-		jails,
-		opType.OperationCtx,
-		opType.MetricsType,
-	)
-}
-
-// ProcessOperationParallelWithContext processes operations across multiple jails in parallel with context
-func (pop *ParallelOperationProcessor) ProcessOperationParallelWithContext(
-	ctx context.Context,
-	client fail2ban.Client,
-	ip string,
-	jails []string,
-	opType OperationType,
-) ([]OperationResult, error) {
-	if len(jails) <= 1 {
-		// For single jail, use sequential processing to avoid overhead
-		return ProcessOperationWithContext(ctx, client, ip, jails, opType)
-	}
-
-	return pop.processOperations(
-		ctx,
-		client,
-		ip,
-		jails,
-		opType.OperationCtx,
-		opType.MetricsType,
-	)
-}
-
-// ProcessBanOperationParallel processes ban operations across multiple jails in parallel
-func (pop *ParallelOperationProcessor) ProcessBanOperationParallel(
-	client fail2ban.Client,
-	ip string,
-	jails []string,
-) ([]OperationResult, error) {
-	return pop.ProcessOperationParallel(client, ip, jails, BanOperationType)
-}
-
-// ProcessBanOperationParallelWithContext processes ban operations across
-// multiple jails in parallel with timeout context
-func (pop *ParallelOperationProcessor) ProcessBanOperationParallelWithContext(
-	ctx context.Context,
-	client fail2ban.Client,
-	ip string,
-	jails []string,
-) ([]OperationResult, error) {
-	return pop.ProcessOperationParallelWithContext(ctx, client, ip, jails, BanOperationType)
-}
-
-// ProcessUnbanOperationParallel processes unban operations across multiple jails in parallel
-func (pop *ParallelOperationProcessor) ProcessUnbanOperationParallel(
-	client fail2ban.Client,
-	ip string,
-	jails []string,
-) ([]OperationResult, error) {
-	return pop.ProcessOperationParallel(client, ip, jails, UnbanOperationType)
-}
-
-// ProcessUnbanOperationParallelWithContext processes unban operations across
-// multiple jails in parallel with timeout context
-func (pop *ParallelOperationProcessor) ProcessUnbanOperationParallelWithContext(
-	ctx context.Context,
-	client fail2ban.Client,
-	ip string,
-	jails []string,
-) ([]OperationResult, error) {
-	return pop.ProcessOperationParallelWithContext(ctx, client, ip, jails, UnbanOperationType)
-}
-
-// operationFunc represents a ban or unban operation with context
-type operationFunc func(ctx context.Context, client fail2ban.Client, ip, jail string) (int, error)
-
-// validateOperationInputs validates IP and jail inputs before parallel processing.
-// Returns an aggregated error if any inputs are invalid.
-func validateOperationInputs(ctx context.Context, ip string, jails []string) error {
-	var errs []error
-
-	// Validate IP address
-	if err := fail2ban.CachedValidateIP(ctx, ip); err != nil {
-		errs = append(errs, err)
-	}
-
-	// Validate each jail name
-	for _, jail := range jails {
-		if err := fail2ban.CachedValidateJail(ctx, jail); err != nil {
-			errs = append(errs, err)
-		}
-	}
-
-	if len(errs) > 0 {
-		return errors.Join(errs...)
-	}
-	return nil
-}
-
-// processOperations handles the parallel processing of operations
-func (pop *ParallelOperationProcessor) processOperations(
-	ctx context.Context,
-	client fail2ban.Client,
-	ip string,
-	jails []string,
-	operation operationFunc,
-	operationType string,
-) ([]OperationResult, error) {
-	// Validate inputs before processing
-	if err := validateOperationInputs(ctx, ip, jails); err != nil {
-		return nil, err
-	}
-
-	results := make([]OperationResult, len(jails))
-	resultCh := make(chan operationResult, len(jails))
-
-	// Create worker pool
-	var wg sync.WaitGroup
-	jailCh := make(chan jailWork, len(jails))
-
-	workerCount := pop.workerCount
-	if len(jails) < workerCount {
-		workerCount = len(jails)
-	}
-
-	// Start workers
-	for i := 0; i < workerCount; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			pop.worker(ctx, client, ip, operation, operationType, jailCh, resultCh)
-		}()
-	}
-
-	// Send work items
-	go func() {
-		defer close(jailCh)
-		for i, jail := range jails {
-			jailCh <- jailWork{jail: jail, index: i}
-		}
-	}()
-
-	// Wait for workers to complete
-	go func() {
-		wg.Wait()
-		close(resultCh)
-	}()
-
-	// Collect results and errors
-	var errs []error
-	for result := range resultCh {
-		if result.index >= 0 && result.index < len(results) {
-			results[result.index] = result.result
-		}
-		if result.err != nil {
-			errs = append(errs, result.err)
-		}
-	}
-
-	if len(errs) > 0 {
-		return results, errors.Join(errs...)
-	}
-	return results, nil
-}
-
-// jailWork represents work for a specific jail
-type jailWork struct {
-	jail  string
-	index int
-}
-
-// operationResult represents the result of an operation
-type operationResult struct {
-	result OperationResult
-	index  int
-	err    error
-}
-
-// worker processes jail operations
-func (pop *ParallelOperationProcessor) worker(
-	ctx context.Context,
-	client fail2ban.Client,
-	ip string,
-	operation operationFunc,
-	operationType string,
-	jailCh <-chan jailWork,
-	resultCh chan<- operationResult,
-) {
-	for work := range jailCh {
-		code, err := operation(ctx, client, ip, work.jail)
-
-		var status string
-		if err != nil {
-			status = err.Error()
-		} else {
-			status = InterpretBanStatus(code, operationType)
-		}
-
-		Logger.WithFields(map[string]interface{}{
-			"ip":     ip,
-			"jail":   work.jail,
-			"status": status,
-		}).Info("Operation result")
-
-		resultCh <- operationResult{
-			result: OperationResult{
-				IP:     ip,
-				Jail:   work.jail,
-				Status: status,
-			},
-			index: work.index,
-			err:   err,
-		}
-	}
-}
-
-// Global processor instance
-var defaultParallelProcessor = NewParallelOperationProcessor(runtime.NumCPU())
-
-// ProcessBanOperationParallel processes ban operations in parallel using the default processor
+// ProcessBanOperationParallel bans ip across jails concurrently (no caller context).
 func ProcessBanOperationParallel(client fail2ban.Client, ip string, jails []string) ([]OperationResult, error) {
-	return defaultParallelProcessor.ProcessBanOperationParallel(client, ip, jails)
+	return ProcessBanOperationParallelWithContext(context.Background(), client, ip, jails)
 }
 
-// ProcessBanOperationParallelWithContext processes ban operations in parallel using the default processor with context
+// ProcessBanOperationParallelWithContext bans ip across multiple jails concurrently.
 func ProcessBanOperationParallelWithContext(
 	ctx context.Context,
 	client fail2ban.Client,
 	ip string,
 	jails []string,
 ) ([]OperationResult, error) {
-	return defaultParallelProcessor.ProcessBanOperationParallelWithContext(
-		ctx, client, ip, jails)
+	return processJailsParallel(ctx, client, ip, jails, BanOperationType)
 }
 
-// ProcessUnbanOperationParallel processes unban operations in parallel using the default processor
+// ProcessUnbanOperationParallel unbans ip across jails concurrently (no caller context).
 func ProcessUnbanOperationParallel(client fail2ban.Client, ip string, jails []string) ([]OperationResult, error) {
-	return defaultParallelProcessor.ProcessUnbanOperationParallel(client, ip, jails)
+	return ProcessUnbanOperationParallelWithContext(context.Background(), client, ip, jails)
 }
 
-// ProcessUnbanOperationParallelWithContext processes unban operations in
-// parallel using the default processor with context
+// ProcessUnbanOperationParallelWithContext unbans ip across multiple jails concurrently.
 func ProcessUnbanOperationParallelWithContext(
 	ctx context.Context,
 	client fail2ban.Client,
 	ip string,
 	jails []string,
 ) ([]OperationResult, error) {
-	return defaultParallelProcessor.ProcessUnbanOperationParallelWithContext(ctx, client, ip, jails)
+	return processJailsParallel(ctx, client, ip, jails, UnbanOperationType)
+}
+
+// validateOperationInputs validates the IP and jail names before processing,
+// aggregating every failure rather than stopping at the first.
+func validateOperationInputs(ip string, jails []string) error {
+	var errs []error
+	if err := fail2ban.ValidateIP(ip); err != nil {
+		errs = append(errs, err)
+	}
+	for _, jail := range jails {
+		if err := fail2ban.ValidateJail(jail); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// processJailsParallel runs opType's per-jail operation against every jail
+// concurrently, bounded to runtime.NumCPU() goroutines, returning the per-jail
+// results in jail order. Zero or one jail takes the sequential path to skip the
+// goroutine setup and keep the fail-fast single-jail semantics.
+func processJailsParallel(
+	ctx context.Context,
+	client fail2ban.Client,
+	ip string,
+	jails []string,
+	opType OperationType,
+) ([]OperationResult, error) {
+	if len(jails) <= 1 {
+		return ProcessOperationWithContext(ctx, client, ip, jails, opType)
+	}
+	if err := validateOperationInputs(ip, jails); err != nil {
+		return nil, err
+	}
+
+	results := make([]OperationResult, len(jails))
+	errs := make([]error, len(jails))
+	logger := GetContextualLogger()
+	sem := make(chan struct{}, min(len(jails), runtime.NumCPU()))
+	var wg sync.WaitGroup
+
+	for i, jail := range jails {
+		sem <- struct{}{} // bound in-flight goroutines to the worker limit
+		wg.Go(func() {
+			defer func() { <-sem }()
+			results[i], errs[i] = runJailOperation(ctx, client, ip, jail, opType, logger)
+		})
+	}
+	wg.Wait()
+
+	return results, joinOperationErrors(errs)
+}
+
+// runJailOperation executes a single per-jail operation under its own
+// CommandTimeout and records metrics plus the structured ban audit log, so a
+// multi-jail run is as observable as a single-jail one.
+func runJailOperation(
+	ctx context.Context,
+	client fail2ban.Client,
+	ip, jail string,
+	opType OperationType,
+	logger *ContextualLogger,
+) (OperationResult, error) {
+	// Stop before spawning a doomed fail2ban-client invocation once the run is
+	// canceled; surface the context error as this jail's status.
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return OperationResult{IP: ip, Jail: jail, Status: ctxErr.Error()}, ctxErr
+	}
+
+	jailCtx := WithJail(ctx, jail)
+	// Per-jail CommandTimeout: without it one hung invocation stalls for the
+	// whole ParallelTimeout, while single-jail runs are capped at CommandTimeout.
+	opCtx, opCancel := createTimeoutContext(jailCtx, &cfg)
+	start := time.Now()
+	code, err := opType.OperationCtx(opCtx, client, ip, jail)
+	opCancel()
+	logger.LogBanOperation(jailCtx, opType.MetricsType, ip, jail, err == nil, time.Since(start))
+
+	status := InterpretBanStatus(code, opType.MetricsType)
+	if err != nil {
+		status = err.Error()
+	}
+	return OperationResult{IP: ip, Jail: jail, Status: status}, err
+}
+
+// joinOperationErrors collapses the per-jail errors into one, deduping the
+// repeated context error a canceled run produces for every unprocessed jail so
+// the user doesn't see "context canceled" N times.
+func joinOperationErrors(errs []error) error {
+	var out []error
+	var ctxErr error
+	for _, err := range errs {
+		switch {
+		case err == nil:
+		case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+			ctxErr = err
+		default:
+			out = append(out, err)
+		}
+	}
+	if ctxErr != nil {
+		out = append(out, ctxErr)
+	}
+	return errors.Join(out...)
 }

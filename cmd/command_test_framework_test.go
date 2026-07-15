@@ -9,37 +9,50 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/spf13/cobra"
 
-	"github.com/ivuorinen/f2b/shared"
+	"github.com/ivuorinen/f2b/constants"
 
 	"github.com/ivuorinen/f2b/fail2ban"
 )
 
 // CommandTestResult represents the result of a command execution
+// resultTestingT is the subset of *testing.T the assert methods use. Tests
+// inject a recording implementation to verify the failure paths — the
+// direction a plain green-path test can't check.
+type resultTestingT interface {
+	Helper()
+	Fatalf(format string, args ...any)
+}
+
+// CommandTestResult carries a command's captured output and error together
+// with the testing handle its Assert* methods report through.
 type CommandTestResult struct {
 	Output string
 	Error  error
-	t      *testing.T
+	t      resultTestingT
 	name   string
 }
 
 // CommandTestBuilder provides a fluent interface for testing commands
 type CommandTestBuilder struct {
-	t           *testing.T
-	name        string
-	command     string
-	args        []string
-	mockClient  *fail2ban.MockClient
-	config      *Config
-	expectError bool
-	expectedOut string
-	exactMatch  bool
-	setupFunc   func(*fail2ban.MockClient)
-	environment *TestEnvironment
+	t              *testing.T
+	name           string
+	command        string
+	args           []string
+	mockClient     *fail2ban.MockClient
+	config         *Config
+	expectError    bool
+	expectedOut    string
+	expectedOutSet bool
+	exactMatch     bool
+	setupFunc      func(*fail2ban.MockClient)
+	environment    *TestEnvironment
 }
 
 // TestEnvironment manages test environment setup and cleanup
@@ -78,9 +91,9 @@ func (env *TestEnvironment) WithMockRunner() *TestEnvironment {
 	env.originalRunner = fail2ban.GetRunner()
 	mockRunner := fail2ban.NewMockRunner()
 	// Set up common responses
-	mockRunner.SetResponse(shared.MockCommandVersion, []byte(shared.VersionOutput))
-	mockRunner.SetResponse(shared.MockCommandPing, []byte(shared.PingOutput))
-	mockRunner.SetResponse(shared.MockCommandStatus, []byte(shared.StatusOutput))
+	mockRunner.SetResponse(constants.MockCommandVersion, []byte(constants.VersionOutput))
+	mockRunner.SetResponse(constants.MockCommandPing, []byte(constants.PingOutput))
+	mockRunner.SetResponse(constants.MockCommandStatus, []byte(constants.StatusOutput))
 	mockRunner.SetResponse("sudo service fail2ban status", []byte("● fail2ban.service - Fail2Ban Service"))
 	fail2ban.SetRunner(mockRunner)
 
@@ -95,8 +108,9 @@ func (env *TestEnvironment) WithStdoutCapture() *TestEnvironment {
 	env.originalStdout = os.Stdout
 	r, w, err := os.Pipe()
 	if err != nil {
-		// Return early with nil fields to indicate failure
-		return env
+		// Test scaffolding must fail loudly: silently continuing with nil
+		// fields made every later stdout assertion vacuously pass.
+		panic(fmt.Sprintf("WithStdoutCapture: os.Pipe failed: %v", err))
 	}
 	env.stdoutReader = r
 	env.stdoutWriter = w
@@ -116,8 +130,8 @@ func (env *TestEnvironment) WithStdoutCapture() *TestEnvironment {
 
 // Cleanup restores the original environment
 func (env *TestEnvironment) Cleanup() {
-	for i := len(env.cleanup) - 1; i >= 0; i-- {
-		env.cleanup[i]()
+	for _, v := range slices.Backward(env.cleanup) {
+		v()
 	}
 }
 
@@ -134,10 +148,13 @@ func (env *TestEnvironment) ReadStdout() string {
 	}
 
 	// Use io.ReadAll for dynamic buffer reading
-	if data, err := io.ReadAll(env.stdoutReader); err == nil {
-		return string(data)
+	data, err := io.ReadAll(env.stdoutReader)
+	if err != nil {
+		// Fail loudly rather than returning "" that vacuously satisfies
+		// empty-output assertions.
+		panic(fmt.Sprintf("ReadStdout: reading captured stdout failed: %v", err))
 	}
-	return ""
+	return string(data)
 }
 
 // NewCommandTest creates a new command test builder
@@ -150,9 +167,9 @@ func NewCommandTest(t *testing.T, commandName string) *CommandTestBuilder {
 		args:    make([]string, 0),
 		config: &Config{
 			Format:          PlainFormat,
-			CommandTimeout:  shared.DefaultCommandTimeout,
-			FileTimeout:     shared.DefaultFileTimeout,
-			ParallelTimeout: shared.DefaultParallelTimeout,
+			CommandTimeout:  constants.DefaultCommandTimeout,
+			FileTimeout:     constants.DefaultFileTimeout,
+			ParallelTimeout: constants.DefaultParallelTimeout,
 		},
 	}
 }
@@ -193,6 +210,16 @@ func (ctb *CommandTestBuilder) WithSetup(setupFunc func(*fail2ban.MockClient)) *
 // WithServiceSetup provides a function to set up mock runner for service commands
 func (ctb *CommandTestBuilder) WithServiceSetup(setupFunc func(*fail2ban.MockRunner)) *CommandTestBuilder {
 	ctb.setupFunc = func(_ *fail2ban.MockClient) {
+		// Save and restore the package-global sudo checker and runner so this
+		// setup does not leak mock state into later tests (which made outcomes
+		// order-dependent under `go test -shuffle=on`).
+		origChecker := fail2ban.GetSudoChecker()
+		origRunner := fail2ban.GetRunner()
+		ctb.t.Cleanup(func() {
+			fail2ban.SetSudoChecker(origChecker)
+			fail2ban.SetRunner(origRunner)
+		})
+
 		// Set up sudo checker
 		mockChecker := &fail2ban.MockSudoChecker{
 			MockHasPrivileges:     true,
@@ -232,6 +259,7 @@ func (ctb *CommandTestBuilder) ExpectSuccess() *CommandTestBuilder {
 // ExpectOutput sets the expected output substring
 func (ctb *CommandTestBuilder) ExpectOutput(expectedOut string) *CommandTestBuilder {
 	ctb.expectedOut = expectedOut
+	ctb.expectedOutSet = true
 	return ctb
 }
 
@@ -239,6 +267,7 @@ func (ctb *CommandTestBuilder) ExpectOutput(expectedOut string) *CommandTestBuil
 func (ctb *CommandTestBuilder) ExpectExactOutput(expectedOut string) *CommandTestBuilder {
 	ctb.expectedOut = expectedOut
 	ctb.exactMatch = true
+	ctb.expectedOutSet = true
 	return ctb
 }
 
@@ -270,7 +299,7 @@ func (ctb *CommandTestBuilder) Run() *CommandTestResult {
 	// Perform basic validations
 	result.AssertError(ctb.expectError)
 
-	if ctb.expectedOut != "" {
+	if ctb.expectedOutSet {
 		if ctb.exactMatch {
 			result.AssertExactOutput(ctb.expectedOut)
 		} else {
@@ -292,7 +321,7 @@ func (ctb *CommandTestBuilder) executeCommand() (string, error) {
 		cmd = UnbanCmd(ctb.mockClient, ctb.config)
 	case "status":
 		cmd = StatusCmd(ctb.mockClient, ctb.config)
-	case shared.CLICmdListJails:
+	case constants.CLICmdListJails:
 		cmd = ListJailsCmd(ctb.mockClient, ctb.config)
 	case "banned":
 		cmd = BannedCmd(ctb.mockClient, ctb.config)
@@ -300,94 +329,91 @@ func (ctb *CommandTestBuilder) executeCommand() (string, error) {
 		cmd = TestIPCmd(ctb.mockClient, ctb.config)
 	case "logs":
 		cmd = LogsCmd(ctb.mockClient, ctb.config)
-	case shared.ServiceCommand:
+	case "test-filter":
+		cmd = TestFilterCmd(ctb.mockClient, ctb.config)
+	case constants.ServiceCommand:
 		cmd = ServiceCmd(ctb.config)
-	case shared.CLICmdVersion:
+	case constants.CLICmdVersion:
 		cmd = VersionCmd(ctb.config)
 	default:
 		return "", fmt.Errorf("unknown command: %s", ctb.command)
 	}
 
 	// For service commands, we need to capture os.Stdout since PrintOutput writes directly to it
-	if ctb.command == shared.ServiceCommand {
+	if ctb.command == constants.ServiceCommand {
 		return ctb.executeServiceCommand(cmd)
 	}
 
-	// Execute regular commands
+	// Execute regular commands. Capture os.Stdout/os.Stderr as well as the
+	// command's own buffers, since PrintOutput/PrintError write directly to the
+	// process streams (and cobra's error output is silenced).
 	var outBuf, errBuf bytes.Buffer
 	cmd.SetOut(&outBuf)
 	cmd.SetErr(&errBuf)
 	cmd.SetArgs(ctb.args)
-	err := cmd.Execute()
-	output := outBuf.String() + errBuf.String()
+
+	captured, err := captureStdoutStderr(cmd.Execute)
+	output := captured + outBuf.String() + errBuf.String()
 
 	return output, err
 }
 
-// executeServiceCommand handles service command execution with stdout/stderr capture
-func (ctb *CommandTestBuilder) executeServiceCommand(cmd *cobra.Command) (string, error) {
-	// Capture os.Stdout since service command uses PrintOutput
-	oldStdout := os.Stdout
+// captureStdoutStderr redirects os.Stdout and os.Stderr into pipes, runs fn,
+// and returns everything written to them. The pipes are drained by goroutines
+// started before fn runs, so output larger than the OS pipe buffer cannot
+// deadlock the command inside fn.
+//
+// Mutates the process-global os.Stdout/os.Stderr: tests routed through this
+// helper must not use t.Parallel().
+func captureStdoutStderr(fn func() error) (string, error) {
+	oldStdout, oldStderr := os.Stdout, os.Stderr
 	stdoutR, stdoutW, err := os.Pipe()
 	if err != nil {
 		return "", fmt.Errorf("failed to create stdout pipe: %w", err)
 	}
-	os.Stdout = stdoutW
-
-	// Also capture os.Stderr since PrintError uses it
-	oldStderr := os.Stderr
 	stderrR, stderrW, err := os.Pipe()
 	if err != nil {
-		// Clean up stdout pipe before returning error
 		_ = stdoutR.Close()
 		_ = stdoutW.Close()
-		os.Stdout = oldStdout
 		return "", fmt.Errorf("failed to create stderr pipe: %w", err)
 	}
-	os.Stderr = stderrW
 
+	os.Stdout, os.Stderr = stdoutW, stderrW
+
+	var wg sync.WaitGroup
+	var outBuf, errBuf bytes.Buffer
+	wg.Add(2)
+	go func() { defer wg.Done(); _, _ = outBuf.ReadFrom(stdoutR) }()
+	go func() { defer wg.Done(); _, _ = errBuf.ReadFrom(stderrR) }()
+
+	runErr := fn()
+
+	_ = stdoutW.Close()
+	_ = stderrW.Close()
+	wg.Wait()
+	os.Stdout, os.Stderr = oldStdout, oldStderr
+
+	return outBuf.String() + errBuf.String(), runErr
+}
+
+// executeServiceCommand handles service command execution with stdout/stderr capture
+func (ctb *CommandTestBuilder) executeServiceCommand(cmd *cobra.Command) (string, error) {
 	var cmdErrBuf bytes.Buffer
 	cmd.SetErr(&cmdErrBuf)
 	cmd.SetArgs(ctb.args)
-	err = cmd.Execute()
 
-	// Close writers and restore
-	if closeErr := stdoutW.Close(); closeErr != nil {
-		os.Stdout = oldStdout
-		os.Stderr = oldStderr
-		return "", fmt.Errorf("failed to close stdout writer: %v", closeErr)
-	}
-	if closeErr := stderrW.Close(); closeErr != nil {
-		os.Stdout = oldStdout
-		os.Stderr = oldStderr
-		return "", fmt.Errorf("failed to close stderr writer: %v", closeErr)
-	}
-	os.Stdout = oldStdout
-	os.Stderr = oldStderr
-
-	// Read captured output
-	var stdoutBuf bytes.Buffer
-	if _, readErr := stdoutBuf.ReadFrom(stdoutR); readErr != nil {
-		return "", fmt.Errorf("failed to read stdout: %v", readErr)
-	}
-
-	var stderrBuf bytes.Buffer
-	if _, readErr := stderrBuf.ReadFrom(stderrR); readErr != nil {
-		return "", fmt.Errorf("failed to read stderr: %v", readErr)
-	}
-
-	output := stdoutBuf.String() + stderrBuf.String() + cmdErrBuf.String()
-	return output, err
+	captured, err := captureStdoutStderr(cmd.Execute)
+	return captured + cmdErrBuf.String(), err
 }
 
 // AssertError validates the error state
 func (result *CommandTestResult) AssertError(expectError bool) *CommandTestResult {
 	result.t.Helper()
 	if expectError && result.Error == nil {
-		result.t.Fatalf(shared.ErrTestExpectedError, result.name)
+		result.t.Fatalf(constants.ErrTestExpectedError, result.name)
 	}
 	if !expectError && result.Error != nil {
-		result.t.Fatalf(shared.ErrTestUnexpectedWithOutput, result.name, result.Error, result.Output)
+		result.t.Fatalf(constants.ErrTestUnexpectedWithOutput, result.name, result.Error, result.Output)
 	}
 	return result
 }
@@ -396,7 +422,7 @@ func (result *CommandTestResult) AssertError(expectError bool) *CommandTestResul
 func (result *CommandTestResult) AssertContains(expected string) *CommandTestResult {
 	result.t.Helper()
 	if !strings.Contains(result.Output, expected) {
-		result.t.Fatalf(shared.ErrTestExpectedOutput, result.name, expected, result.Output)
+		result.t.Fatalf(constants.ErrTestExpectedOutput, result.name, expected, result.Output)
 	}
 	return result
 }
@@ -420,10 +446,10 @@ func (result *CommandTestResult) AssertExactOutput(expected string) *CommandTest
 }
 
 // checkJSONFieldValue validates that a JSON field value matches the expected string.
-func (result *CommandTestResult) checkJSONFieldValue(val interface{}, fieldName, expected string) {
+func (result *CommandTestResult) checkJSONFieldValue(val any, fieldName, expected string) {
 	result.t.Helper()
 	if fmt.Sprintf("%v", val) != expected {
-		result.t.Fatalf(shared.ErrTestJSONFieldMismatch, result.name, fieldName, expected, val)
+		result.t.Fatalf(constants.ErrTestJSONFieldMismatch, result.name, fieldName, expected, val)
 	}
 }
 
@@ -437,7 +463,7 @@ func (result *CommandTestResult) failMissingJSONField(fieldName, context string)
 func (result *CommandTestResult) AssertJSONField(fieldPath, expected string) *CommandTestResult {
 	result.t.Helper()
 
-	var data interface{}
+	var data any
 	if err := json.Unmarshal([]byte(result.Output), &data); err != nil {
 		result.t.Fatalf("%s: failed to parse JSON output: %v, output: %s", result.name, err, result.Output)
 	}
@@ -447,16 +473,16 @@ func (result *CommandTestResult) AssertJSONField(fieldPath, expected string) *Co
 	fieldName := strings.TrimPrefix(fieldPath, "$.")
 
 	switch v := data.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		if val, ok := v[fieldName]; ok {
 			result.checkJSONFieldValue(val, fieldName, expected)
 		} else {
 			result.failMissingJSONField(fieldName, " in output")
 		}
-	case []interface{}:
+	case []any:
 		// Handle array case - look in first element
 		if len(v) > 0 {
-			if firstItem, ok := v[0].(map[string]interface{}); ok {
+			if firstItem, ok := v[0].(map[string]any); ok {
 				if val, ok := firstItem[fieldName]; ok {
 					result.checkJSONFieldValue(val, fieldName, expected)
 				} else {
@@ -518,15 +544,18 @@ func (b *MockClientBuilder) WithJails(jails ...string) *MockClientBuilder {
 	return b
 }
 
-// WithBannedIP adds a banned IP to specific jail
+// WithBannedIP marks an IP as already banned in a specific jail.
+// MockClient.BanIP reads BanResults[jail][ip] (jail-major); the previous
+// [ip][jail] order meant this configuration was never seen by BanIP. Result
+// code 1 means "already banned" per the Client contract.
 func (b *MockClientBuilder) WithBannedIP(ip, jail string) *MockClientBuilder {
 	if b.client.BanResults == nil {
 		b.client.BanResults = make(map[string]map[string]int)
 	}
-	if b.client.BanResults[ip] == nil {
-		b.client.BanResults[ip] = make(map[string]int)
+	if b.client.BanResults[jail] == nil {
+		b.client.BanResults[jail] = make(map[string]int)
 	}
-	b.client.BanResults[ip][jail] = 1 // 1 indicates banned
+	b.client.BanResults[jail][ip] = 1 // 1 = already banned
 	return b
 }
 
@@ -551,7 +580,7 @@ func (b *MockClientBuilder) WithStatusResponse(target, response string) *MockCli
 	if b.client.StatusJailData == nil {
 		b.client.StatusJailData = make(map[string]string)
 	}
-	if target == shared.AllFilter {
+	if target == constants.AllFilter {
 		b.client.StatusAllData = response
 	} else {
 		b.client.StatusJailData[target] = response

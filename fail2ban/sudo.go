@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ivuorinen/f2b/shared"
+	"github.com/ivuorinen/f2b/constants"
 )
 
 const (
@@ -18,15 +18,11 @@ const (
 )
 
 // RealSudoChecker implements SudoChecker using actual system calls
-type RealSudoChecker struct{}
-
-// MockSudoChecker implements SudoChecker for testing
-type MockSudoChecker struct {
-	MockIsRoot            bool
-	MockInSudoGroup       bool
-	MockCanUseSudo        bool
-	MockHasPrivileges     bool
-	ExplicitPrivilegesSet bool // Track if MockHasPrivileges was explicitly set
+type RealSudoChecker struct {
+	// runSudoProbe runs the non-interactive sudo probe. Tests inject a mock
+	// here so the probe branch is exercisable without ever executing real
+	// sudo; nil means the real `sudo -n true` probe.
+	runSudoProbe func(ctx context.Context) error
 }
 
 var (
@@ -75,7 +71,7 @@ func (r *RealSudoChecker) InSudoGroup() bool {
 		}
 
 		// Check common sudo group names (portable across systems)
-		if group.Name == shared.SudoCommand || group.Name == "wheel" || group.Name == "admin" {
+		if group.Name == constants.SudoCommand || group.Name == "wheel" || group.Name == "admin" {
 			return true
 		}
 
@@ -86,22 +82,28 @@ func (r *RealSudoChecker) InSudoGroup() bool {
 	return false
 }
 
+// defaultSudoProbe tries to run 'sudo -n true' (non-interactive) to test sudo access.
+func defaultSudoProbe(ctx context.Context) error {
+	// #nosec G204 -- constants.SudoCommand is a hardcoded constant "sudo", not user input
+	return exec.CommandContext(ctx, constants.SudoCommand, "-n", "true").Run()
+}
+
 // CanUseSudo returns true if the current user can use sudo
 func (r *RealSudoChecker) CanUseSudo() bool {
-	// In test environment, don't actually run sudo
-	if IsTestEnvironment() {
-		return false // Default to false in tests unless mocked
+	probe := r.runSudoProbe
+	if probe == nil {
+		// In test environment, never execute the real sudo binary
+		if IsTestEnvironment() {
+			return false // Default to false in tests unless mocked
+		}
+		probe = defaultSudoProbe
 	}
 
 	// Create a context with timeout to prevent hanging processes
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultSudoTimeout)
 	defer cancel()
 
-	// Try to run 'sudo -n true' (non-interactive) to test sudo access
-	// #nosec G204 -- shared.SudoCommand is a hardcoded constant "sudo", not user input
-	cmd := exec.CommandContext(ctx, shared.SudoCommand, "-n", "true")
-	err := cmd.Run()
-	return err == nil
+	return probe(ctx) == nil
 }
 
 // HasSudoPrivileges returns true if user has any form of sudo access
@@ -111,56 +113,38 @@ func (r *RealSudoChecker) HasSudoPrivileges() bool {
 
 // Mock implementations
 
-// IsRoot returns the mocked root status
-func (m *MockSudoChecker) IsRoot() bool {
-	return m.MockIsRoot
-}
-
-// InSudoGroup returns the mocked sudo group status
-func (m *MockSudoChecker) InSudoGroup() bool {
-	return m.MockInSudoGroup
-}
-
-// CanUseSudo returns the mocked sudo capability status
-func (m *MockSudoChecker) CanUseSudo() bool {
-	return m.MockCanUseSudo
-}
-
-// HasSudoPrivileges returns the mocked sudo privileges status
-func (m *MockSudoChecker) HasSudoPrivileges() bool {
-	// If ExplicitPrivilegesSet is true, use MockHasPrivileges directly
-	if m.ExplicitPrivilegesSet {
-		return m.MockHasPrivileges
-	}
-	// Otherwise, compute from individual privileges
-	return m.MockIsRoot || m.MockInSudoGroup || m.MockCanUseSudo
-}
-
 // RequiresSudo returns true if the given command typically requires sudo privileges
 func RequiresSudo(command string, args ...string) bool {
-	// Commands that typically require sudo for fail2ban operations
-	if command == shared.Fail2BanClientCommand {
-		if len(args) > 0 {
-			switch args[0] {
-			case shared.ActionSet, shared.ActionReload, shared.ActionRestart, shared.ActionStart, shared.ActionStop:
-				return true
-			case shared.ActionGet:
-				// Some get operations might require sudo depending on configuration
-				if len(args) > 2 && (args[2] == shared.ActionBanIP || args[2] == shared.ActionUnbanIP) {
-					return true
-				}
-			}
+	// Every fail2ban-client subcommand talks to the server socket
+	// (/var/run/fail2ban/fail2ban.sock), which is root-only, so all of them
+	// need sudo for a non-root user. The sole exception is `-V`, which only
+	// prints the client version and never touches the socket.
+	if command == constants.Fail2BanClientCommand {
+		// No subcommand (prints usage) and -V (prints version) never touch the
+		// root-only server socket, so they don't need sudo. Every real
+		// subcommand does.
+		if len(args) == 0 || args[0] == constants.CommandArgVersion {
+			return false
 		}
-		return false
+		return true
 	}
 
-	if command == shared.ServiceCommand && len(args) > 0 && args[0] == shared.ServiceFail2ban {
+	// fail2ban-regex reads the log file named in the filter's logpath; those
+	// logs (e.g. /var/log/auth.log) are typically root-only, so the probe is
+	// useless without sudo. The logpath is validated against the log allowlist
+	// before it reaches argv (TestFilterWithContext), so sudo cannot be turned
+	// into an arbitrary read-as-root primitive.
+	if command == constants.Fail2BanRegexCommand {
+		return true
+	}
+
+	if command == constants.ServiceCommand && len(args) > 0 && args[0] == constants.ServiceFail2ban {
 		return true
 	}
 
 	if command == "systemctl" && len(args) > 0 {
 		switch args[0] {
-		case shared.ActionStart, "stop", "restart", "reload", "enable", "disable":
+		case constants.ActionStart, "stop", "restart", "reload", "enable", "disable":
 			return true
 		}
 	}
@@ -187,39 +171,4 @@ func CheckSudoRequirements() error {
 	}
 
 	return nil
-}
-
-// GetCurrentUserInfo returns information about the current user for debugging
-func GetCurrentUserInfo() map[string]interface{} {
-	info := make(map[string]interface{})
-
-	info["uid"] = os.Getuid()
-	info["gid"] = os.Getgid()
-	info["euid"] = os.Geteuid()
-	info["egid"] = os.Getegid()
-
-	if currentUser, err := user.Current(); err == nil {
-		info["username"] = currentUser.Username
-		info["name"] = currentUser.Name
-		info["home_dir"] = currentUser.HomeDir
-
-		if groups, err := currentUser.GroupIds(); err == nil {
-			var groupNames []string
-			for _, gid := range groups {
-				if group, err := user.LookupGroupId(gid); err == nil {
-					groupNames = append(groupNames, group.Name)
-				}
-			}
-			info["groups"] = groupNames
-			info["group_ids"] = groups
-		}
-	}
-
-	checker := GetSudoChecker()
-	info["is_root"] = checker.IsRoot()
-	info["in_sudo_group"] = checker.InSudoGroup()
-	info["can_use_sudo"] = checker.CanUseSudo()
-	info["has_sudo_privileges"] = checker.HasSudoPrivileges()
-
-	return info
 }

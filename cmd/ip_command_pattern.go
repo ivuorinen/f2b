@@ -9,17 +9,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ivuorinen/f2b/constants"
 	"github.com/ivuorinen/f2b/fail2ban"
-	"github.com/ivuorinen/f2b/shared"
 )
-
-// IPOperationProcessor defines the interface for processing IP-based operations
-type IPOperationProcessor interface {
-	// ProcessSingle processes a single jail operation
-	ProcessSingle(ctx context.Context, client fail2ban.Client, ip string, jails []string) ([]OperationResult, error)
-	// ProcessParallel processes multiple jails in parallel
-	ProcessParallel(ctx context.Context, client fail2ban.Client, ip string, jails []string) ([]OperationResult, error)
-}
 
 // IPCommandConfig holds configuration for IP-based commands
 type IPCommandConfig struct {
@@ -28,7 +20,10 @@ type IPCommandConfig struct {
 	Description   string   // e.g., "Ban an IP address"
 	Aliases       []string // e.g., ["banip", "b"]
 	OperationName string   // e.g., "ban_command", "unban_command"
-	Processor     IPOperationProcessor
+	// SingleOp handles the one-jail path; ParallelOp handles the multi-jail
+	// path. Both are wrapped in processWithValidation before executing.
+	SingleOp   multiJailOperationFunc
+	ParallelOp multiJailOperationFunc
 }
 
 // resolveOutputFormat determines the final output format from config and command flags
@@ -37,7 +32,7 @@ func resolveOutputFormat(config *Config, cmd *cobra.Command) string {
 	if config != nil {
 		finalFormat = config.Format
 	}
-	format, _ := cmd.Flags().GetString(shared.FlagFormat)
+	format, _ := cmd.Flags().GetString(constants.FlagFormat)
 	if format != "" {
 		finalFormat = format
 	}
@@ -45,9 +40,12 @@ func resolveOutputFormat(config *Config, cmd *cobra.Command) string {
 }
 
 // outputOperationResults outputs the operation results in the specified format
-func outputOperationResults(cmd *cobra.Command, results []OperationResult, config *Config, format string) error {
+func outputOperationResults(cmd *cobra.Command, results []OperationResult, _ *Config, format string) error {
 	if format == JSONFormat {
-		OutputResults(cmd, results, config)
+		// Use the format resolved by the caller directly; routing through
+		// OutputResults would re-derive it from config.Format and silently
+		// print plain whenever the two diverge.
+		PrintOutputTo(GetCmdOutput(cmd), results, format)
 		return nil
 	}
 
@@ -59,22 +57,27 @@ func outputOperationResults(cmd *cobra.Command, results []OperationResult, confi
 	return nil
 }
 
-// processIPOperation handles the parallel vs single processing logic
+// processIPOperation handles the parallel vs single processing logic.
+// rootCtx is the un-CommandTimeout'd request context; opCtx carries the
+// per-command timeout. The multi-jail budget must derive from rootCtx, not
+// opCtx: a context cannot outlive its parent, so wrapping the CommandTimeout
+// context with ParallelTimeout previously capped the batch at
+// min(CommandTimeout, ParallelTimeout) and made F2B_PARALLEL_TIMEOUT a no-op
+// whenever it exceeded F2B_COMMAND_TIMEOUT.
 func processIPOperation(
-	ctx context.Context,
+	rootCtx, opCtx context.Context,
 	config *Config,
-	processor IPOperationProcessor,
+	cmdConfig IPCommandConfig,
 	client fail2ban.Client,
 	ip string,
 	jails []string,
 ) ([]OperationResult, error) {
 	if len(jails) > 1 {
-		// Use parallel timeout for multi-jail operations
-		parallelCtx, parallelCancel := context.WithTimeout(ctx, config.ParallelTimeout)
+		parallelCtx, parallelCancel := context.WithTimeout(rootCtx, config.ParallelTimeout)
 		defer parallelCancel()
-		return processor.ProcessParallel(parallelCtx, client, ip, jails)
+		return processWithValidation(parallelCtx, client, ip, jails, cmdConfig.ParallelOp)
 	}
-	return processor.ProcessSingle(ctx, client, ip, jails)
+	return processWithValidation(opCtx, client, ip, jails, cmdConfig.SingleOp)
 }
 
 // ExecuteIPCommand provides a unified execution pattern for IP-based commands
@@ -87,9 +90,11 @@ func ExecuteIPCommand(
 		// Get the contextual logger
 		logger := GetContextualLogger()
 
-		// Create timeout context for the entire operation
-		// Use cmd.Context() to inherit Cobra's signal cancellation
-		ctx, cancel := createTimeoutContext(cmd.Context(), config)
+		// cmd.Context() inherits Cobra's signal cancellation. Keep a reference
+		// to it (rootCtx) so the multi-jail parallel path can use the full
+		// ParallelTimeout rather than being capped by CommandTimeout.
+		rootCtx := cmd.Context()
+		ctx, cancel := createTimeoutContext(rootCtx, config)
 		defer cancel()
 
 		// Add command context
@@ -112,14 +117,31 @@ func ExecuteIPCommand(
 				return HandleClientError(err)
 			}
 
+			// Guard against a silent no-op: with no jail argument and no jails
+			// configured, the operation loop would run zero times and report
+			// success without banning anything.
+			if len(jails) == 0 {
+				return HandleValidationError(
+					fmt.Errorf("no jails configured; nothing to %s", cmdConfig.CommandName),
+				)
+			}
+
 			// Process operation with timeout context
-			results, err := processIPOperation(ctx, config, cmdConfig.Processor, client, ip, jails)
+			results, err := processIPOperation(rootCtx, ctx, config, cmdConfig, client, ip, jails)
+			finalFormat := resolveOutputFormat(config, cmd)
 			if err != nil {
+				// Partial failure still changed firewall state in the jails
+				// that succeeded — show the per-jail results (failed jails
+				// carry the error in their Status) before reporting the error.
+				if len(results) > 0 {
+					if outErr := outputOperationResults(cmd, results, config, finalFormat); outErr != nil {
+						Logger.WithError(outErr).Warn("failed to print partial results")
+					}
+				}
 				return HandleClientError(err)
 			}
 
 			// Output results in the appropriate format
-			finalFormat := resolveOutputFormat(config, cmd)
 			return outputOperationResults(cmd, results, config, finalFormat)
 		})
 	}
@@ -127,10 +149,14 @@ func ExecuteIPCommand(
 
 // NewIPCommand creates a new IP-based command using the unified pattern
 func NewIPCommand(client fail2ban.Client, config *Config, cmdConfig IPCommandConfig) *cobra.Command {
-	return NewCommand(
+	c := NewCommand(
 		cmdConfig.Usage,
 		cmdConfig.Description,
 		cmdConfig.Aliases,
 		ExecuteIPCommand(client, config, cmdConfig),
 	)
+	// <ip> [jail]: a third argument was previously ignored without any
+	// message ("f2b ban 1.2.3.4 sshd apache" silently skipped apache).
+	c.Args = cobra.MaximumNArgs(2)
+	return c
 }

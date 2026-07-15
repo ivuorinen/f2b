@@ -3,11 +3,11 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"log/slog"
 	"os"
 	"strings"
 	"testing"
 
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/ivuorinen/f2b/fail2ban"
@@ -17,57 +17,57 @@ func TestParseLogLevel(t *testing.T) {
 	tests := []struct {
 		name     string
 		level    string
-		expected logrus.Level
+		expected slog.Level
 	}{
 		{
 			name:     "debug level",
 			level:    "debug",
-			expected: logrus.DebugLevel,
+			expected: slog.LevelDebug,
 		},
 		{
 			name:     "info level",
 			level:    "info",
-			expected: logrus.InfoLevel,
+			expected: slog.LevelInfo,
 		},
 		{
 			name:     "warn level",
 			level:    "warn",
-			expected: logrus.WarnLevel,
+			expected: slog.LevelWarn,
 		},
 		{
 			name:     "warning level",
 			level:    "warning",
-			expected: logrus.WarnLevel,
+			expected: slog.LevelWarn,
 		},
 		{
 			name:     "error level",
 			level:    "error",
-			expected: logrus.ErrorLevel,
+			expected: slog.LevelError,
 		},
 		{
 			name:     "fatal level",
 			level:    "fatal",
-			expected: logrus.FatalLevel,
+			expected: levelFatal,
 		},
 		{
 			name:     "panic level",
 			level:    "panic",
-			expected: logrus.PanicLevel,
+			expected: levelPanic,
 		},
 		{
 			name:     "unknown level defaults to info",
 			level:    "unknown",
-			expected: logrus.InfoLevel,
+			expected: slog.LevelInfo,
 		},
 		{
 			name:     "empty level defaults to info",
 			level:    "",
-			expected: logrus.InfoLevel,
+			expected: slog.LevelInfo,
 		},
 		{
 			name:     "uppercase level",
 			level:    "DEBUG",
-			expected: logrus.InfoLevel, // case sensitive, so falls back to default
+			expected: slog.LevelInfo, // case sensitive, so falls back to default
 		},
 	}
 
@@ -221,7 +221,7 @@ func BenchmarkParseLogLevel(b *testing.B) {
 	levels := []string{"debug", "info", "warn", "error", "unknown"}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		level := levels[i%len(levels)]
 		parseLogLevel(level)
 	}
@@ -257,11 +257,7 @@ func TestExecute(t *testing.T) {
 			setupClient: func() fail2ban.Client {
 				return fail2ban.NewMockClient()
 			},
-			config: Config{
-				LogDir:    "/tmp/test",
-				FilterDir: "/tmp/filters",
-				Format:    "plain",
-			},
+			config:    validTestConfig("plain"),
 			wantError: false,
 		},
 		{
@@ -269,11 +265,7 @@ func TestExecute(t *testing.T) {
 			setupClient: func() fail2ban.Client {
 				return fail2ban.NewMockClient()
 			},
-			config: Config{
-				LogDir:    "/var/log",
-				FilterDir: "/etc/fail2ban/filter.d",
-				Format:    "json",
-			},
+			config:    validTestConfig("json"),
 			wantError: false,
 		},
 	}
@@ -501,9 +493,9 @@ func TestInitFunctionCoverage(t *testing.T) {
 }
 
 func TestPersistentPreRun(t *testing.T) {
-	// Test the PersistentPreRun function
-	if rootCmd.PersistentPreRun == nil {
-		t.Errorf("expected PersistentPreRun to be set")
+	// Test the PersistentPreRunE function
+	if rootCmd.PersistentPreRunE == nil {
+		t.Errorf("expected PersistentPreRunE to be set")
 		return
 	}
 
@@ -528,70 +520,74 @@ func TestPersistentPreRun(t *testing.T) {
 	cmd.Flags().String("log-file", tmpFile.Name(), "test log file")
 	cmd.Flags().String("log-level", "debug", "test log level")
 
-	// Save original logger output
-	originalOutput := Logger.Out
+	// PersistentPreRunE validates the global cfg first; give it a valid one and
+	// restore all mutated global state afterward.
+	originalCfg := cfg
+	cfg = validTestConfig("plain")
+	originalOutput := Logger.Output()
+	originalLevel := Logger.GetLevel()
+	defer func() {
+		cfg = originalCfg
+		Logger.SetOutput(originalOutput)
+		Logger.SetLevel(originalLevel)
+	}()
 
-	// Run PersistentPreRun
-	rootCmd.PersistentPreRun(cmd, []string{})
+	// A valid log-file and cfg must succeed and apply the requested level.
+	if err := rootCmd.PersistentPreRunE(cmd, []string{}); err != nil {
+		t.Fatalf("PersistentPreRunE with a valid log file returned error: %v", err)
+	}
+	if got := Logger.GetLevel(); got != slog.LevelDebug {
+		t.Errorf("log level after PersistentPreRunE = %v, want debug", got)
+	}
 
-	// Restore original logger output
-	Logger.SetOutput(originalOutput)
-
-	// Test log level parsing
+	// Each --log-level maps to the expected slog level through PersistentPreRunE
+	// (empty log-file so no file is opened; "invalid" falls back to info).
 	tests := []struct {
 		name     string
 		logLevel string
+		want     slog.Level
 	}{
-		{"debug", "debug"},
-		{"info", "info"},
-		{"warn", "warn"},
-		{"error", "error"},
-		{"invalid", "invalid"},
+		{"debug", "debug", slog.LevelDebug},
+		{"info", "info", slog.LevelInfo},
+		{"warn", "warn", slog.LevelWarn},
+		{"error", "error", slog.LevelError},
+		{"invalid", "invalid", slog.LevelInfo},
 	}
 
 	for _, tt := range tests {
-		t.Run("log_level_"+tt.name, func(_ *testing.T) {
+		t.Run("log_level_"+tt.name, func(t *testing.T) {
 			cmd := &cobra.Command{}
 			cmd.Flags().String("log-file", "", "")
 			cmd.Flags().String("log-level", tt.logLevel, "")
 
-			// This should not panic
-			rootCmd.PersistentPreRun(cmd, []string{})
+			if err := rootCmd.PersistentPreRunE(cmd, []string{}); err != nil {
+				t.Fatalf("PersistentPreRunE returned error: %v", err)
+			}
+			if got := Logger.GetLevel(); got != tt.want {
+				t.Errorf("log level for %q = %v, want %v", tt.logLevel, got, tt.want)
+			}
 		})
 	}
 }
 
 func TestPersistentPreRunWithInvalidLogFile(t *testing.T) {
-	// Test PersistentPreRun with invalid log file path
+	// Test PersistentPreRunE with invalid log file path. It must now return an
+	// error (aborting the command) rather than printing to stderr and
+	// continuing. PersistentPreRunE validates the global cfg first, so give it
+	// a valid one for the duration of the test.
+	originalCfg := cfg
+	cfg = validTestConfig("plain")
+	defer func() { cfg = originalCfg }()
 	cmd := &cobra.Command{}
 	cmd.Flags().String("log-file", "/invalid/path/to/logfile.log", "invalid log file")
 	cmd.Flags().String("log-level", "info", "test log level")
 
-	// Capture stderr to check for error message
-	oldStderr := os.Stderr
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("failed to create pipe: %v", err)
+	err := rootCmd.PersistentPreRunE(cmd, []string{})
+	if err == nil {
+		t.Fatal("expected an error for an unopenable log file path")
 	}
-	os.Stderr = w
-
-	// This should handle the error gracefully
-	rootCmd.PersistentPreRun(cmd, []string{})
-
-	if err := w.Close(); err != nil {
-		t.Fatalf("failed to close writer: %v", err)
-	}
-	os.Stderr = oldStderr
-
-	var buf bytes.Buffer
-	if _, err := buf.ReadFrom(r); err != nil {
-		t.Fatalf("failed to read output: %v", err)
-	}
-	output := buf.String()
-
-	// Should contain error message about failed to open log file
-	if !strings.Contains(output, "Failed to open log file") {
-		t.Errorf("expected error message about failed to open log file, got: %s", output)
+	if !strings.Contains(err.Error(), "failed to open log file") {
+		t.Errorf("expected error about failing to open log file, got: %v", err)
 	}
 }
 
@@ -652,13 +648,9 @@ func TestExecuteIntegration(t *testing.T) {
 		cleanup  func()
 	}{
 		{
-			name: "execute with environment variables",
-			args: []string{"f2b", "version"},
-			config: Config{
-				LogDir:    "/tmp/test",
-				FilterDir: "/tmp/filters",
-				Format:    "plain",
-			},
+			name:   "execute with environment variables",
+			args:   []string{"f2b", "version"},
+			config: validTestConfig("plain"),
 			setupEnv: func() {
 				// Environment variables will be set using t.Setenv in test loop
 			},
@@ -738,7 +730,7 @@ func BenchmarkParseLogLevelExtended(b *testing.B) {
 	levels := []string{"debug", "info", "warn", "warning", "error", "fatal", "panic", "invalid", ""}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		level := levels[i%len(levels)]
 		parseLogLevel(level)
 	}
@@ -775,7 +767,7 @@ func BenchmarkExecute(b *testing.B) {
 	}()
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		os.Args = []string{"f2b", "version"}
 		if err := Execute(client, config); err != nil {
 			b.Fatalf("execute failed: %v", err)
