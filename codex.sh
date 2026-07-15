@@ -9,12 +9,11 @@ if ! command -v go >/dev/null; then
   exit 1
 fi
 
-echo "Installing all development dependencies using Makefile..."
+echo "Setting up development environment using Makefile..."
 
-# Use make dev-deps for all tool installation - this handles:
-# - golangci-lint, markdownlint-cli2, yamlfmt, actionlint
-# - goimports, editorconfig-checker, gosec, staticcheck, revive, checkmake
-make dev-deps
+# make dev-setup installs and configures pre-commit hooks; other tools
+# (golangci-lint, yamlfmt, actionlint, ...) run on demand via `go run`
+# with versions pinned in the Makefile.
+make dev-setup
 
-echo "All development tools installed successfully!"
-echo "Run 'make check-deps' to verify all dependencies are available."
+echo "Development environment ready!"

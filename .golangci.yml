@@ -8,7 +8,7 @@ run:
   timeout: 5m
   modules-download-mode: readonly
   concurrency: 1 # Serial execution for deterministic results
-  go: "1.25"
+  go: "1.26"
 
 linters:
   enable:
@@ -58,18 +58,13 @@ linters:
     - maintidx # Maintainability index
     - nestif # Nested if checking
     - wsl # Whitespace linter (too strict)
-    - gocritic # Too many style opinions
     - nakedret # Naked returns
-    - nolintlint # Nolint directive checking
     - noctx # Context checking
 
   settings:
     errcheck:
-      check-type-assertions: false
+      check-type-assertions: true
       check-blank: false
-      exclude-functions:
-        - (*os.File).Close
-        - (io.Closer).Close
 
     govet:
       enable-all: true
@@ -117,4 +112,4 @@ issues:
   max-issues-per-linter: 0
   max-same-issues: 0
   new: false
-  fix: true
+  fix: false

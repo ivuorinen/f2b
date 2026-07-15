@@ -15,3 +15,4 @@ dist/*
 # Anonymous test data from real fail2ban logs
 !fail2ban/testdata/*
 /.claude/settings.local.json
+graphify-out/
