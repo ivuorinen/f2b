@@ -480,25 +480,31 @@ func (result *CommandTestResult) AssertJSONField(fieldPath, expected string) *Co
 			result.failMissingJSONField(fieldName, " in output")
 		}
 	case []any:
-		// Handle array case - look in first element
-		if len(v) > 0 {
-			if firstItem, ok := v[0].(map[string]any); ok {
-				if val, ok := firstItem[fieldName]; ok {
-					result.checkJSONFieldValue(val, fieldName, expected)
-				} else {
-					result.failMissingJSONField(fieldName, " in first array element")
-				}
-			} else {
-				result.t.Fatalf("%s: first array element is not an object in output: %s", result.name, result.Output)
-			}
-		} else {
-			result.t.Fatalf("%s: JSON array is empty in output: %s", result.name, result.Output)
-		}
+		result.assertJSONArrayField(v, fieldName, expected)
 	default:
 		result.t.Fatalf("%s: expected JSON object or array but got %T in output: %s", result.name, data, result.Output)
 	}
 
 	return result
+}
+
+// assertJSONArrayField validates fieldName in the first element of a JSON array.
+func (result *CommandTestResult) assertJSONArrayField(arr []any, fieldName, expected string) {
+	result.t.Helper()
+	if len(arr) == 0 {
+		result.t.Fatalf("%s: JSON array is empty in output: %s", result.name, result.Output)
+		return
+	}
+	firstItem, ok := arr[0].(map[string]any)
+	if !ok {
+		result.t.Fatalf("%s: first array element is not an object in output: %s", result.name, result.Output)
+		return
+	}
+	if val, ok := firstItem[fieldName]; ok {
+		result.checkJSONFieldValue(val, fieldName, expected)
+	} else {
+		result.failMissingJSONField(fieldName, " in first array element")
+	}
 }
 
 // AssertEmpty validates that output is empty
