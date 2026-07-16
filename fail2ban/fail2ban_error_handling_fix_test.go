@@ -48,161 +48,89 @@ func TestGetLogLinesErrorHandling(t *testing.T) {
 	})
 
 	t.Run("valid_log_with_jail_filter", func(t *testing.T) {
-		// Create temporary log directory with test data
-		tempDir := t.TempDir()
-		originalDir := GetLogDir()
-		defer SetLogDir(originalDir)
-
-		SetLogDir(tempDir)
-
-		// Create test log file with sshd entries
-		logContent := `2024-01-01 12:00:00,123 fail2ban.filter [1234]: INFO [sshd] Found 192.168.1.100
-2024-01-01 12:01:00,456 fail2ban.actions [1234]: NOTICE [sshd] Ban 192.168.1.100
-2024-01-01 12:02:00,789 fail2ban.filter [1234]: INFO [apache] Found 192.168.1.101`
-
-		err := os.WriteFile(filepath.Join(tempDir, "fail2ban.log"), []byte(logContent), 0600)
-		if err != nil {
-			t.Fatalf("Failed to create test log file: %v", err)
-		}
-
-		// Test filtering by jail
-		lines, err := GetLogLines(context.Background(), "sshd", "")
-		if err != nil {
-			t.Errorf("GetLogLines should not error with valid log: %v", err)
-		}
-
-		expectedSSHLines := 2 // Two sshd entries
-		if len(lines) != expectedSSHLines {
-			t.Errorf("Expected %d sshd lines, got %d", expectedSSHLines, len(lines))
-		}
-
-		// Verify content
-		for _, line := range lines {
-			if !strings.Contains(line, "sshd") {
-				t.Errorf("Expected sshd in line, got: %s", line)
-			}
-		}
+		assertLogFilter(t, "sshd", "", "sshd", 2)
 	})
 
 	t.Run("valid_log_with_ip_filter", func(t *testing.T) {
-		// Create temporary log directory with test data
-		tempDir := t.TempDir()
-		originalDir := GetLogDir()
-		defer SetLogDir(originalDir)
-
-		SetLogDir(tempDir)
-
-		logContent := `2024-01-01 12:00:00,123 fail2ban.filter [1234]: INFO [sshd] Found 192.168.1.100
-2024-01-01 12:01:00,456 fail2ban.actions [1234]: NOTICE [sshd] Ban 192.168.1.100
-2024-01-01 12:02:00,789 fail2ban.filter [1234]: INFO [apache] Found 192.168.1.101`
-
-		err := os.WriteFile(filepath.Join(tempDir, "fail2ban.log"), []byte(logContent), 0600)
-		if err != nil {
-			t.Fatalf("Failed to create test log file: %v", err)
-		}
-
-		// Test filtering by IP
-		lines, err := GetLogLines(context.Background(), "", "192.168.1.100")
-		if err != nil {
-			t.Errorf("GetLogLines should not error with valid log: %v", err)
-		}
-
-		expectedIPLines := 2 // Two entries for 192.168.1.100
-		if len(lines) != expectedIPLines {
-			t.Errorf("Expected %d lines for IP, got %d", expectedIPLines, len(lines))
-		}
-
-		// Verify content
-		for _, line := range lines {
-			if !strings.Contains(line, "192.168.1.100") {
-				t.Errorf("Expected IP in line, got: %s", line)
-			}
-		}
+		assertLogFilter(t, "", "192.168.1.100", "192.168.1.100", 2)
 	})
+}
+
+// assertLogFilter writes the standard test log to a temp dir, calls GetLogLines
+// with the given jail/ip filter, and asserts the result count and that every
+// line contains want. Centralizing the log content avoids duplicating it (and
+// the setup) across filter cases.
+func assertLogFilter(t *testing.T, jail, ip, want string, wantCount int) {
+	t.Helper()
+	setupLogDir(t, `2024-01-01 12:00:00,123 fail2ban.filter [1234]: INFO [sshd] Found 192.168.1.100
+2024-01-01 12:01:00,456 fail2ban.actions [1234]: NOTICE [sshd] Ban 192.168.1.100
+2024-01-01 12:02:00,789 fail2ban.filter [1234]: INFO [apache] Found 192.168.1.101`)
+
+	lines, err := GetLogLines(context.Background(), jail, ip)
+	if err != nil {
+		t.Errorf("GetLogLines should not error with valid log: %v", err)
+	}
+	if len(lines) != wantCount {
+		t.Errorf("expected %d lines, got %d", wantCount, len(lines))
+	}
+	for _, line := range lines {
+		if !strings.Contains(line, want) {
+			t.Errorf("expected %q in line, got: %s", want, line)
+		}
+	}
 }
 
 // TestGetLogLinesWithLimitErrorHandling tests error handling with memory limits
 func TestGetLogLinesWithLimitErrorHandling(t *testing.T) {
 	t.Run("zero_limit", func(t *testing.T) {
-		tempDir := t.TempDir()
-		originalDir := GetLogDir()
-		defer SetLogDir(originalDir)
+		setupLogDir(t, `2024-01-01 12:00:00,123 fail2ban.filter [1234]: INFO [sshd] Found 192.168.1.100
+2024-01-01 12:01:00,456 fail2ban.actions [1234]: NOTICE [sshd] Ban 192.168.1.100`)
 
-		SetLogDir(tempDir)
-
-		logContent := `2024-01-01 12:00:00,123 fail2ban.filter [1234]: INFO [sshd] Found 192.168.1.100
-2024-01-01 12:01:00,456 fail2ban.actions [1234]: NOTICE [sshd] Ban 192.168.1.100`
-
-		err := os.WriteFile(filepath.Join(tempDir, "fail2ban.log"), []byte(logContent), 0600)
-		if err != nil {
-			t.Fatalf("Failed to create test log file: %v", err)
-		}
-
-		// Test with zero limit
 		lines, err := GetLogLinesWithLimit(context.Background(), "sshd", "", 0)
 		if err != nil {
 			t.Errorf("GetLogLinesWithLimit should not error with zero limit: %v", err)
 		}
-
-		// Should return empty due to limit
 		if len(lines) != 0 {
 			t.Errorf("Expected no lines with zero limit, got %d", len(lines))
 		}
 	})
 
 	t.Run("negative_limit", func(t *testing.T) {
-		tempDir := t.TempDir()
-		originalDir := GetLogDir()
-		defer SetLogDir(originalDir)
+		setupLogDir(t, `2024-01-01 12:00:00,123 fail2ban.filter [1234]: INFO [sshd] Found 192.168.1.100`)
 
-		SetLogDir(tempDir)
-
-		logContent := `2024-01-01 12:00:00,123 fail2ban.filter [1234]: INFO [sshd] Found 192.168.1.100`
-
-		err := os.WriteFile(filepath.Join(tempDir, "fail2ban.log"), []byte(logContent), 0600)
-		if err != nil {
-			t.Fatalf("Failed to create test log file: %v", err)
-		}
-
-		// Test with negative limit (should be rejected with validation error)
-		_, err = GetLogLinesWithLimit(context.Background(), "sshd", "", -1)
+		_, err := GetLogLinesWithLimit(context.Background(), "sshd", "", -1)
 		if err == nil {
 			t.Error("GetLogLinesWithLimit should error with negative limit")
-		}
-
-		// Error should indicate validation failure
-		if !strings.Contains(err.Error(), "must be non-negative") {
+		} else if !strings.Contains(err.Error(), "must be non-negative") {
 			t.Errorf("Expected validation error for negative limit, got: %v", err)
 		}
 	})
 
 	t.Run("small_limit", func(t *testing.T) {
-		tempDir := t.TempDir()
-		originalDir := GetLogDir()
-		defer SetLogDir(originalDir)
-
-		SetLogDir(tempDir)
-
-		// Create log with multiple entries
-		logContent := `2024-01-01 12:00:00,123 fail2ban.filter [1234]: INFO [sshd] Found 192.168.1.100
+		setupLogDir(t, `2024-01-01 12:00:00,123 fail2ban.filter [1234]: INFO [sshd] Found 192.168.1.100
 2024-01-01 12:01:00,456 fail2ban.actions [1234]: NOTICE [sshd] Ban 192.168.1.100
 2024-01-01 12:02:00,789 fail2ban.filter [1234]: INFO [sshd] Found 192.168.1.101
-2024-01-01 12:03:00,012 fail2ban.actions [1234]: NOTICE [sshd] Ban 192.168.1.101`
+2024-01-01 12:03:00,012 fail2ban.actions [1234]: NOTICE [sshd] Ban 192.168.1.101`)
 
-		err := os.WriteFile(filepath.Join(tempDir, "fail2ban.log"), []byte(logContent), 0600)
-		if err != nil {
-			t.Fatalf("Failed to create test log file: %v", err)
-		}
-
-		// Test with limit of 2
 		lines, err := GetLogLinesWithLimit(context.Background(), "sshd", "", 2)
 		if err != nil {
 			t.Errorf("GetLogLinesWithLimit should not error: %v", err)
 		}
-
-		// Should respect the limit
 		if len(lines) != 2 {
 			t.Errorf("Expected 2 lines due to limit, got %d", len(lines))
 		}
 	})
+}
+
+// setupLogDir points GetLogDir at a fresh temp dir containing a fail2ban.log
+// with the given content, restoring the original dir on cleanup.
+func setupLogDir(t *testing.T, content string) {
+	t.Helper()
+	tempDir := t.TempDir()
+	original := GetLogDir()
+	t.Cleanup(func() { SetLogDir(original) })
+	SetLogDir(tempDir)
+	if err := os.WriteFile(filepath.Join(tempDir, "fail2ban.log"), []byte(content), 0600); err != nil {
+		t.Fatalf("Failed to create test log file: %v", err)
+	}
 }

@@ -2,9 +2,11 @@ package fail2ban
 
 import (
 	"context"
+	"errors"
 	"testing"
 )
 
+//nolint:gocyclo // exhaustive table-driven coverage of every mock context method
 func TestMockClientContextMethods(t *testing.T) {
 	mockClient := NewMockClient()
 	ctx := context.Background()
@@ -96,59 +98,55 @@ func TestMockClientContextMethods(t *testing.T) {
 	if err == nil && result == "" {
 		t.Error("Expected test result or error, got neither")
 	}
+
+	// The WithContext wrappers must honor cancellation: a canceled context
+	// returns its error before the underlying method runs. This exercises the
+	// shared wrapWithContext* production logic, not the mock's canned data.
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := mockClient.ListJailsWithContext(canceledCtx); !errors.Is(err, context.Canceled) {
+		t.Errorf("ListJailsWithContext(canceled) err = %v, want context.Canceled", err)
+	}
+	if _, err := mockClient.StatusJailWithContext(canceledCtx, "sshd"); !errors.Is(err, context.Canceled) {
+		t.Errorf("StatusJailWithContext(canceled) err = %v, want context.Canceled", err)
+	}
+	if _, err := mockClient.BanIPWithContext(canceledCtx, "192.168.1.100", "sshd"); !errors.Is(err, context.Canceled) {
+		t.Errorf("BanIPWithContext(canceled) err = %v, want context.Canceled", err)
+	}
 }
 
-func TestMockClientConfigurationMethods(_ *testing.T) {
+func TestMockClientConfigurationMethods(t *testing.T) {
 	mockClient := NewMockClient()
 
-	// Test that configuration methods exist and can be called
 	testErr := NewInvalidIPError("test ip")
-	mockClient.SetBanError("192.168.1.1", "sshd", testErr)
-	mockClient.SetBanResult("192.168.1.2", "sshd", 1)
-	mockClient.SetUnbanError("192.168.1.3", "sshd", testErr)
-	mockClient.SetUnbanResult("192.168.1.4", "sshd", 1)
+	// Set*(jail, ip, ...) — jail first. (The original test passed these
+	// swapped, which went unnoticed because it asserted nothing.)
+	mockClient.SetBanError("sshd", "192.168.1.1", testErr)
+	mockClient.SetBanResult("sshd", "192.168.1.2", 1)
+	mockClient.SetUnbanError("sshd", "192.168.1.3", testErr)
+	mockClient.SetUnbanResult("sshd", "192.168.1.4", 1)
 	mockClient.SetStatusJailData("apache", "status: active")
 	mockClient.SetFilterTest("apache", "filter test result")
 
-	// Just verify the methods don't panic
-	ctx := context.Background()
-	_, _ = mockClient.BanIPWithContext(ctx, "192.168.1.1", "sshd")
-	_, _ = mockClient.UnbanIPWithContext(ctx, "192.168.1.3", "sshd")
-	_, _ = mockClient.StatusJailWithContext(ctx, "apache")
-	_, _ = mockClient.TestFilterWithContext(ctx, "apache")
-}
-
-func TestNoOpClientContextMethods(_ *testing.T) {
-	noopClient := NewNoOpClient()
 	ctx := context.Background()
 
-	// Test that all context methods can be called without panicking
-	// NoOpClient may return errors due to fail2ban not being available
-	_, _ = noopClient.ListJailsWithContext(ctx)
-	_, _ = noopClient.StatusAllWithContext(ctx)
-	_, _ = noopClient.StatusJailWithContext(ctx, "sshd")
-	_, _ = noopClient.BanIPWithContext(ctx, "192.168.1.1", "sshd")
-	_, _ = noopClient.UnbanIPWithContext(ctx, "192.168.1.1", "sshd")
-	_, _ = noopClient.BannedInWithContext(ctx, "192.168.1.1")
-	_, _ = noopClient.GetBanRecordsWithContext(ctx, []string{"sshd"})
-	_, _ = noopClient.GetLogLinesWithContext(ctx, "sshd", "192.168.1.1")
-	_, _ = noopClient.ListFiltersWithContext(ctx)
-	_, _ = noopClient.TestFilterWithContext(ctx, "sshd")
-}
-
-func TestNoOpClientRegularMethods(_ *testing.T) {
-	noopClient := NewNoOpClient()
-
-	// Test that all regular methods can be called without panicking
-	// NoOpClient may return errors due to fail2ban not being available
-	_, _ = noopClient.ListJails()
-	_, _ = noopClient.StatusAll()
-	_, _ = noopClient.StatusJail("sshd")
-	_, _ = noopClient.BanIP("192.168.1.1", "sshd")
-	_, _ = noopClient.UnbanIP("192.168.1.1", "sshd")
-	_, _ = noopClient.BannedIn("192.168.1.1")
-	_, _ = noopClient.GetBanRecords([]string{"sshd"})
-	_, _ = noopClient.GetLogLines("sshd", "192.168.1.1")
-	_, _ = noopClient.ListFilters()
-	_, _ = noopClient.TestFilter("sshd")
+	// A configured ban error must be surfaced.
+	if _, err := mockClient.BanIPWithContext(ctx, "192.168.1.1", "sshd"); !errors.Is(err, testErr) {
+		t.Errorf("BanIPWithContext error = %v, want %v", err, testErr)
+	}
+	// A configured ban result code must be returned.
+	if code, err := mockClient.BanIPWithContext(ctx, "192.168.1.2", "sshd"); err != nil || code != 1 {
+		t.Errorf("BanIPWithContext = (%d, %v), want (1, nil)", code, err)
+	}
+	// A configured unban error must be surfaced.
+	if _, err := mockClient.UnbanIPWithContext(ctx, "192.168.1.3", "sshd"); !errors.Is(err, testErr) {
+		t.Errorf("UnbanIPWithContext error = %v, want %v", err, testErr)
+	}
+	// Configured status and filter data must round-trip through the context wrappers.
+	if status, err := mockClient.StatusJailWithContext(ctx, "apache"); err != nil || status != "status: active" {
+		t.Errorf("StatusJailWithContext = (%q, %v), want (\"status: active\", nil)", status, err)
+	}
+	if filter, err := mockClient.TestFilterWithContext(ctx, "apache"); err != nil || filter != "filter test result" {
+		t.Errorf("TestFilterWithContext = (%q, %v), want (\"filter test result\", nil)", filter, err)
+	}
 }

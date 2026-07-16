@@ -138,31 +138,6 @@ func TestScanLogLines(t *testing.T) {
 	})
 }
 
-// TestGetCacheStats tests the GetCacheStats function
-func TestGetCacheStats(t *testing.T) {
-	olp := NewOptimizedLogProcessor()
-
-	// Initially should have zero stats
-	hits, misses := olp.GetCacheStats()
-	assert.Equal(t, int64(0), hits)
-	assert.Equal(t, int64(0), misses)
-}
-
-// TestClearCaches tests the ClearCaches function
-func TestClearCaches(t *testing.T) {
-	olp := NewOptimizedLogProcessor()
-
-	// Should not panic
-	assert.NotPanics(t, func() {
-		olp.ClearCaches()
-	})
-
-	// Stats should show zero after clear
-	hits, misses := olp.GetCacheStats()
-	assert.Equal(t, int64(0), hits)
-	assert.Equal(t, int64(0), misses)
-}
-
 // TestGetLogLinesOptimized tests the GetLogLinesOptimized function
 func TestGetLogLinesOptimized(t *testing.T) {
 	tmpDir := t.TempDir()
@@ -178,25 +153,29 @@ func TestGetLogLinesOptimized(t *testing.T) {
 	err := os.WriteFile(logFile, []byte(logContent), 0600)
 	require.NoError(t, err)
 
+	const sshdLine = "2024-01-01 10:00:00 [sshd] Ban 192.168.1.1"
+
 	t.Run("successful read with jail filter", func(t *testing.T) {
 		olp := NewOptimizedLogProcessor()
 		lines, err := olp.GetLogLinesOptimized("sshd", "", 10)
-		assert.NoError(t, err)
-		assert.NotNil(t, lines)
+		require.NoError(t, err)
+		// Only the [sshd] line matches; the [apache] line is filtered out.
+		assert.Equal(t, []string{sshdLine}, lines)
 	})
 
 	t.Run("read with IP filter", func(t *testing.T) {
 		olp := NewOptimizedLogProcessor()
 		lines, err := olp.GetLogLinesOptimized("", "192.168.1.1", 10)
-		assert.NoError(t, err)
-		assert.NotNil(t, lines)
+		require.NoError(t, err)
+		// Only 192.168.1.1 matches (not 192.168.1.2).
+		assert.Equal(t, []string{sshdLine}, lines)
 	})
 
 	t.Run("read with both filters", func(t *testing.T) {
 		olp := NewOptimizedLogProcessor()
 		lines, err := olp.GetLogLinesOptimized("sshd", "192.168.1.1", 5)
-		assert.NoError(t, err)
-		assert.NotNil(t, lines)
+		require.NoError(t, err)
+		assert.Equal(t, []string{sshdLine}, lines)
 	})
 }
 
@@ -216,22 +195,30 @@ func TestGetLogLinesUltraOptimized(t *testing.T) {
 	err := os.WriteFile(logFile, []byte(logContent), 0600)
 	require.NoError(t, err)
 
+	const (
+		sshdLine1 = "2024-01-01 10:00:00 [sshd] Ban 192.168.1.1"
+		sshdLine3 = "2024-01-01 10:02:00 [sshd] Ban 192.168.1.3"
+	)
+
 	t.Run("successful ultra optimized read", func(t *testing.T) {
 		lines, err := GetLogLinesUltraOptimized("sshd", "", 10)
-		assert.NoError(t, err)
-		assert.NotNil(t, lines)
+		require.NoError(t, err)
+		// Both [sshd] lines match; the [apache] line is filtered out.
+		assert.Equal(t, []string{sshdLine1, sshdLine3}, lines)
 	})
 
 	t.Run("with both filters", func(t *testing.T) {
 		lines, err := GetLogLinesUltraOptimized("sshd", "192.168.1.1", 5)
-		assert.NoError(t, err)
-		assert.NotNil(t, lines)
+		require.NoError(t, err)
+		// Only the sshd line whose IP is 192.168.1.1.
+		assert.Equal(t, []string{sshdLine1}, lines)
 	})
 
 	t.Run("with max lines limit", func(t *testing.T) {
 		lines, err := GetLogLinesUltraOptimized("", "", 1)
-		assert.NoError(t, err)
-		assert.NotNil(t, lines)
+		require.NoError(t, err)
+		// The limit caps the result to a single line.
+		assert.Len(t, lines, 1)
 	})
 }
 

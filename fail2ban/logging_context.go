@@ -5,12 +5,12 @@ package fail2ban
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"net"
 	"strings"
 
-	"github.com/google/uuid"
-
-	"github.com/ivuorinen/f2b/shared"
+	"github.com/ivuorinen/f2b/constants"
 )
 
 // WithRequestID adds a request ID to the context
@@ -20,7 +20,7 @@ func WithRequestID(ctx context.Context, requestID string) context.Context {
 	if requestID == "" {
 		return ctx // Don't store empty request IDs
 	}
-	return context.WithValue(ctx, shared.ContextKeyRequestID, requestID)
+	return context.WithValue(ctx, constants.ContextKeyRequestID, requestID)
 }
 
 // WithOperation adds an operation name to the context
@@ -30,7 +30,7 @@ func WithOperation(ctx context.Context, operation string) context.Context {
 	if operation == "" {
 		return ctx // Don't store empty operations
 	}
-	return context.WithValue(ctx, shared.ContextKeyOperation, operation)
+	return context.WithValue(ctx, constants.ContextKeyOperation, operation)
 }
 
 // WithJail adds a validated jail name to the context
@@ -44,7 +44,7 @@ func WithJail(ctx context.Context, jail string) context.Context {
 		return ctx
 	}
 
-	return context.WithValue(ctx, shared.ContextKeyJail, jail)
+	return context.WithValue(ctx, constants.ContextKeyJail, jail)
 }
 
 // WithIP adds a validated IP address to the context
@@ -57,33 +57,39 @@ func WithIP(ctx context.Context, ip string) context.Context {
 		return ctx
 	}
 
-	return context.WithValue(ctx, shared.ContextKeyIP, ip)
+	return context.WithValue(ctx, constants.ContextKeyIP, ip)
 }
 
 // LoggerFromContext creates a logger entry with fields from context
 func LoggerFromContext(ctx context.Context) LoggerEntry {
 	fields := Fields{}
 
-	if requestID, ok := ctx.Value(shared.ContextKeyRequestID).(string); ok && requestID != "" {
+	if requestID, ok := ctx.Value(constants.ContextKeyRequestID).(string); ok && requestID != "" {
 		fields["request_id"] = requestID
 	}
 
-	if operation, ok := ctx.Value(shared.ContextKeyOperation).(string); ok && operation != "" {
+	if operation, ok := ctx.Value(constants.ContextKeyOperation).(string); ok && operation != "" {
 		fields["operation"] = operation
 	}
 
-	if jail, ok := ctx.Value(shared.ContextKeyJail).(string); ok && jail != "" {
+	if jail, ok := ctx.Value(constants.ContextKeyJail).(string); ok && jail != "" {
 		fields["jail"] = jail
 	}
 
-	if ip, ok := ctx.Value(shared.ContextKeyIP).(string); ok && ip != "" {
+	if ip, ok := ctx.Value(constants.ContextKeyIP).(string); ok && ip != "" {
 		fields["ip"] = ip
 	}
 
 	return getLogger().WithFields(fields)
 }
 
-// GenerateRequestID generates a unique request ID using UUID for tracing
+// GenerateRequestID generates a random request ID for tracing. 16 random bytes
+// (128 bits) of hex is ample uniqueness for a correlation ID without pulling in
+// a UUID dependency.
 func GenerateRequestID() string {
-	return uuid.NewString()
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "req-unknown"
+	}
+	return hex.EncodeToString(b[:])
 }

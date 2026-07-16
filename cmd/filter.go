@@ -17,7 +17,11 @@ func TestFilterCmd(client fail2ban.Client, config *Config) *cobra.Command {
 		nil,
 		func(cmd *cobra.Command, args []string) error {
 			// Create timeout context for filter testing (use file timeout as it involves file operations)
-			ctx, cancel := context.WithTimeout(context.Background(), config.FileTimeout)
+			base := cmd.Context()
+			if base == nil {
+				base = context.Background()
+			}
+			ctx, cancel := context.WithTimeout(base, config.FileTimeout)
 			defer cancel()
 
 			if len(args) < 1 {

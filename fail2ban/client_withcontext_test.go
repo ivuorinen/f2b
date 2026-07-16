@@ -224,8 +224,9 @@ func TestUnbanIPWithContext(t *testing.T) {
 			jail: "sshd",
 			setupMock: func(m *MockRunner) {
 				StandardMockSetup(m)
-				m.SetResponse("fail2ban-client set sshd unbanip 192.168.1.100", []byte("0"))
-				m.SetResponse("sudo fail2ban-client set sshd unbanip 192.168.1.100", []byte("0"))
+				// fail2ban prints the count unbanned: 1 = newly unbanned.
+				m.SetResponse("fail2ban-client set sshd unbanip 192.168.1.100", []byte("1"))
+				m.SetResponse("sudo fail2ban-client set sshd unbanip 192.168.1.100", []byte("1"))
 			},
 			timeout:     5 * time.Second,
 			expectError: false,
@@ -237,8 +238,9 @@ func TestUnbanIPWithContext(t *testing.T) {
 			jail: "sshd",
 			setupMock: func(m *MockRunner) {
 				StandardMockSetup(m)
-				m.SetResponse("fail2ban-client set sshd unbanip 192.168.1.100", []byte("1"))
-				m.SetResponse("sudo fail2ban-client set sshd unbanip 192.168.1.100", []byte("1"))
+				// 0 = the IP was already unbanned.
+				m.SetResponse("fail2ban-client set sshd unbanip 192.168.1.100", []byte("0"))
+				m.SetResponse("sudo fail2ban-client set sshd unbanip 192.168.1.100", []byte("0"))
 			},
 			timeout:     5 * time.Second,
 			expectError: false,
@@ -390,6 +392,13 @@ logpath = /var/log/auth.log
 	err := os.WriteFile(filepath.Join(tmpDir, "sshd.conf"), []byte(filterContent), 0600)
 	require.NoError(t, err)
 
+	// Stock-style filter: failregex only, no logpath — must be rejected.
+	stockContent := `[Definition]
+failregex = ^.* Failed .* for .* from <HOST>
+`
+	err = os.WriteFile(filepath.Join(tmpDir, "stock.conf"), []byte(stockContent), 0600)
+	require.NoError(t, err)
+
 	tests := []struct {
 		name        string
 		filter      string
@@ -420,6 +429,16 @@ logpath = /var/log/auth.log
 			setupMock: func(m *MockRunner) {
 				StandardMockSetup(m)
 				// Validation will fail before command execution
+			},
+			timeout:     5 * time.Second,
+			expectError: true,
+		},
+		{
+			name:   "filter without logpath",
+			filter: "stock",
+			setupMock: func(m *MockRunner) {
+				StandardMockSetup(m)
+				// Rejected before any fail2ban-regex invocation
 			},
 			timeout:     5 * time.Second,
 			expectError: true,

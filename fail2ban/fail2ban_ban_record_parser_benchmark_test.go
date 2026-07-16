@@ -32,7 +32,7 @@ func BenchmarkOriginalBanRecordParsing(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := parser.ParseBanRecords(benchmarkBanRecordOutput, "sshd")
 		if err != nil {
 			b.Fatal(err)
@@ -61,84 +61,49 @@ func BenchmarkBanRecordLineParsing(b *testing.B) {
 	})
 }
 
-// BenchmarkTimeParsingOptimization compares time parsing implementations
+// BenchmarkTimeParsingOptimization measures the optimized time parser.
 func BenchmarkTimeParsingOptimization(b *testing.B) {
 	timeStr := "2025-07-20 14:30:39"
 
-	b.Run("original", func(b *testing.B) {
-		cache, err := NewTimeParsingCache("2006-01-02 15:04:05")
+	cache, err := NewFastTimeCache("2006-01-02 15:04:05")
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for b.Loop() {
+		_, err := cache.ParseTimeOptimized(timeStr)
 		if err != nil {
 			b.Fatal(err)
 		}
-
-		b.ResetTimer()
-		b.ReportAllocs()
-
-		for i := 0; i < b.N; i++ {
-			_, err := cache.ParseTime(timeStr)
-			if err != nil {
-				b.Fatal(err)
-			}
-		}
-	})
-
-	b.Run("optimized", func(b *testing.B) {
-		cache, err := NewFastTimeCache("2006-01-02 15:04:05")
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		b.ResetTimer()
-		b.ReportAllocs()
-
-		for i := 0; i < b.N; i++ {
-			_, err := cache.ParseTimeOptimized(timeStr)
-			if err != nil {
-				b.Fatal(err)
-			}
-		}
-	})
+	}
 }
 
-// BenchmarkTimeStringBuilding compares time string building
+// BenchmarkTimeStringBuilding measures the optimized time string builder.
 func BenchmarkTimeStringBuilding(b *testing.B) {
 	dateStr := "2025-07-20"
 	timeStr := "14:30:39"
 
-	b.Run("original", func(b *testing.B) {
-		cache, err := NewTimeParsingCache("2006-01-02 15:04:05")
-		if err != nil {
-			b.Fatal(err)
-		}
+	cache, err := NewFastTimeCache("2006-01-02 15:04:05")
+	if err != nil {
+		b.Fatal(err)
+	}
 
-		b.ResetTimer()
-		b.ReportAllocs()
+	b.ResetTimer()
+	b.ReportAllocs()
 
-		for i := 0; i < b.N; i++ {
-			_ = cache.BuildTimeString(dateStr, timeStr)
-		}
-	})
-
-	b.Run("optimized", func(b *testing.B) {
-		cache, err := NewFastTimeCache("2006-01-02 15:04:05")
-		if err != nil {
-			b.Fatal(err)
-		}
-
-		b.ResetTimer()
-		b.ReportAllocs()
-
-		for i := 0; i < b.N; i++ {
-			_ = cache.BuildTimeStringOptimized(dateStr, timeStr)
-		}
-	})
+	for b.Loop() {
+		_ = cache.BuildTimeStringOptimized(dateStr, timeStr)
+	}
 }
 
 // BenchmarkLargeDataset tests with larger datasets
 func BenchmarkLargeDataset(b *testing.B) {
 	// Generate larger dataset
-	var largeData []string
-	for i := 0; i < 100; i++ {
+	largeData := make([]string, 0, 100*len(benchmarkBanRecordData))
+	for i := range 100 {
 		for _, line := range benchmarkBanRecordData {
 			// Vary the IP addresses slightly
 			modifiedLine := strings.Replace(line, "192.168.1.100", fmt.Sprintf("192.168.%d.%d", i%256, (i*7)%256), 1)
@@ -164,31 +129,16 @@ func BenchmarkLargeDataset(b *testing.B) {
 	})
 }
 
-// BenchmarkDurationFormatting compares duration formatting
+// BenchmarkDurationFormatting benchmarks the ban-record duration formatter.
 func BenchmarkDurationFormatting(b *testing.B) {
 	testDurations := []int64{30, 125, 3661, 7200, 86401} // Various durations
 
-	b.Run("original", func(b *testing.B) {
-		b.ResetTimer()
-		b.ReportAllocs()
-
-		for i := 0; i < b.N; i++ {
-			for _, dur := range testDurations {
-				_ = FormatDuration(dur)
-			}
+	b.ReportAllocs()
+	for b.Loop() {
+		for _, dur := range testDurations {
+			_ = formatDurationOptimized(dur)
 		}
-	})
-
-	b.Run("optimized", func(b *testing.B) {
-		b.ResetTimer()
-		b.ReportAllocs()
-
-		for i := 0; i < b.N; i++ {
-			for _, dur := range testDurations {
-				_ = formatDurationOptimized(dur)
-			}
-		}
-	})
+	}
 }
 
 // BenchmarkMemoryPooling tests the effectiveness of object pooling
@@ -202,9 +152,9 @@ func BenchmarkMemoryPooling(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		// This should demonstrate reduced allocations due to pooling
-		for j := 0; j < 10; j++ {
+		for range 10 {
 			_, err := parser.ParseBanRecordLine(testLine, "sshd")
 			if err != nil {
 				b.Fatal(err)

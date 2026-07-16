@@ -2,12 +2,13 @@ package cmd
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/ivuorinen/f2b/constants"
 	"github.com/ivuorinen/f2b/fail2ban"
-	"github.com/ivuorinen/f2b/shared"
 )
 
 // StatusCmd returns the status command with injected client and config
@@ -18,32 +19,17 @@ func StatusCmd(client fail2ban.Client, config *Config) *cobra.Command {
 		[]string{"st", "stat", "show-status"},
 		func(cmd *cobra.Command, args []string) error {
 			// Create timeout context for the entire status operation
-			ctx, cancel := context.WithTimeout(context.Background(), config.CommandTimeout)
+			ctx, cancel := createTimeoutContext(cmd.Context(), config)
 			defer cancel()
 
 			if len(args) == 0 {
-				jails, err := client.ListJailsWithContext(ctx)
-				if err != nil {
-					// Log error but continue with empty jail list for help display
-					Logger.WithError(err).Warn("Failed to fetch jails for help display")
-					jails = []string{}
-				}
-				PrintOutputTo(
-					GetCmdOutput(cmd),
-					"Usage: "+cmd.Root().Use+" status all   (show all jails)",
-					config.Format,
-				)
-				PrintOutputTo(
-					GetCmdOutput(cmd),
-					"       "+cmd.Root().Use+" status <jail> (show specific jail)",
-					config.Format,
-				)
-				PrintOutputTo(GetCmdOutput(cmd), "Available jails: "+strings.Join(jails, " "), config.Format)
-				return nil
+				return printStatusUsage(ctx, cmd, client, config)
 			}
 
-			target := strings.ToLower(args[0])
-			if target == shared.AllFilter {
+			// Jail names are case-sensitive; keep the argument verbatim and
+			// only treat the special "all" selector case-insensitively.
+			target := args[0]
+			if strings.EqualFold(target, constants.AllFilter) {
 				out, err := client.StatusAllWithContext(ctx)
 				if err != nil {
 					return HandleClientError(err)
@@ -58,13 +44,7 @@ func StatusCmd(client fail2ban.Client, config *Config) *cobra.Command {
 			if err != nil {
 				return HandleClientError(err)
 			}
-			jailExists := false
-			for _, j := range jails {
-				if j == target {
-					jailExists = true
-					break
-				}
-			}
+			jailExists := slices.Contains(jails, target)
 
 			if !jailExists {
 				return HandleClientError(fail2ban.NewJailNotFoundError(target))
@@ -79,4 +59,20 @@ func StatusCmd(client fail2ban.Client, config *Config) *cobra.Command {
 			PrintOutputTo(GetCmdOutput(cmd), status, config.Format)
 			return nil
 		})
+}
+
+// printStatusUsage prints the status command usage help, listing the currently
+// available jails. A jail-list error is non-fatal here: it degrades to an
+// empty list so the help still prints.
+func printStatusUsage(ctx context.Context, cmd *cobra.Command, client fail2ban.Client, config *Config) error {
+	jails, err := client.ListJailsWithContext(ctx)
+	if err != nil {
+		Logger.WithError(err).Warn("Failed to fetch jails for help display")
+		jails = []string{}
+	}
+	out := GetCmdOutput(cmd)
+	PrintOutputTo(out, "Usage: "+cmd.Root().Use+" status all   (show all jails)", config.Format)
+	PrintOutputTo(out, "       "+cmd.Root().Use+" status <jail> (show specific jail)", config.Format)
+	PrintOutputTo(out, "Available jails: "+strings.Join(jails, " "), config.Format)
+	return nil
 }

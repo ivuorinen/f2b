@@ -1,9 +1,9 @@
 package cmd
 
 import (
+	"log/slog"
 	"testing"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -12,8 +12,8 @@ func TestConfigureCIFriendlyLogging(t *testing.T) {
 	tests := []struct {
 		name          string
 		envVars       map[string]string
-		initialLevel  logrus.Level
-		expectedLevel logrus.Level
+		initialLevel  slog.Level
+		expectedLevel slog.Level
 		shouldChange  bool
 	}{
 		{
@@ -23,8 +23,8 @@ func TestConfigureCIFriendlyLogging(t *testing.T) {
 				"F2B_LOG_LEVEL":     "",
 				"F2B_VERBOSE_TESTS": "",
 			},
-			initialLevel:  logrus.InfoLevel,
-			expectedLevel: logrus.ErrorLevel,
+			initialLevel:  slog.LevelInfo,
+			expectedLevel: slog.LevelError,
 			shouldChange:  true,
 		},
 		{
@@ -34,8 +34,8 @@ func TestConfigureCIFriendlyLogging(t *testing.T) {
 				"F2B_LOG_LEVEL":     "",
 				"F2B_VERBOSE_TESTS": "",
 			},
-			initialLevel:  logrus.InfoLevel,
-			expectedLevel: logrus.ErrorLevel,
+			initialLevel:  slog.LevelInfo,
+			expectedLevel: slog.LevelError,
 			shouldChange:  true,
 		},
 		{
@@ -44,8 +44,8 @@ func TestConfigureCIFriendlyLogging(t *testing.T) {
 				"GITHUB_ACTIONS": "true",
 				"F2B_LOG_LEVEL":  "debug",
 			},
-			initialLevel:  logrus.DebugLevel,
-			expectedLevel: logrus.DebugLevel,
+			initialLevel:  slog.LevelDebug,
+			expectedLevel: slog.LevelDebug,
 			shouldChange:  false,
 		},
 		{
@@ -54,8 +54,8 @@ func TestConfigureCIFriendlyLogging(t *testing.T) {
 				"GITHUB_ACTIONS":    "true",
 				"F2B_VERBOSE_TESTS": "true",
 			},
-			initialLevel:  logrus.InfoLevel,
-			expectedLevel: logrus.InfoLevel,
+			initialLevel:  slog.LevelInfo,
+			expectedLevel: slog.LevelInfo,
 			shouldChange:  false,
 		},
 		// Note: Cannot test "normal environment" case because IsTestEnvironment()
@@ -66,8 +66,8 @@ func TestConfigureCIFriendlyLogging(t *testing.T) {
 				"CI":            "true",
 				"F2B_LOG_LEVEL": "warn",
 			},
-			initialLevel:  logrus.WarnLevel,
-			expectedLevel: logrus.WarnLevel,
+			initialLevel:  slog.LevelWarn,
+			expectedLevel: slog.LevelWarn,
 			shouldChange:  false,
 		},
 		{
@@ -76,8 +76,8 @@ func TestConfigureCIFriendlyLogging(t *testing.T) {
 				"F2B_TEST_SUDO":     "1",
 				"F2B_VERBOSE_TESTS": "1",
 			},
-			initialLevel:  logrus.InfoLevel,
-			expectedLevel: logrus.InfoLevel,
+			initialLevel:  slog.LevelInfo,
+			expectedLevel: slog.LevelInfo,
 			shouldChange:  false,
 		},
 	}
@@ -102,7 +102,6 @@ func TestConfigureCIFriendlyLogging(t *testing.T) {
 
 			// Set initial log level
 			Logger.SetLevel(tt.initialLevel)
-			logrus.SetLevel(tt.initialLevel)
 
 			// Call the function
 			configureCIFriendlyLogging()
@@ -110,10 +109,6 @@ func TestConfigureCIFriendlyLogging(t *testing.T) {
 			// Verify Logger level
 			assert.Equal(t, tt.expectedLevel, Logger.GetLevel(),
 				"Logger level should be %s", tt.expectedLevel)
-
-			// Verify global logrus level
-			assert.Equal(t, tt.expectedLevel, logrus.GetLevel(),
-				"logrus global level should be %s", tt.expectedLevel)
 		})
 	}
 }
@@ -133,8 +128,7 @@ func TestConfigureCIFriendlyLogging_Integration(t *testing.T) {
 		t.Setenv("GITHUB_ACTIONS", "true")
 
 		// Set initial level
-		Logger.SetLevel(logrus.InfoLevel)
-		logrus.SetLevel(logrus.InfoLevel)
+		Logger.SetLevel(slog.LevelInfo)
 
 		// Call multiple times
 		configureCIFriendlyLogging()
@@ -145,7 +139,7 @@ func TestConfigureCIFriendlyLogging_Integration(t *testing.T) {
 
 		// Should be the same after multiple calls
 		assert.Equal(t, firstLevel, secondLevel)
-		assert.Equal(t, logrus.ErrorLevel, firstLevel)
+		assert.Equal(t, slog.LevelError, firstLevel)
 	})
 
 	t.Run("respects explicit environment variables", func(t *testing.T) {
@@ -154,13 +148,11 @@ func TestConfigureCIFriendlyLogging_Integration(t *testing.T) {
 		t.Setenv("F2B_TEST_SUDO", "1")
 		t.Setenv("F2B_LOG_LEVEL", "info")
 
-		Logger.SetLevel(logrus.InfoLevel)
-		logrus.SetLevel(logrus.InfoLevel)
+		Logger.SetLevel(slog.LevelInfo)
 
 		configureCIFriendlyLogging()
 
 		// Should NOT change to error level due to explicit F2B_LOG_LEVEL
-		assert.Equal(t, logrus.InfoLevel, Logger.GetLevel())
-		assert.Equal(t, logrus.InfoLevel, logrus.GetLevel())
+		assert.Equal(t, slog.LevelInfo, Logger.GetLevel())
 	})
 }

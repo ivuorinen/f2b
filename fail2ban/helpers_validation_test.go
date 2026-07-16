@@ -76,7 +76,8 @@ func TestValidateFilterName(t *testing.T) {
 // TestGetLogLinesWrapper tests the GetLogLines wrapper function
 func TestGetLogLinesWrapper(t *testing.T) {
 	mockRunner := NewMockRunner()
-	defer WithTestRunner(t, mockRunner)()
+	restoreRunner := WithTestRunner(t, mockRunner)
+	defer restoreRunner()
 	mockRunner.SetResponse("fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
 	mockRunner.SetResponse("sudo fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
 	mockRunner.SetResponse("fail2ban-client ping", []byte("Server replied: pong"))
@@ -103,7 +104,8 @@ func TestGetLogLinesWrapper(t *testing.T) {
 
 // TestBanIPWithContext tests the BanIPWithContext function
 func TestBanIPWithContext(t *testing.T) {
-	defer WithTestRunner(t, GetRunner())()
+	restoreRunner := WithTestRunner(t, GetRunner())
+	defer restoreRunner()
 
 	tests := []struct {
 		name        string
@@ -155,7 +157,8 @@ func TestBanIPWithContext(t *testing.T) {
 // TestGetLogLinesWithLimitAndContext tests the GetLogLinesWithLimitAndContext function
 func TestGetLogLinesWithLimitAndContext(t *testing.T) {
 	mockRunner := NewMockRunner()
-	defer WithTestRunner(t, mockRunner)()
+	restoreRunner := WithTestRunner(t, mockRunner)
+	defer restoreRunner()
 	mockRunner.SetResponse("fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
 	mockRunner.SetResponse("sudo fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
 	mockRunner.SetResponse("fail2ban-client ping", []byte("Server replied: pong"))

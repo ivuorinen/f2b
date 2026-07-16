@@ -284,9 +284,10 @@ func TestTimeParsingOptimizations(t *testing.T) {
 		t.Errorf("Cached time doesn't match: %v vs %v", time1, time2)
 	}
 
-	expected := time.Date(2025, 7, 20, 14, 30, 39, 0, time.UTC)
-	if time1.UTC().Unix() != expected.Unix() {
-		t.Errorf("Parsed time incorrect: got %v, expected %v", time1.UTC(), expected)
+	// fail2ban emits zone-less local timestamps, parsed in the local zone.
+	expected := time.Date(2025, 7, 20, 14, 30, 39, 0, time.Local)
+	if time1.Unix() != expected.Unix() {
+		t.Errorf("Parsed time incorrect: got %v, expected %v", time1, expected)
 	}
 }
 
@@ -318,7 +319,7 @@ func BenchmarkParserStatistics(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := parser.ParseBanRecordLine(testLine, "sshd")
 		if err != nil {
 			b.Fatal(err)

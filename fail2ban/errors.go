@@ -4,19 +4,18 @@ import "fmt"
 
 // Enhanced error messages with context and remediation hints
 const (
-	ErrJailNotFound       = "jail '%s' not found. Use 'f2b status' to list available jails"
-	ErrInvalidIP          = "invalid IP address: %s. Expected: IPv4 (192.168.1.1) or IPv6 (2001:db8::1)"
-	ErrInvalidJail        = "invalid jail name: %s. Must contain only alphanumeric, hyphens, underscores"
-	ErrInvalidFilter      = "invalid filter name: %s. Must contain only alphanumeric, hyphens, underscores"
-	ErrFilterNotFound     = "filter %s not found in filter directory. Use 'f2b filter' to list available filters"
-	ErrClientNotAvailable = "fail2ban client not available for this command. Ensure fail2ban is installed and running"
-	ErrIPRequired         = "IP address required. Usage: f2b <command> <ip-address> [jail]"
-	ErrJailRequired       = "jail name required. Use 'f2b status' to list available jails"
-	ErrFilterRequired     = "filter name required. Use 'f2b filter' to list available filters"
-	ErrActionRequired     = "action required. Valid actions: start, stop, restart, status, reload, enable, disable"
-	ErrInvalidCommand     = "invalid command: %s. Use 'f2b --help' to see available commands"
-	ErrCommandNotAllowed  = "command not allowed: %s. This command contains potentially dangerous characters"
-	ErrInvalidArgument    = "invalid argument: %s. Check command usage with 'f2b <command> --help'"
+	ErrJailNotFound      = "jail '%s' not found. Use 'f2b status' to list available jails"
+	ErrInvalidIP         = "invalid IP address: %s. Expected: IPv4 (192.168.1.1) or IPv6 (2001:db8::1)"
+	ErrInvalidJail       = "invalid jail name: %s. Must contain only letters, digits, dots, hyphens, underscores"
+	ErrInvalidFilter     = "invalid filter name: %s. Must contain only alphanumeric, hyphens, underscores"
+	ErrFilterNotFound    = "filter %s not found. Check the filter directory (filter.d) for available filters"
+	ErrIPRequired        = "IP address required. Usage: f2b <command> <ip-address> [jail]"
+	ErrJailRequired      = "jail name required. Use 'f2b status' to list available jails"
+	ErrFilterRequired    = "filter name required. Usage: f2b test-filter <filter>"
+	ErrActionRequired    = "action required. Valid actions: start, stop, restart, status, reload, enable, disable"
+	ErrInvalidCommand    = "invalid command: %s. Use 'f2b --help' to see available commands"
+	ErrCommandNotAllowed = "command not allowed: %s. This command contains potentially dangerous characters"
+	ErrInvalidArgument   = "invalid argument: %s. Check command usage with 'f2b <command> --help'"
 )
 
 // NewJailNotFoundError creates a formatted error for jail not found scenarios.
@@ -129,11 +128,6 @@ func NewPermissionError(message, remediation string) *ContextualError {
 
 // Common validation errors with enhanced context
 var (
-	ErrClientNotAvailableError = NewSystemError(
-		ErrClientNotAvailable,
-		"Check if fail2ban service is running: 'sudo systemctl status fail2ban'",
-		nil,
-	)
 	ErrIPRequiredError = NewValidationError(
 		ErrIPRequired,
 		"Provide a valid IPv4 or IPv6 address as the first argument",
@@ -144,7 +138,7 @@ var (
 	)
 	ErrFilterRequiredError = NewValidationError(
 		ErrFilterRequired,
-		"Specify a filter name or use 'f2b filter' to see available filters",
+		"Specify a filter name, e.g. 'f2b test-filter sshd'; filters live in the filter directory (filter.d)",
 	)
 	ErrActionRequiredError = NewValidationError(
 		ErrActionRequired,

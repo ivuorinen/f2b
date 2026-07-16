@@ -1,6 +1,6 @@
-// Package cmd provides concrete implementations of IP operation processors.
-// This module contains the specific processors for ban and unban operations
-// that implement the IPOperationProcessor interface.
+// Package cmd provides the shared validate-then-execute helper for IP
+// operations (ban/unban). The per-command operation functions are wired
+// directly into IPCommandConfig; no processor abstraction is needed.
 package cmd
 
 import (
@@ -17,8 +17,8 @@ type multiJailOperationFunc func(
 	jails []string,
 ) ([]OperationResult, error)
 
-// validateIPAndJails validates an IP address and a list of jail names.
-// Returns an error if any validation fails.
+// validateIPAndJails validates an IP address and a list of jail names,
+// returning an error if any validation fails.
 func validateIPAndJails(ip string, jails []string) error {
 	if err := fail2ban.ValidateIP(ip); err != nil {
 		return err
@@ -44,50 +44,4 @@ func processWithValidation(
 		return nil, err
 	}
 	return opFunc(ctx, client, ip, jails)
-}
-
-// BanProcessor handles ban operations
-type BanProcessor struct{}
-
-// ProcessSingle processes a ban operation for a single jail
-func (p *BanProcessor) ProcessSingle(
-	ctx context.Context,
-	client fail2ban.Client,
-	ip string,
-	jails []string,
-) ([]OperationResult, error) {
-	return processWithValidation(ctx, client, ip, jails, ProcessBanOperationWithContext)
-}
-
-// ProcessParallel processes ban operations for multiple jails in parallel
-func (p *BanProcessor) ProcessParallel(
-	ctx context.Context,
-	client fail2ban.Client,
-	ip string,
-	jails []string,
-) ([]OperationResult, error) {
-	return processWithValidation(ctx, client, ip, jails, ProcessBanOperationParallelWithContext)
-}
-
-// UnbanProcessor handles unban operations
-type UnbanProcessor struct{}
-
-// ProcessSingle processes an unban operation for a single jail
-func (p *UnbanProcessor) ProcessSingle(
-	ctx context.Context,
-	client fail2ban.Client,
-	ip string,
-	jails []string,
-) ([]OperationResult, error) {
-	return processWithValidation(ctx, client, ip, jails, ProcessUnbanOperationWithContext)
-}
-
-// ProcessParallel processes unban operations for multiple jails in parallel
-func (p *UnbanProcessor) ProcessParallel(
-	ctx context.Context,
-	client fail2ban.Client,
-	ip string,
-	jails []string,
-) ([]OperationResult, error) {
-	return processWithValidation(ctx, client, ip, jails, ProcessUnbanOperationParallelWithContext)
 }

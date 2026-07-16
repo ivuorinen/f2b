@@ -4,19 +4,25 @@
 package fail2ban
 
 import (
+	"flag"
+	"log/slog"
 	"os"
-	"strings"
+	"sync"
 	"sync/atomic"
-
-	"github.com/sirupsen/logrus"
 )
+
+// loggerBox wraps a LoggerInterface so atomic.Value always stores the same
+// concrete type. Storing bare LoggerInterface values panics with "store of
+// inconsistently typed value" when the concrete type differs from the first
+// store (e.g. a custom logger after the default *logrusAdapter).
+type loggerBox struct{ l LoggerInterface }
 
 // logger holds the current logger instance in a thread-safe manner
 var logger atomic.Value
 
 func init() {
 	// Initialize with default logger
-	logger.Store(NewLogrusAdapter(logrus.StandardLogger()))
+	logger.Store(loggerBox{NewSlogLogger(SlogText)})
 }
 
 // SetLogger allows the cmd package to set the logger instance (thread-safe)
@@ -24,17 +30,17 @@ func SetLogger(l LoggerInterface) {
 	if l == nil {
 		return
 	}
-	logger.Store(l)
+	logger.Store(loggerBox{l})
 }
 
 // getLogger returns the current logger instance (thread-safe)
 func getLogger() LoggerInterface {
-	l, ok := logger.Load().(LoggerInterface)
-	if !ok {
+	box, ok := logger.Load().(loggerBox)
+	if !ok || box.l == nil {
 		// Fallback to default logger if type assertion fails
-		return NewLogrusAdapter(logrus.StandardLogger())
+		return NewSlogLogger(SlogText)
 	}
-	return l
+	return box.l
 }
 
 // IsCI detects if we're running in a CI environment
@@ -58,33 +64,47 @@ func ConfigureCITestLogging() {
 	if IsCI() || IsTestEnvironment() {
 		// Try interface-based assertion first to support custom loggers
 		currentLogger := getLogger()
-		if l, ok := currentLogger.(interface{ SetLevel(logrus.Level) }); ok {
-			l.SetLevel(logrus.WarnLevel)
+		if l, ok := currentLogger.(interface{ SetLevel(slog.Level) }); ok {
+			l.SetLevel(slog.LevelWarn)
 		} else {
 			// Log when we can't adjust level (observable for debugging)
-			logrus.StandardLogger().Debug(
+			currentLogger.Debug(
 				"Non-standard logger in use; CI/test log level adjustment skipped",
 			)
 		}
 	}
 }
 
-// IsTestEnvironment detects if we're running in a test environment
+// IsTestEnvironment detects if we're running in a test environment.
+//
+// It must NOT match on os.Args content: the previous substring scan for
+// "-test"/".test" flipped security-relevant behavior (skipping sudo checks)
+// whenever any argument happened to contain that substring, e.g. a jail named
+// "sshd-test". Detection relies on the -test.v flag that the testing package
+// registers when running under `go test` — this is present regardless of the
+// test binary's name, so it also closes the renamed-binary bypass.
 func IsTestEnvironment() bool {
-	// Check for test-specific environment variables
+	// Explicit opt-in via environment variables.
 	testEnvVars := []string{"GO_TEST", "F2B_TEST", "F2B_TEST_SUDO"}
 	for _, envVar := range testEnvVars {
 		if os.Getenv(envVar) != "" {
+			if flag.Lookup("test.v") == nil {
+				// Outside `go test` these vars silently disable real sudo
+				// probing, which later surfaces as confusing "service not
+				// running" errors — say so once, loudly.
+				warnTestEnvOutsideGoTest.Do(func() {
+					getLogger().WithField("variable", envVar).
+						Warn("Test-environment variable set outside `go test`; real sudo checks are disabled")
+				})
+			}
 			return true
 		}
 	}
 
-	// Check command line arguments for test patterns
-	for _, arg := range os.Args {
-		if strings.Contains(arg, ".test") || strings.Contains(arg, "-test") {
-			return true
-		}
-	}
-
-	return false
+	// Precise Go-test-binary detection.
+	return flag.Lookup("test.v") != nil
 }
+
+// warnTestEnvOutsideGoTest rate-limits the production-shell warning above to
+// one occurrence per process.
+var warnTestEnvOutsideGoTest sync.Once

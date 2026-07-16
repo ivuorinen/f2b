@@ -16,29 +16,35 @@ for comprehensive concurrent testing scenarios.
 ### File Structure
 
 - **Unit tests**: Co-located with source files using `*_test.go` suffix
-- **Integration tests**: Named `integration_test.go` for end-to-end scenarios
-- **Test helpers**: Shared utilities in test files
+- **Integration tests**: `cmd/cmd_integration_test.go` and the top-level `main_*_test.go` files for end-to-end scenarios
+- **Test helpers**: Shared utilities in `cmd/test_helpers_test.go` and `fail2ban/test_helpers.go`
 - **Mocks**: Comprehensive mock implementations in `fail2ban/` package
 
 ### Package Organization
 
+Representative test files (not exhaustive):
+
 ```text
 cmd/
-├── ban_test.go                    # Unit tests for ban command with context support
-├── cmd_test.go                    # Shared test utilities and fluent framework
-├── integration_test.go            # End-to-end command tests with timeout handling
-├── metrics_test.go                # Performance metrics testing
-├── parallel_operations_test.go    # Concurrent operation testing
+├── cmd_commands_test.go            # Command behavior tests using the fluent framework
+├── cmd_integration_test.go         # End-to-end command tests
+├── cmd_parallel_operations_test.go # Concurrent operation tests
+├── cmd_service_test.go             # Service command tests
+├── command_test_framework_test.go  # Fluent test framework (builder, result, environment)
+├── helpers_test.go                 # Helper function tests
 └── ...
 
 fail2ban/
-├── client_test.go                 # Client interface tests with context support
-├── client_security_test.go        # extensive path traversal security test cases
-├── mock.go                       # Thread-safe MockClient implementation
-├── mock_test.go                  # Mock behavior tests
-├── concurrency_test.go           # Thread safety and race condition tests
-├── validation_cache_test.go      # Caching system tests
+├── client_security_test.go             # Path traversal and injection security tests
+├── client_management_test.go           # Client lifecycle tests
+├── fail2ban_command_validation_test.go # Command validation tests
+├── fail2ban_concurrency_test.go        # Thread safety and race condition tests
+├── mock.go                             # Thread-safe MockClient implementation
+├── test_helpers.go                     # SetupMockEnvironment* helpers
 └── ...
+
+main_config_test.go                     # Top-level configuration tests
+main_security_test.go                   # Top-level security tests
 ```
 
 ## Testing Framework
@@ -56,76 +62,48 @@ NewCommandTest(t, "ban").
     ExpectSuccess().
     Run()
 
-// Error testing with context support
+// Error testing
 NewCommandTest(t, "ban").
     WithArgs("invalid-ip", "sshd").
-    WithContext(context.WithTimeout(context.Background(), time.Second*5)).
     ExpectError().
     Run().
     AssertContains("invalid IP address")
 
-// JSON output validation with timeout handling
+// JSON output validation
 NewCommandTest(t, "banned").
     WithArgs("sshd").
     WithJSONFormat().
-    WithContext(context.WithTimeout(context.Background(), time.Second*10)).
     ExpectSuccess().
     Run().
     AssertJSONField("Jail", "sshd")
-
-// Parallel operation testing
-NewCommandTest(t, "banned").
-    WithArgs("all").
-    WithParallelExecution(true).
-    ExpectSuccess().
-    Run().
-    AssertNotEmpty()
 ```
 
-#### Advanced Framework Features with Context Support
+#### Advanced Framework Features
 
 ```go
-// Environment setup with automatic cleanup and context support
+// Environment setup with automatic cleanup
 env := NewTestEnvironment().
     WithPrivileges(true).
-    WithMockRunner().
-    WithContextTimeout(time.Second*30)
+    WithMockRunner()
 defer env.Cleanup()
 
-// Complex test with chained assertions and timeout handling
+// Complex test with chained assertions
 result := NewCommandTest(t, "status").
     WithArgs("sshd").
     WithEnvironment(env).
-    WithContext(context.WithTimeout(context.Background(), time.Second*10)).
     WithSetup(func(mock *fail2ban.MockClient) {
         setMockJails(mock, []string{"sshd", "apache"})
         mock.StatusJailData = map[string]string{
             "sshd": "Status for sshd jail",
         }
-        // Configure context-aware operations
-        mock.EnableContextSupport = true
     }).
     ExpectSuccess().
     Run()
 
-// Multiple validations on same result with performance metrics
+// Multiple validations on the same result
 result.AssertContains("Status for sshd").
     AssertNotContains("apache").
-    AssertNotEmpty().
-    AssertExecutionTime(time.Millisecond*100) // Performance assertion
-
-// Concurrent operation testing
-result := NewCommandTest(t, "banned").
-    WithArgs("all").
-    WithConcurrentWorkers(4).
-    WithSetup(func(mock *fail2ban.MockClient) {
-        // Setup thread-safe mock operations
-        mock.EnableConcurrentAccess = true
-        setMockJails(mock, []string{"sshd", "apache", "nginx"})
-    }).
-    ExpectSuccess().
-    Run().
-    AssertConcurrentSafety()
+    AssertNotEmpty()
 ```
 
 #### Mock Client Builder Pattern (Advanced Configuration)
@@ -133,45 +111,33 @@ result := NewCommandTest(t, "banned").
 The framework includes a fluent MockClientBuilder for complex mock scenarios:
 
 ```go
-// Advanced mock setup with builder pattern and context support
+// Advanced mock setup with builder pattern
 mockBuilder := NewMockClientBuilder().
     WithJails("sshd", "apache").
     WithBannedIP("192.168.1.100", "sshd").
     WithBanRecord("sshd", "192.168.1.100", "01:30:00").
     WithLogLine("2024-01-01 12:00:00 [sshd] Ban 192.168.1.100").
     WithStatusResponse("sshd", "Mock status for jail sshd").
-    WithBanError("apache", "192.168.1.101", errors.New("ban failed")).
-    WithContextSupport(true).
-    WithValidationCache(true).
-    WithParallelProcessing(true)
+    WithBanError("apache", "192.168.1.101", errors.New("ban failed"))
 
-// Use builder in test with context and performance monitoring
+// Use builder in test
 NewCommandTest(t, "banned").
     WithArgs("sshd").
     WithMockBuilder(mockBuilder).
-    WithContext(context.WithTimeout(context.Background(), time.Second*5)).
-    WithMetricsCollection(true).
     ExpectSuccess().
     ExpectOutput("sshd | 192.168.1.100").
-    AssertExecutionTime(time.Millisecond*50).
     Run()
 ```
 
 #### Builder Methods
 
 - `WithJails(jails...)` - Configure available jails
-- `WithBannedIP(ip, jail)` - Add banned IP to jail
+- `WithBannedIP(ip, jail)` - Mark an IP as already banned in a jail
 - `WithBanRecord(jail, ip, remaining)` - Add ban record with time
 - `WithLogLine(line)` - Add log entry
-- `WithStatusResponse(jail, response)` - Configure status responses
+- `WithStatusResponse(target, response)` - Configure status responses
 - `WithBanError(jail, ip, err)` - Configure ban operation errors
 - `WithUnbanError(jail, ip, err)` - Configure unban operation errors
-- `WithContextSupport(bool)` - Enable context-aware operations
-- `WithValidationCache(bool)` - Enable validation caching
-- `WithParallelProcessing(bool)` - Enable concurrent operations
-- `WithTimeoutHandling(duration)` - Configure timeout behavior
-- `WithSecurityTesting(bool)` - Enable security test patterns
-- `WithPathTraversalProtection(bool)` - Enable path traversal test coverage
 
 #### Table-Driven Tests with Framework
 
@@ -242,9 +208,8 @@ This standardization improves code maintainability and aligns with Go testing co
 
 **File-Specific Achievements:**
 
-- `cmd_commands_test.go`: 529 lines (reduced from 780)
-- `cmd_service_test.go`: 284 lines (reduced from 640)
-- `cmd_integration_test.go`: 182 lines (reduced from 223)
+- `cmd_commands_test.go`, `cmd_service_test.go`, and `cmd_integration_test.go`:
+  substantially reduced by migrating to the fluent framework
 - `cmd_root_test.go`: Completion and execute tests standardized
 - `cmd_logswatch_test.go`: Logs watch tests standardized
 
@@ -327,7 +292,7 @@ defer cleanup()
 - **Test privilege escalation** - Ensure commands escalate only when necessary with timeout protection
 - **Context-aware security testing** - Test timeout and cancellation behavior in security scenarios
 - **Thread-safe security operations** - Test concurrent access to security-critical functions
-- **Performance security testing** - Test DoS protection through validation caching
+- **Input validation security testing** - Test that malicious input is rejected before execution
 - **Advanced path traversal protection** - Test Unicode normalization, mixed case, and Windows-style attacks
 
 ### Test Environment Setup
@@ -345,9 +310,7 @@ func TestWithMocks(t *testing.T) {
     // All mock environment is configured with:
     // - Thread-safe operations
     // - Context-aware timeout handling
-    // - Validation caching enabled
     // - Security test coverage patterns
-    // - Performance metrics collection
 }
 ```
 
@@ -420,29 +383,10 @@ func TestValidateIP_AdvancedSecurityChecks(t *testing.T) {
 
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
-            // Test with validation caching enabled
-            start := time.Now()
             err := fail2ban.ValidateIP(tt.ip)
-            duration := time.Since(start)
 
             if (err != nil) != tt.wantErr {
                 t.Errorf("ValidateIP() error = %v, wantErr %v", err, tt.wantErr)
-            }
-
-            // Test caching performance on second call
-            if !tt.wantErr {
-                start2 := time.Now()
-                err2 := fail2ban.ValidateIP(tt.ip)
-                duration2 := time.Since(start2)
-
-                if err2 != nil {
-                    t.Errorf("Cached validation failed: %v", err2)
-                }
-
-                // Second call should be faster due to caching
-                if duration2 > duration {
-                    t.Logf("Cache may not be working: first=%v, second=%v", duration, duration2)
-                }
             }
 
             // Log attack type for security analysis
@@ -584,7 +528,7 @@ func BenchmarkBanCommand(b *testing.B) {
 - **Input validation**: Complete coverage for validation functions including extensive path traversal cases
 - **Context operations**: Comprehensive coverage for timeout and cancellation behavior
 - **Concurrent operations**: Extensive coverage for thread-safe functions
-- **Performance features**: Substantial coverage for caching and metrics systems
+- **Performance features**: Coverage for object pooling and parallel processing
 
 ### Coverage Verification
 
@@ -620,7 +564,6 @@ go tool cover -func=coverage.out | grep total
 - [ ] Environment variables properly isolated
 - [ ] Context-aware timeout behavior tested
 - [ ] Thread-safe concurrent operations verified
-- [ ] Validation caching security tested (DoS protection)
 - [ ] Performance degradation attack scenarios covered
 - [ ] Unicode normalization attacks tested
 - [ ] Mixed case and Windows-style path attacks covered
@@ -665,7 +608,7 @@ defer cleanup()
 
 **Service Commands:**
 
-- `WithServiceSetup(response, error)` - Configure service command mocks
+- `WithServiceSetup(func(*fail2ban.MockRunner))` - Configure service command mocks
 - Service commands support stdout/stderr capture automatically
 
 #### CommandTestResult Assertions
@@ -738,8 +681,8 @@ go test -run "Security|Sudo|Privilege|PathTraversal|Context|Timeout" ./...
 # Run concurrent safety tests
 go test -run "Concurrent|Race|ThreadSafe" -race ./...
 
-# Run performance security tests (caching, DoS protection)
-go test -run "Cache|Performance|Validation" ./...
+# Run validation and performance tests
+go test -run "Performance|Validation" ./...
 
 # Run advanced path traversal security tests
 go test -run "PathTraversal|Unicode|Mixed|Windows" ./fail2ban
@@ -761,4 +704,4 @@ go test -coverprofile=integration.out -run Integration ./cmd
 This comprehensive testing approach ensures f2b remains secure, reliable, and maintainable while providing confidence
 for all changes and contributions. The enhanced testing framework includes context-aware operations, sophisticated
 security coverage with extensive path traversal attack vectors, thread-safe concurrent testing, performance-oriented
-validation caching tests, and comprehensive timeout handling verification for enterprise-grade reliability.
+validation tests, and comprehensive timeout handling verification for enterprise-grade reliability.

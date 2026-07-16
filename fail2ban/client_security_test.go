@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ivuorinen/f2b/shared"
+	"github.com/ivuorinen/f2b/constants"
 )
 
 func TestNewClientPathTraversalProtection(t *testing.T) {
@@ -169,22 +169,22 @@ func TestNewClientDefaultPathValidation(t *testing.T) {
 	}
 
 	// Verify defaults were applied
-	if client.LogDir != shared.DefaultLogDir {
-		t.Errorf("expected LogDir to be %s, got %s", shared.DefaultLogDir, client.LogDir)
+	if client.LogDir != constants.DefaultLogDir {
+		t.Errorf("expected LogDir to be %s, got %s", constants.DefaultLogDir, client.LogDir)
 	}
 
-	if client.FilterDir != shared.DefaultFilterDir {
-		if resolved, err := resolveAncestorSymlinks(shared.DefaultFilterDir, true); err == nil {
+	if client.FilterDir != constants.DefaultFilterDir {
+		if resolved, err := resolveAncestorSymlinks(constants.DefaultFilterDir, true); err == nil {
 			if client.FilterDir != resolved {
 				t.Errorf(
 					"expected FilterDir to be %s or %s, got %s",
-					shared.DefaultFilterDir,
+					constants.DefaultFilterDir,
 					resolved,
 					client.FilterDir,
 				)
 			}
 		} else {
-			t.Errorf("expected FilterDir to be %s, got %s", shared.DefaultFilterDir, client.FilterDir)
+			t.Errorf("expected FilterDir to be %s, got %s", constants.DefaultFilterDir, client.FilterDir)
 		}
 	}
 }

@@ -6,21 +6,38 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
-	"github.com/ivuorinen/f2b/shared"
+	"github.com/ivuorinen/f2b/constants"
 
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/ivuorinen/f2b/fail2ban"
 )
+
+// interruptCode holds 128+n when signal n interrupted the current Execute
+// run, 0 otherwise. Read via SignalExitCode after Execute returns.
+var interruptCode atomic.Int32
+
+// SignalExitCode returns the conventional exit code for a signal-interrupted
+// run (130 for SIGINT, 143 for SIGTERM), or 0 when no signal was received.
+func SignalExitCode() int {
+	return int(interruptCode.Load())
+}
+
+// EnvConfig returns the package-level config built from the environment at
+// init time — the same instance the CLI flags are bound to. main uses it so
+// the environment is read (and warned about) once per process.
+func EnvConfig() Config {
+	return cfg
+}
 
 // Config holds global configuration for the CLI, including log and filter directories and output format.
 type Config struct {
@@ -30,6 +47,11 @@ type Config struct {
 	CommandTimeout  time.Duration // Timeout for individual fail2ban commands
 	FileTimeout     time.Duration // Timeout for file operations
 	ParallelTimeout time.Duration // Timeout for parallel operations
+
+	// configErr holds a fatal configuration error (e.g. an explicitly-set but
+	// invalid F2B_LOG_DIR/F2B_FILTER_DIR) discovered while building the config.
+	// Execute returns it instead of running against silently-substituted defaults.
+	configErr error
 }
 
 var (
@@ -37,25 +59,70 @@ var (
 		Use:   "f2b",
 		Short: "Fail2Ban CLI helper",
 		Long:  "Fail2Ban CLI tool implemented in Go using Cobra.",
+		// Report runtime errors once via our own handler instead of letting
+		// cobra reprint them and dump usage as if they were syntax errors.
+		SilenceErrors: true,
+		SilenceUsage:  true,
 	}
 	cfg Config
 
 	// Resource cleanup tracking
 	logFile      *os.File
 	logFileMutex sync.Mutex
-	cleanupOnce  sync.Once
 )
 
 // Execute runs the CLI application with the given client and configuration.
 func Execute(client fail2ban.Client, config Config) error {
 	cfg = config
+	// Fail fast on a fatal config error (e.g. an explicitly-set but invalid
+	// F2B_LOG_DIR/F2B_FILTER_DIR) rather than operating on a silently
+	// substituted default directory.
+	if cfg.configErr != nil {
+		return cfg.configErr
+	}
 	// Ensure cleanup happens even if the program exits unexpectedly
 	defer cleanupResources()
 
-	// Set up metrics recorder for validation caching
-	fail2ban.SetMetricsRecorder(GetGlobalMetrics())
-
-	ctx := context.Background()
+	// Derive a context that is canceled on SIGINT/SIGTERM so long-running
+	// commands (e.g. logs-watch) can shut down gracefully via cmd.Context().
+	// The signal is recorded before cancellation so main can exit 128+n
+	// (130/143) after the graceful teardown, and handling reverts to the
+	// default after the first signal so a second Ctrl-C force-kills a command
+	// stuck in non-context-aware work.
+	interruptCode.Store(0)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	defer func() {
+		signal.Stop(sigCh)
+		// A signal delivered as the command completed may still sit in the
+		// buffer with its goroutine not yet scheduled — record it so main
+		// doesn't exit 0 on an interrupted run.
+		select {
+		case sig := <-sigCh:
+			if s, ok := sig.(syscall.Signal); ok {
+				interruptCode.Store(int32(128 + int(s))) // #nosec G115 -- signal numbers are tiny
+			}
+		default:
+		}
+		close(sigCh)
+	}()
+	go func() {
+		sig, ok := <-sigCh
+		if !ok {
+			return
+		}
+		if s, ok := sig.(syscall.Signal); ok {
+			interruptCode.Store(int32(128 + int(s))) // #nosec G115 -- signal numbers are tiny
+		}
+		signal.Stop(sigCh)
+		cancel()
+	}()
+	// Re-register from scratch: cobra does not dedupe AddCommand, so a second
+	// Execute in the same process (tests, embedding) would otherwise dispatch
+	// to the closures bound to the FIRST call's client and signal context.
+	rootCmd.ResetCommands()
 	rootCmd.AddCommand(ListJailsCmd(client, &cfg))
 	rootCmd.AddCommand(StatusCmd(client, &cfg))
 	rootCmd.AddCommand(BannedCmd(client, &cfg))
@@ -67,9 +134,8 @@ func Execute(client fail2ban.Client, config Config) error {
 	rootCmd.AddCommand(ServiceCmd(&cfg))
 	rootCmd.AddCommand(VersionCmd(&cfg))
 	rootCmd.AddCommand(TestFilterCmd(client, &cfg))
-	rootCmd.AddCommand(MetricsCmd(client, &cfg))
 	rootCmd.AddCommand(completionCmd())
-	return rootCmd.Execute()
+	return rootCmd.ExecuteContext(ctx)
 }
 
 func init() {
@@ -81,7 +147,7 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&cfg.LogDir, "log-dir", cfg.LogDir, "Fail2Ban log directory")
 	rootCmd.PersistentFlags().StringVar(&cfg.FilterDir, "filter-dir", cfg.FilterDir, "Fail2Ban filter directory")
-	rootCmd.PersistentFlags().StringVar(&cfg.Format, shared.FlagFormat, cfg.Format, shared.FlagDescFormat)
+	rootCmd.PersistentFlags().StringVar(&cfg.Format, constants.FlagFormat, cfg.Format, constants.FlagDescFormat)
 	rootCmd.PersistentFlags().
 		DurationVar(&cfg.CommandTimeout, "command-timeout", cfg.CommandTimeout, "Timeout for individual fail2ban commands")
 	rootCmd.PersistentFlags().
@@ -90,63 +156,75 @@ func init() {
 		DurationVar(&cfg.ParallelTimeout, "parallel-timeout", cfg.ParallelTimeout, "Timeout for parallel operations")
 
 	// Log level configuration
-	logLevel := os.Getenv(shared.EnvLogLevel)
+	logLevel := os.Getenv(constants.EnvLogLevel)
 	if logLevel == "" {
-		logLevel = shared.DefaultLogLevel
+		logLevel = constants.DefaultLogLevel
 	}
 
 	// Log file support
 	logFile := os.Getenv("F2B_LOG_FILE")
-	rootCmd.PersistentFlags().String(shared.FlagLogFile, logFile, "Path to log file for f2b logs (optional)")
-	rootCmd.PersistentFlags().String(shared.FlagLogLevel, logLevel, "Log level (debug, info, warn, error)")
+	rootCmd.PersistentFlags().String(constants.FlagLogFile, logFile, "Path to log file for f2b logs (optional)")
+	rootCmd.PersistentFlags().String(constants.FlagLogLevel, logLevel, "Log level (debug, info, warn, error)")
 
-	rootCmd.PersistentPreRun = func(cmd *cobra.Command, _ []string) {
-		logFileFlag, _ := cmd.Flags().GetString(shared.FlagLogFile)
-		if logFileFlag != "" {
-			// Validate log file path for security
-			cleanPath, err := filepath.Abs(filepath.Clean(logFileFlag))
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Invalid log file path %s: %v\n", logFileFlag, err)
-				return
-			}
-
-			// Additional security check: ensure path doesn't contain dangerous patterns
-			if strings.Contains(cleanPath, "..") || strings.Contains(cleanPath, "//") {
-				fmt.Fprintf(os.Stderr, "Invalid log file path %s: contains dangerous patterns\n", logFileFlag)
-				return
-			}
-
-			// #nosec G304 - Path is validated and sanitized above
-			f, err := os.OpenFile(cleanPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, shared.DefaultFilePermissions)
-			if err == nil {
-				Logger.SetOutput(f)
-				// Register cleanup for graceful shutdown
-				registerLogFileCleanup(f, cleanPath)
-			} else {
-				fmt.Fprintf(os.Stderr, "Failed to open log file %s: %v\n", cleanPath, err)
-			}
+	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+		// Validate AFTER flag parsing so flag-provided values are covered too
+		// (validating before ExecuteContext left --format/--command-timeout/
+		// --log-dir entirely unvalidated). Invalid values are a hard error.
+		if err := cfg.ValidateConfig(); err != nil {
+			return err
 		}
-		level, _ := cmd.Flags().GetString(shared.FlagLogLevel)
+
+		// Apply --log-level first so it takes effect even if --log-file setup
+		// later fails; previously an invalid log-file path returned early and
+		// silently skipped the level change.
+		level, _ := cmd.Flags().GetString(constants.FlagLogLevel)
 		Logger.SetLevel(parseLogLevel(level))
+
+		logFileFlag, _ := cmd.Flags().GetString(constants.FlagLogFile)
+		if logFileFlag == "" {
+			syncContextualLogger()
+			return nil
+		}
+
+		// Validate log file path for security
+		cleanPath, err := filepath.Abs(filepath.Clean(logFileFlag))
+		if err != nil {
+			return fmt.Errorf("invalid log file path %s: %w", logFileFlag, err)
+		}
+
+		// #nosec G304 - Path is cleaned and made absolute above; filepath.Clean
+		// already normalizes any traversal sequences.
+		f, err := os.OpenFile(cleanPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, constants.DefaultFilePermissions)
+		if err != nil {
+			return fmt.Errorf("failed to open log file %s: %w", cleanPath, err)
+		}
+		Logger.SetOutput(f)
+		// Register cleanup for graceful shutdown
+		registerLogFileCleanup(f, cleanPath)
+		syncContextualLogger()
+		return nil
 	}
 }
 
-// registerLogFileCleanup registers a log file for cleanup and sets up signal handling
+// syncContextualLogger propagates the configured level and output of the main
+// Logger to the structured operation logger, which was otherwise frozen at its
+// package-init values and ignored --log-level/--log-file.
+func syncContextualLogger() {
+	if cl := GetContextualLogger(); cl != nil {
+		cl.SetLevel(Logger.GetLevel())
+		cl.SetOutput(Logger.Output())
+	}
+}
+
+// registerLogFileCleanup registers a log file so cleanupResources closes it
+// when Execute returns. Signal handling lives in Execute's NotifyContext: a
+// signal cancels the command context, the command returns, and the deferred
+// cleanup runs — no competing handler that os.Exits mid-command and skips the
+// metrics/log-file defers.
 func registerLogFileCleanup(f *os.File, _ string) {
 	logFileMutex.Lock()
 	logFile = f
 	logFileMutex.Unlock()
-
-	// Setup signal handler for graceful cleanup (only once)
-	cleanupOnce.Do(func() {
-		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-		go func() {
-			<-c
-			cleanupResources()
-			os.Exit(0)
-		}()
-	})
 }
 
 // cleanupResources performs cleanup of allocated resources
@@ -157,32 +235,37 @@ func cleanupResources() {
 	if logFile != nil {
 		if err := logFile.Close(); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: Failed to close log file: %v\n", err)
-		} else {
-			fmt.Fprintf(os.Stderr, "Log file closed successfully\n")
 		}
 		logFile = nil
 	}
 }
 
-// parseLogLevel parses a string log level for logrus.
-func parseLogLevel(level string) logrus.Level {
+// slog has no Fatal/Panic levels; map them above Error so selecting them still
+// silences everything below, preserving logrus's original level ordering.
+const (
+	levelFatal = slog.LevelError + 4
+	levelPanic = slog.LevelError + 8
+)
+
+// parseLogLevel converts a string log level to its slog.Level.
+func parseLogLevel(level string) slog.Level {
 	switch level {
 	case "debug":
-		return logrus.DebugLevel
-	case shared.DefaultLogLevel:
-		return logrus.InfoLevel
+		return slog.LevelDebug
+	case constants.DefaultLogLevel:
+		return slog.LevelInfo
 	case "warn", "warning":
-		return logrus.WarnLevel
+		return slog.LevelWarn
 	case "error":
-		return logrus.ErrorLevel
+		return slog.LevelError
 	case "fatal":
-		return logrus.FatalLevel
+		return levelFatal
 	case "panic":
-		return logrus.PanicLevel
+		return levelPanic
 	default:
 		// Log warning about invalid log level before falling back to default
 		Logger.WithField("invalid_level", level).Warn("Invalid log level specified, falling back to 'info'")
-		return logrus.InfoLevel
+		return slog.LevelInfo
 	}
 }
 
@@ -234,10 +317,6 @@ PowerShell:
 				_ = root.GenFishCompletion(cmd.OutOrStdout(), true)
 			case "powershell":
 				_ = root.GenPowerShellCompletionWithDesc(cmd.OutOrStdout())
-			default:
-				if _, err := fmt.Fprintf(cmd.ErrOrStderr(), "Unsupported shell type: %s\n", args[0]); err != nil {
-					Logger.WithError(err).Error("failed to write unsupported shell type")
-				}
 			}
 		},
 	}

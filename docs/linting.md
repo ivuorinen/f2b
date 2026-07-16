@@ -9,19 +9,22 @@ CI, and pre-commit hooks.
 
 ### Supported Tools
 
-- **Go**: `gofmt`, `go-build-mod`, `go-mod-tidy`, `golangci-lint`
-- **Markdown**: `markdownlint`
+- **Go**: `golangci-lint` (local hook)
+- **Markdown**: `markdownlint-cli2`, `mdformat`, `markdown-link-check`
 - **YAML**: `yamlfmt` (Google's YAML formatter)
-- **GitHub Actions**: `actionlint`
+- **Shell**: `shfmt`
+- **GitHub Actions**: `actionlint`, `check-github-workflows`
 - **EditorConfig**: `editorconfig-checker`
 - **Makefile**: `checkmake`
+- **Infrastructure/security**: `checkov`
+- **Hook hygiene**: `sync-pre-commit-deps`, standard `pre-commit-hooks` file checks
 
 ## Quick Start
 
 ### Install Development Dependencies
 
 ```bash
-make dev-deps
+make dev-setup
 ```
 
 ### Set Up Pre-commit (Recommended)
@@ -41,11 +44,8 @@ pre-commit install
 # Run all linting and formatting checks
 make lint
 
-# Run all linters with strict mode
-make lint-strict
-
-# Run linters with auto-fix
-make lint-fix
+# Run only the Go linters
+make lint-go
 ```
 
 **Individual Pre-commit Hooks:**
@@ -54,7 +54,7 @@ make lint-fix
 # Run specific hook
 pre-commit run yamlfmt --all-files
 pre-commit run golangci-lint --all-files
-pre-commit run markdownlint --all-files
+pre-commit run markdownlint-cli2 --all-files
 pre-commit run checkmake --all-files
 ```
 
@@ -81,24 +81,6 @@ make lint-make         # Makefile only
 
 ### Go Linting
 
-#### gofmt (via pre-commit-golang)
-
-- **Purpose**: Code formatting
-- **Configuration**: Uses Go standard formatting
-- **Hook**: `go-fmt`
-
-#### go-build-mod (via pre-commit-golang)
-
-- **Purpose**: Verify code builds
-- **Configuration**: Uses go.mod
-- **Hook**: `go-build-mod`
-
-#### go-mod-tidy (via pre-commit-golang)
-
-- **Purpose**: Clean up go.mod and go.sum
-- **Configuration**: Automatic
-- **Hook**: `go-mod-tidy`
-
 #### golangci-lint (local hook)
 
 - **Purpose**: Comprehensive Go linting with multiple analyzers
@@ -108,14 +90,25 @@ make lint-make         # Makefile only
 
 ### Markdown Linting
 
-#### markdownlint (local hook)
+#### markdownlint-cli2 (DavidAnson/markdownlint-cli2)
 
 - **Purpose**: Markdown formatting and style consistency
 - **Configuration**: `.markdownlint.json`
 - **Key rules**:
   - Line length limit: 120 characters
   - Disabled: HTML tags, bare URLs, first-line heading requirement
-- **Hook**: `markdownlint`
+- **Hook**: `markdownlint-cli2`
+
+#### mdformat (hukkin/mdformat)
+
+- **Purpose**: Markdown auto-formatting (with GFM support)
+- **Hook**: `mdformat`
+
+#### markdown-link-check (tcort/markdown-link-check)
+
+- **Purpose**: Detect broken links in Markdown files
+- **Configuration**: `.markdown-link-check.json`
+- **Hook**: `markdown-link-check`
 
 ### YAML Linting
 
@@ -133,7 +126,7 @@ make lint-make         # Makefile only
 
 ### GitHub Actions Linting
 
-#### actionlint (local hook)
+#### actionlint (rhysd/actionlint)
 
 - **Purpose**: GitHub Actions workflow validation
 - **Configuration**: Default configuration
@@ -144,9 +137,28 @@ make lint-make         # Makefile only
   - Expression validation
 - **Hook**: `actionlint`
 
+#### check-github-workflows (python-jsonschema/check-jsonschema)
+
+- **Purpose**: Validate workflow files against the GitHub workflow JSON schema
+- **Hook**: `check-github-workflows`
+
+### Shell Formatting
+
+#### shfmt (scop/pre-commit-shfmt)
+
+- **Purpose**: Shell script formatting
+- **Hook**: `shfmt`
+
+### Security Scanning
+
+#### checkov (bridgecrewio/checkov)
+
+- **Purpose**: Static analysis of infrastructure and CI configuration
+- **Hook**: `checkov`
+
 ### EditorConfig
 
-#### editorconfig-checker (local hook)
+#### editorconfig-checker (official repo)
 
 - **Purpose**: Verify EditorConfig compliance
 - **Configuration**: `.editorconfig`
@@ -174,10 +186,18 @@ The project uses `.pre-commit-config.yaml` for unified tooling:
 ### Hook Sources
 
 - **pre-commit/pre-commit-hooks**: Basic file checks
-- **tekwizely/pre-commit-golang**: Go-specific hooks
+- **pre-commit/sync-pre-commit-deps**: Keeps hook dependency pins in sync
 - **google/yamlfmt**: Official YAML formatter
-- **mrtazz/checkmake**: Official Makefile linter
-- **local**: Custom hooks for project-specific tools
+- **DavidAnson/markdownlint-cli2**: Markdown linter
+- **hukkin/mdformat**: Markdown formatter
+- **tcort/markdown-link-check**: Markdown link checker
+- **rhysd/actionlint**: GitHub Actions linter
+- **scop/pre-commit-shfmt**: Shell formatter
+- **checkmake/checkmake**: Official Makefile linter
+- **bridgecrewio/checkov**: Infrastructure/CI security scanner
+- **python-jsonschema/check-jsonschema**: Workflow schema validation
+- **editorconfig-checker/editorconfig-checker**: EditorConfig compliance
+- **local**: `golangci-lint` (run via `go run`)
 
 ### Automatic Setup
 
@@ -208,17 +228,16 @@ pre-commit autoupdate
 
 ### GitHub Actions
 
-Both workflows now use unified pre-commit:
+CI lints Go code directly with the golangci-lint action (it does not run pre-commit):
 
 - **`.github/workflows/lint.yml`**: Main linting workflow
 - **`.github/workflows/pr-lint.yml`**: Pull request linting
 
 ### Workflow Features
 
-- Single `pre-commit/action@v3.0.1` step
-- Automatic tool installation and caching
-- Consistent behavior with local development
-- Python and Go environment setup
+- `golangci/golangci-lint-action@v9.3.0` step (pinned by commit SHA)
+- Go environment setup and built-in caching
+- Same `.golangci.yml` configuration as local `make lint-go`
 
 ## Development Workflow
 
@@ -266,11 +285,18 @@ formatter:
     "tables": false,
     "code_blocks": false
   },
+  "MD024": {
+    "siblings_only": true
+  },
   "MD033": false,
   "MD041": false,
-  "MD034": false
+  "MD034": false,
+  "MD007": false,
+  "MD029": false
 }
 ```
+
+See [.markdownlint.json](../.markdownlint.json) for the authoritative configuration.
 
 ### `.golangci.yml`
 
@@ -294,7 +320,7 @@ All YAML files include schema references for better IDE support:
 
 #### "command not found" errors
 
-**Solution**: Run `make dev-deps` and `make pre-commit-setup`
+**Solution**: Run `make dev-setup` (which runs `make pre-commit-setup`)
 
 #### YAML formatting differences
 

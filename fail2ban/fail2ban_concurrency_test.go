@@ -10,7 +10,8 @@ import (
 // TestRunnerConcurrentAccess tests that concurrent access to the runner
 // is safe and doesn't cause race conditions.
 func TestRunnerConcurrentAccess(t *testing.T) {
-	defer WithTestRunner(t, GetRunner())()
+	restoreRunner := WithTestRunner(t, GetRunner())
+	defer restoreRunner()
 
 	const numGoroutines = 100
 	const numOperations = 50
@@ -18,12 +19,12 @@ func TestRunnerConcurrentAccess(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Test concurrent SetRunner/GetRunner operations
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
 
-			for j := 0; j < numOperations; j++ {
+			for j := range numOperations {
 				// Alternate between different mock runners
 				if (id+j)%2 == 0 {
 					mockRunner := NewMockRunner()
@@ -53,18 +54,16 @@ func TestRunnerConcurrentAccess(t *testing.T) {
 // RunnerCombinedOutput are safe.
 func TestRunnerCombinedOutputConcurrency(t *testing.T) {
 	mockRunner := NewMockRunner()
-	defer WithTestRunner(t, mockRunner)()
-	mockRunner.SetResponse("echo test", []byte("test output"))
+	restoreRunner := WithTestRunner(t, mockRunner)
+	defer restoreRunner()
+	mockRunner.SetResponse("fail2ban-client status", []byte("test output"))
 
 	const numGoroutines = 50
 	var wg sync.WaitGroup
 
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			output, err := RunnerCombinedOutput("echo", "test")
+	for range numGoroutines {
+		wg.Go(func() {
+			output, err := RunnerCombinedOutput("fail2ban-client", "status")
 			if err != nil {
 				t.Errorf("RunnerCombinedOutput failed: %v", err)
 				return
@@ -73,7 +72,7 @@ func TestRunnerCombinedOutputConcurrency(t *testing.T) {
 			if string(output) != "test output" {
 				t.Errorf("Expected 'test output', got '%s'", string(output))
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -87,17 +86,14 @@ func TestRunnerCombinedOutputWithSudoConcurrency(t *testing.T) {
 	defer cleanup()
 
 	// Get the mock runner and configure additional responses
-	mockRunner := GetRunner().(*MockRunner)
+	mockRunner := MustMockRunner(t)
 	mockRunner.SetResponse("fail2ban-client status", []byte("status output"))
 
 	const numGoroutines = 50
 	var wg sync.WaitGroup
 
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
+	for range numGoroutines {
+		wg.Go(func() {
 			output, err := RunnerCombinedOutputWithSudo("fail2ban-client", "status")
 			if err != nil {
 				t.Errorf("RunnerCombinedOutputWithSudo failed: %v", err)
@@ -107,7 +103,7 @@ func TestRunnerCombinedOutputWithSudoConcurrency(t *testing.T) {
 			if string(output) != "status output" {
 				t.Errorf("Expected 'status output', got '%s'", string(output))
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -119,7 +115,8 @@ func TestMixedConcurrentOperations(t *testing.T) {
 	// Set up a single shared MockRunner with all required responses
 	// This avoids race conditions from multiple goroutines setting different runners
 	sharedMockRunner := NewMockRunner()
-	defer WithTestRunner(t, sharedMockRunner)()
+	restoreRunner := WithTestRunner(t, sharedMockRunner)
+	defer restoreRunner()
 
 	// Set up responses for valid fail2ban commands to avoid validation errors
 	sharedMockRunner.SetResponse("fail2ban-client status", []byte("Status: OK"))
@@ -133,12 +130,9 @@ func TestMixedConcurrentOperations(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Group 1: Set runners (now just validates that setting runners works concurrently)
-	for i := 0; i < numGoroutines/3; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			for j := 0; j < 20; j++ {
+	for range numGoroutines / 3 {
+		wg.Go(func() {
+			for range 20 {
 				// Create a new runner with the same responses to test concurrent setting
 				mockRunner := NewMockRunner()
 				mockRunner.SetResponse("fail2ban-client status", []byte("Status: OK"))
@@ -148,16 +142,13 @@ func TestMixedConcurrentOperations(t *testing.T) {
 				SetRunner(mockRunner)
 				time.Sleep(time.Millisecond)
 			}
-		}()
+		})
 	}
 
 	// Group 2: Execute regular commands (using valid fail2ban commands)
-	for i := 0; i < numGoroutines/3; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			for j := 0; j < 20; j++ {
+	for range numGoroutines / 3 {
+		wg.Go(func() {
+			for range 20 {
 				output, err := RunnerCombinedOutput("fail2ban-client", "status")
 				if err != nil {
 					t.Errorf("RunnerCombinedOutput failed: %v", err)
@@ -167,16 +158,13 @@ func TestMixedConcurrentOperations(t *testing.T) {
 				}
 				time.Sleep(time.Millisecond)
 			}
-		}()
+		})
 	}
 
 	// Group 3: Execute sudo commands (using valid fail2ban commands)
-	for i := 0; i < numGoroutines/3; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			for j := 0; j < 20; j++ {
+	for range numGoroutines / 3 {
+		wg.Go(func() {
+			for range 20 {
 				output, err := RunnerCombinedOutputWithSudo("fail2ban-client", "-V")
 				if err != nil {
 					t.Errorf("RunnerCombinedOutputWithSudo failed: %v", err)
@@ -186,7 +174,7 @@ func TestMixedConcurrentOperations(t *testing.T) {
 				}
 				time.Sleep(time.Millisecond)
 			}
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -195,7 +183,8 @@ func TestMixedConcurrentOperations(t *testing.T) {
 // TestRunnerManagerLockOrdering verifies there are no deadlocks in the
 // runner manager's lock ordering.
 func TestRunnerManagerLockOrdering(t *testing.T) {
-	defer WithTestRunner(t, GetRunner())()
+	restoreRunner := WithTestRunner(t, GetRunner())
+	defer restoreRunner()
 
 	// This test specifically looks for deadlocks by creating scenarios
 	// where multiple goroutines could potentially deadlock if locks
@@ -208,17 +197,15 @@ func TestRunnerManagerLockOrdering(t *testing.T) {
 		var wg sync.WaitGroup
 
 		// Multiple goroutines doing mixed operations
-		for i := 0; i < 20; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				for j := 0; j < 100; j++ {
+		for range 20 {
+			wg.Go(func() {
+				for range 100 {
 					SetRunner(NewMockRunner())
 					GetRunner()
 					_, _ = RunnerCombinedOutput("test")
 					_, _ = RunnerCombinedOutputWithSudo("test")
 				}
-			}()
+			})
 		}
 
 		wg.Wait()
@@ -239,19 +226,17 @@ func TestRunnerStateConsistency(t *testing.T) {
 	// Set initial state
 	initialRunner := NewMockRunner()
 	initialRunner.SetResponse("initial", []byte("initial response"))
-	defer WithTestRunner(t, initialRunner)()
+	restoreRunner := WithTestRunner(t, initialRunner)
+	defer restoreRunner()
 
 	const numReaders = 50
 	const numWriters = 10
 	var wg sync.WaitGroup
 
 	// Multiple readers
-	for i := 0; i < numReaders; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			for j := 0; j < 100; j++ {
+	for range numReaders {
+		wg.Go(func() {
+			for range 100 {
 				runner := GetRunner()
 				if runner == nil {
 					t.Errorf("GetRunner() returned nil")
@@ -259,16 +244,13 @@ func TestRunnerStateConsistency(t *testing.T) {
 				}
 				runtime.Gosched()
 			}
-		}()
+		})
 	}
 
 	// Fewer writers
-	for i := 0; i < numWriters; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			for j := 0; j < 10; j++ {
+	for range numWriters {
+		wg.Go(func() {
+			for range 10 {
 				mockRunner := NewMockRunner()
 				mockRunner.SetResponse("test", []byte("test response"))
 				mockRunner.SetResponse("echo test", []byte("test response"))
@@ -276,7 +258,7 @@ func TestRunnerStateConsistency(t *testing.T) {
 				SetRunner(mockRunner)
 				time.Sleep(time.Microsecond)
 			}
-		}()
+		})
 	}
 
 	wg.Wait()

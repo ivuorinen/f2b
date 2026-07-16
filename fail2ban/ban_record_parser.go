@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ivuorinen/f2b/shared"
+	"github.com/ivuorinen/f2b/constants"
 )
 
 // Sentinel errors for parser
@@ -22,7 +22,7 @@ var (
 
 // Buffer pool for duration formatting to reduce allocations
 var durationBufPool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		b := make([]byte, 0, 11)
 		return &b
 	},
@@ -60,7 +60,7 @@ func (btc *BoundedTimeCache) Store(key string, value time.Time) {
 	defer btc.mu.Unlock()
 
 	// Check if we need to evict before adding
-	if len(btc.cache) >= int(float64(btc.maxSize)*shared.CacheEvictionThreshold) {
+	if len(btc.cache) >= int(float64(btc.maxSize)*constants.CacheEvictionThreshold) {
 		btc.evictEntries()
 	}
 
@@ -70,7 +70,7 @@ func (btc *BoundedTimeCache) Store(key string, value time.Time) {
 // evictEntries removes entries to bring cache back to target size
 // Caller must hold btc.mu lock
 func (btc *BoundedTimeCache) evictEntries() {
-	targetSize := int(float64(len(btc.cache)) * (1.0 - shared.CacheEvictionRate))
+	targetSize := int(float64(len(btc.cache)) * (1.0 - constants.CacheEvictionRate))
 	count := 0
 
 	for key := range btc.cache {
@@ -104,8 +104,11 @@ func (btc *BoundedTimeCache) ParseWithLayout(timeStr, layout string) (time.Time,
 		return cached, nil
 	}
 
-	// Parse and cache - only cache successful parses
-	t, err := time.Parse(layout, timeStr)
+	// Parse and cache - only cache successful parses.
+	// fail2ban-client emits zone-less local timestamps; time.Parse would
+	// interpret them as UTC, skewing "remaining" by the host's UTC offset
+	// (and clamping fresh bans to 0 east of UTC). Parse in the local zone.
+	t, err := time.ParseInLocation(layout, timeStr, time.Local)
 	if err == nil {
 		btc.Store(timeStr, t)
 	}
@@ -120,8 +123,8 @@ type BanRecordParser struct {
 	timeCache  *FastTimeCache
 
 	// Statistics for monitoring
-	parseCount int64
-	errorCount int64
+	parseCount atomic.Int64
+	errorCount atomic.Int64
 }
 
 // FastTimeCache provides ultra-fast time parsing with minimal allocations
@@ -133,7 +136,7 @@ type FastTimeCache struct {
 
 // NewBanRecordParser creates a new high-performance ban record parser
 func NewBanRecordParser() (*BanRecordParser, error) {
-	timeCache, err := NewFastTimeCache(shared.TimeFormat)
+	timeCache, err := NewFastTimeCache(constants.TimeFormat)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create parser: %w", err)
 	}
@@ -144,7 +147,7 @@ func NewBanRecordParser() (*BanRecordParser, error) {
 
 	// String pool for reusing field slices
 	parser.stringPool = sync.Pool{
-		New: func() interface{} {
+		New: func() any {
 			s := make([]string, 0, 16)
 			return &s
 		},
@@ -152,7 +155,7 @@ func NewBanRecordParser() (*BanRecordParser, error) {
 
 	// Record pool for reusing BanRecord objects
 	parser.recordPool = sync.Pool{
-		New: func() interface{} {
+		New: func() any {
 			return &BanRecord{}
 		},
 	}
@@ -162,7 +165,7 @@ func NewBanRecordParser() (*BanRecordParser, error) {
 
 // NewFastTimeCache creates an optimized time cache
 func NewFastTimeCache(layout string) (*FastTimeCache, error) {
-	parseCache, err := NewBoundedTimeCache(shared.CacheMaxSize)
+	parseCache, err := NewBoundedTimeCache(constants.CacheMaxSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create time cache: %w", err)
 	}
@@ -173,7 +176,7 @@ func NewFastTimeCache(layout string) (*FastTimeCache, error) {
 	}
 
 	cache.stringPool = sync.Pool{
-		New: func() interface{} {
+		New: func() any {
 			b := make([]byte, 0, 32)
 			return &b
 		},
@@ -189,7 +192,10 @@ func (ftc *FastTimeCache) ParseTimeOptimized(timeStr string) (time.Time, error) 
 
 // BuildTimeStringOptimized builds time string with zero allocations using byte buffer
 func (ftc *FastTimeCache) BuildTimeStringOptimized(dateStr, timeStr string) string {
-	bufPtr := ftc.stringPool.Get().(*[]byte)
+	bufPtr, ok := ftc.stringPool.Get().(*[]byte)
+	if !ok {
+		bufPtr = new([]byte) // unreachable with our pool New; satisfies errcheck honestly
+	}
 	buf := *bufPtr
 	defer func() {
 		buf = buf[:0] // Reset buffer
@@ -227,7 +233,10 @@ func (brp *BanRecordParser) ParseBanRecordLine(line, jail string) (*BanRecord, e
 	}
 
 	// Get pooled field slice
-	fieldsPtr := brp.stringPool.Get().(*[]string)
+	fieldsPtr, ok := brp.stringPool.Get().(*[]string)
+	if !ok {
+		fieldsPtr = new([]string) // unreachable with our pool New
+	}
 	fields := (*fieldsPtr)[:0] // Reset slice but keep capacity
 	defer func() {
 		*fieldsPtr = fields[:0]
@@ -247,11 +256,14 @@ func (brp *BanRecordParser) ParseBanRecordLine(line, jail string) (*BanRecord, e
 
 	// Validate IP address format
 	if fields[0] != "" && net.ParseIP(fields[0]) == nil {
-		return nil, fmt.Errorf(shared.ErrInvalidIPAddress, fields[0])
+		return nil, fmt.Errorf(constants.ErrInvalidIPAddress, fields[0])
 	}
 
 	// Get pooled record
-	record := brp.recordPool.Get().(*BanRecord)
+	record, ok := brp.recordPool.Get().(*BanRecord)
+	if !ok {
+		record = &BanRecord{} // unreachable with our pool New
+	}
 	defer brp.recordPool.Put(record)
 
 	// Reset record fields
@@ -260,14 +272,25 @@ func (brp *BanRecordParser) ParseBanRecordLine(line, jail string) (*BanRecord, e
 		IP:   fields[0],
 	}
 
-	// Fast path for full format (8+ fields)
-	if len(fields) >= 8 {
-		return brp.parseFullFormat(fields, record)
+	// Full format carries ban and unban timestamps (>= 6 fields).
+	// The 8-field upstream variant "IP date time + SECS = date time" and the
+	// 7-field "IP date time + date time remaining" both have ban time at
+	// fields[1..2]; parseFullFormat locates the unban time for each.
+	if len(fields) >= 6 {
+		result, err := brp.parseFullFormat(fields, record)
+		if err == nil || len(fields) >= 8 {
+			// 8+ fields is the well-known upstream layout: unparseable
+			// timestamps there mean a genuinely malformed record.
+			return result, err
+		}
+		// A 6/7-field line whose fields aren't timestamps is an exotic
+		// variant, not garbage: fall through to the simple-format record
+		// instead of dropping the line.
 	}
 
 	// Fallback for simple format
 	record.BannedAt = time.Now()
-	record.Remaining = shared.UnknownValue
+	record.Remaining = constants.UnknownValue
 
 	// Return a copy since we're pooling the original
 	result := &BanRecord{
@@ -280,11 +303,22 @@ func (brp *BanRecordParser) ParseBanRecordLine(line, jail string) (*BanRecord, e
 	return result, nil
 }
 
-// parseFullFormat handles the full 8-field format efficiently
+// parseFullFormat handles the full ban-record format (ban + unban timestamps).
+// Ban date/time is always fields[1]/fields[2]. The unban timestamp position
+// depends on the layout emitted by fail2ban-client:
+//   - 8-field "IP date time + SECS = date time": "=" at index 5, unban at 6/7
+//   - 6/7-field "IP date time + date time [remaining]": unban at 4/5
 func (brp *BanRecordParser) parseFullFormat(fields []string, record *BanRecord) (*BanRecord, error) {
 	// Build time strings efficiently
 	bannedStr := brp.timeCache.BuildTimeStringOptimized(fields[1], fields[2])
-	unbanStr := brp.timeCache.BuildTimeStringOptimized(fields[4], fields[5])
+
+	var unbanStr string
+	switch {
+	case len(fields) >= 8 && fields[5] == "=":
+		unbanStr = brp.timeCache.BuildTimeStringOptimized(fields[6], fields[7])
+	default:
+		unbanStr = brp.timeCache.BuildTimeStringOptimized(fields[4], fields[5])
+	}
 
 	// Parse ban time
 	tBan, err := brp.timeCache.ParseTimeOptimized(bannedStr)
@@ -305,15 +339,12 @@ func (brp *BanRecordParser) parseFullFormat(fields []string, record *BanRecord) 
 			"ip":       record.IP,
 			"unbanStr": unbanStr,
 		}).Warnf("Failed to parse unban time: %v", err)
-		tUnban = time.Now().Add(shared.DefaultBanDuration) // 24h fallback
+		tUnban = time.Now().Add(constants.DefaultBanDuration) // 24h fallback
 	}
 
 	// Calculate remaining time efficiently
 	now := time.Now()
-	rem := tUnban.Unix() - now.Unix()
-	if rem < 0 {
-		rem = 0
-	}
+	rem := max(tUnban.Unix()-now.Unix(), 0)
 
 	// Set parsed values
 	record.BannedAt = tBan
@@ -347,13 +378,13 @@ func (brp *BanRecordParser) ParseBanRecords(output string, jail string) ([]BanRe
 
 		record, err := brp.ParseBanRecordLine(line, jail)
 		if err != nil {
-			atomic.AddInt64(&brp.errorCount, 1)
+			brp.errorCount.Add(1)
 			continue // Skip invalid lines
 		}
 
 		if record != nil {
 			records = append(records, *record)
-			atomic.AddInt64(&brp.parseCount, 1)
+			brp.parseCount.Add(1)
 		}
 	}
 
@@ -362,7 +393,7 @@ func (brp *BanRecordParser) ParseBanRecords(output string, jail string) ([]BanRe
 
 // GetStats returns parsing statistics
 func (brp *BanRecordParser) GetStats() (parseCount, errorCount int64) {
-	return atomic.LoadInt64(&brp.parseCount), atomic.LoadInt64(&brp.errorCount)
+	return brp.parseCount.Load(), brp.errorCount.Load()
 }
 
 // fastTrimSpace trims whitespace efficiently
@@ -436,13 +467,16 @@ func fastSplitLines(s string) []string {
 
 // formatDurationOptimized formats duration efficiently in DD:HH:MM:SS format to match original
 func formatDurationOptimized(sec int64) string {
-	days := sec / shared.SecondsPerDay
-	h := (sec % shared.SecondsPerDay) / shared.SecondsPerHour
-	m := (sec % shared.SecondsPerHour) / shared.SecondsPerMinute
-	s := sec % shared.SecondsPerMinute
+	days := sec / constants.SecondsPerDay
+	h := (sec % constants.SecondsPerDay) / constants.SecondsPerHour
+	m := (sec % constants.SecondsPerHour) / constants.SecondsPerMinute
+	s := sec % constants.SecondsPerMinute
 
 	// Get buffer from pool to reduce allocations
-	bufPtr := durationBufPool.Get().(*[]byte)
+	bufPtr, ok := durationBufPool.Get().(*[]byte)
+	if !ok {
+		bufPtr = new([]byte) // unreachable with our pool New
+	}
 	buf := (*bufPtr)[:0]
 	defer func() {
 		*bufPtr = buf[:0]

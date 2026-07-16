@@ -34,9 +34,12 @@ func TestValidateCommand(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:    "valid sudo command",
+			// "sudo" must NOT be allowlisted as a command: the sudo prefix is
+			// only ever added internally after the inner command is validated.
+			name:    "sudo command not allowed",
 			command: "sudo",
-			wantErr: false,
+			wantErr: true,
+			errMsg:  "command not allowed:",
 		},
 		{
 			name:    "empty command",
@@ -85,6 +88,23 @@ func TestValidateCommand(t *testing.T) {
 			command: "fail2ban%2e%2e%2fclient",
 			wantErr: true,
 			errMsg:  "path traversal",
+		},
+		{
+			name:    "absolute path in trusted directory",
+			command: "/usr/bin/fail2ban-client",
+			wantErr: false,
+		},
+		{
+			name:    "absolute path outside trusted directories",
+			command: "/tmp/fail2ban-client",
+			wantErr: true,
+			errMsg:  "command not allowed:",
+		},
+		{
+			name:    "unclean absolute path",
+			command: "/usr/bin/../bin/fail2ban-client",
+			wantErr: true,
+			errMsg:  "invalid command format",
 		},
 	}
 
@@ -142,10 +162,10 @@ func TestValidateCommandConcurrency(t *testing.T) {
 	errChan := make(chan error, concurrency*iterations)
 	done := make(chan bool, concurrency)
 
-	for i := 0; i < concurrency; i++ {
+	for range concurrency {
 		go func() {
 			defer func() { done <- true }()
-			for j := 0; j < iterations; j++ {
+			for range iterations {
 				// Test with valid commands
 				if err := ValidateCommand("fail2ban-client"); err != nil {
 					errChan <- err
@@ -161,7 +181,7 @@ func TestValidateCommandConcurrency(t *testing.T) {
 	}
 
 	// Wait for all goroutines to complete
-	for i := 0; i < concurrency; i++ {
+	for range concurrency {
 		<-done
 	}
 
@@ -185,7 +205,7 @@ func BenchmarkValidateCommand(b *testing.B) {
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		cmd := commands[i%len(commands)]
 		_ = ValidateCommand(cmd) // Ignore error in benchmark
 	}

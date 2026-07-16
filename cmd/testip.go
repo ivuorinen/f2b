@@ -12,13 +12,13 @@ func TestIPCmd(client interface {
 }, config *Config) *cobra.Command {
 	return NewCommand("test <ip>", "Test if an IP is banned", nil, func(cmd *cobra.Command, args []string) error {
 		// Create timeout context for testing IP
-		ctx, cancel := context.WithTimeout(context.Background(), config.CommandTimeout)
+		ctx, cancel := createTimeoutContext(cmd.Context(), config)
 		defer cancel()
 
 		// Validate IP argument
 		ip, err := ValidateIPArgumentWithContext(ctx, args)
 		if err != nil {
-			return HandleClientError(err)
+			return HandleValidationError(err)
 		}
 
 		jails, err := client.BannedInWithContext(ctx, ip)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 )
@@ -39,6 +38,10 @@ type MockClient struct {
 	BannedIPs      map[string][]string         // jail -> list of banned IPs
 	LogLines       []string                    // configurable log lines
 	FilterTests    map[string]string           // filter -> test result
+	// Recorded query arguments so tests can assert that jail/ip flags actually
+	// reach the client (configured LogLines/BanRecords are returned verbatim).
+	LastLogQuery        [2]string // last (jail, ip) passed to GetLogLines
+	LastBanRecordsJails []string  // last jails passed to GetBanRecords
 }
 
 // NewMockClient creates a new MockClient with default jails and filters.
@@ -124,7 +127,10 @@ func (m *MockClient) BanIP(ip, jail string) (int, error) {
 		return 1, nil // Already banned
 	}
 	m.Banned[jail][ip] = time.Now()
-	m.Logs = append(m.Logs, fmt.Sprintf("%s [mock] Ban %s in %s", time.Now().Format(time.RFC3339), ip, jail))
+	// Real fail2ban log shape ("[jail] Ban <ip>") so the shared filter
+	// semantics (bracketed jail, IP token boundary) apply to mock logs too.
+	m.Logs = append(m.Logs, fmt.Sprintf("%s fail2ban.actions [mock]: NOTICE [%s] Ban %s",
+		time.Now().Format(time.RFC3339), jail, ip))
 	return 0, nil
 }
 
@@ -154,7 +160,8 @@ func (m *MockClient) UnbanIP(ip, jail string) (int, error) {
 		return 1, nil // Already unbanned
 	}
 	delete(m.Banned[jail], ip)
-	m.Logs = append(m.Logs, fmt.Sprintf("%s [mock] Unban %s in %s", time.Now().Format(time.RFC3339), ip, jail))
+	m.Logs = append(m.Logs, fmt.Sprintf("%s fail2ban.actions [mock]: NOTICE [%s] Unban %s",
+		time.Now().Format(time.RFC3339), jail, ip))
 	return 0, nil
 }
 
@@ -177,10 +184,21 @@ func (m *MockClient) BannedIn(ip string) ([]string, error) {
 func (m *MockClient) GetBanRecords(jails []string) ([]BanRecord, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.LastBanRecordsJails = jails
 
 	// Use configured ban records if available
 	if len(m.BanRecords) > 0 {
 		return m.BanRecords, nil
+	}
+
+	// Mirror the real client: an empty list or any ""/"all" element queries
+	// every jail instead of returning nothing.
+	if requestsAllJails(jails) {
+		jails = make([]string, 0, len(m.Banned))
+		for jail := range m.Banned {
+			jails = append(jails, jail)
+		}
+		sort.Strings(jails)
 	}
 
 	var recs []BanRecord
@@ -201,15 +219,20 @@ func (m *MockClient) GetBanRecords(jails []string) ([]BanRecord, error) {
 func (m *MockClient) GetLogLines(jail, ip string) ([]string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.LastLogQuery = [2]string{jail, ip}
 
-	// Use configured log lines if available
-	if len(m.LogLines) > 0 {
-		return m.LogLines, nil
+	// Filter with the same semantics as the real client (passesFilters +
+	// canonical IP token matching) so tests can't pass against substring
+	// behavior the production path doesn't have (e.g. "10.0.0.1" matching
+	// inside "10.0.0.100").
+	cfg := LogReadConfig{JailFilter: jail, IPFilter: canonicalizeIPFilter(ip)}
+	source := m.LogLines
+	if len(source) == 0 {
+		source = m.Logs
 	}
-
 	var lines []string
-	for _, l := range m.Logs {
-		if (jail == "" || strings.Contains(l, jail)) && (ip == "" || strings.Contains(l, ip)) {
+	for _, l := range source {
+		if passesFilters(l, cfg) {
 			lines = append(lines, l)
 		}
 	}
@@ -218,11 +241,18 @@ func (m *MockClient) GetLogLines(jail, ip string) ([]string, error) {
 
 // ListFilters returns the available Fail2Ban filters.
 func (m *MockClient) ListFilters() ([]string, error) {
-	return m.Filters, nil
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	// Return a copy so a caller mutating the result cannot corrupt mock state.
+	filters := make([]string, len(m.Filters))
+	copy(filters, m.Filters)
+	return filters, nil
 }
 
 // TestFilter simulates running fail2ban-regex for the given filter.
 func (m *MockClient) TestFilter(filter string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	// Check configured filter tests first
 	if result, ok := m.FilterTests[filter]; ok {
 		return result, nil

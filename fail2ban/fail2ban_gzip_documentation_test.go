@@ -195,7 +195,7 @@ func testGzipReaderPlainFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Should not error on plain file: %v", err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	data, err := io.ReadAll(reader)
 	if err != nil {
@@ -229,7 +229,7 @@ func testGzipReaderGzipFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Should not error on gzip file: %v", err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	data, err := io.ReadAll(reader)
 	if err != nil {

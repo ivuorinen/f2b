@@ -29,7 +29,7 @@ func TestContextCancellationSupport(t *testing.T) {
 	mock.SetResponse("sudo fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
 	mock.SetResponse("fail2ban-client ping", []byte("Server replied: pong"))
 	mock.SetResponse("sudo fail2ban-client ping", []byte("Server replied: pong"))
-	SetRunner(mock)
+	t.Cleanup(WithTestRunner(t, mock))
 
 	// Create a real client for testing (will use mock environment)
 	client, err := NewClient("/var/log", "/etc/fail2ban/filter.d")
@@ -57,7 +57,7 @@ func TestBanOperationContextTimeout(t *testing.T) {
 	mock.SetResponse("sudo fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
 	mock.SetResponse("fail2ban-client ping", []byte("Server replied: pong"))
 	mock.SetResponse("sudo fail2ban-client ping", []byte("Server replied: pong"))
-	SetRunner(mock)
+	t.Cleanup(WithTestRunner(t, mock))
 
 	client, err := NewClient("/var/log", "/etc/fail2ban/filter.d")
 	if err != nil {
@@ -87,7 +87,7 @@ func TestGetBanRecordsContextTimeout(t *testing.T) {
 	mock.SetResponse("sudo fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
 	mock.SetResponse("fail2ban-client ping", []byte("Server replied: pong"))
 	mock.SetResponse("sudo fail2ban-client ping", []byte("Server replied: pong"))
-	SetRunner(mock)
+	t.Cleanup(WithTestRunner(t, mock))
 
 	client, err := NewClient("/var/log", "/etc/fail2ban/filter.d")
 	if err != nil {

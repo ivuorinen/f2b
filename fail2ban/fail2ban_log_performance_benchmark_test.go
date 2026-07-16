@@ -20,7 +20,7 @@ func BenchmarkOriginalLogParsing(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := GetLogLinesWithLimit(context.Background(), "sshd", "", 100)
 		if err != nil {
 			b.Fatal(err)
@@ -41,7 +41,7 @@ func BenchmarkOptimizedLogParsing(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := GetLogLinesUltraOptimized("sshd", "", 100)
 		if err != nil {
 			b.Fatal(err)

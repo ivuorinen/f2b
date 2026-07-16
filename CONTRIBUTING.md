@@ -99,6 +99,4 @@ ______________________________________________________________________
 
 Thank you for helping make **f2b** better!
 
-[contributing](CONTRIBUTING.md)
-
 [effective_go]: https://golang.org/doc/effective_go.html

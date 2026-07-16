@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/ivuorinen/f2b/fail2ban"
 )
@@ -153,15 +152,11 @@ func BenchmarkConcurrentPerformance(b *testing.B) {
 		})
 	})
 
-	b.Run("ConcurrentCacheAccess", func(b *testing.B) {
+	b.Run("ConcurrentLogProcessing", func(b *testing.B) {
 		processor := fail2ban.NewOptimizedLogProcessor()
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				// Mix cache operations
-				processor.GetCacheStats()
-				if pb.Next() {
-					_, _ = processor.GetLogLinesOptimized("all", "all", 10)
-				}
+				_, _ = processor.GetLogLinesOptimized("all", "all", 10)
 			}
 		})
 	})
@@ -196,7 +191,7 @@ func setupBenchmarkClient(b *testing.B) *fail2ban.RealClient {
 	b.Cleanup(cleanup)
 
 	// Get the mock runner and add additional responses
-	mockRunner := fail2ban.GetRunner().(*fail2ban.MockRunner)
+	mockRunner := fail2ban.MustMockRunner(b)
 	mockRunner.SetResponse("fail2ban-client -V", []byte("fail2ban-client v1.0.0"))
 	mockRunner.SetResponse("fail2ban-client status", []byte("Status: [sshd] Jail list: sshd"))
 	mockRunner.SetResponse(
@@ -211,41 +206,4 @@ func setupBenchmarkClient(b *testing.B) *fail2ban.RealClient {
 	}
 
 	return client
-}
-
-// MemoryProfile runs a memory profiling session
-func MemoryProfile(b *testing.B) {
-	b.Helper()
-	tempDir := b.TempDir()
-	fail2ban.SetLogDir(tempDir)
-
-	// Create large test log file (10MB)
-	testLogFile := filepath.Join(tempDir, "fail2ban.log")
-	testLine := "2024-01-01 12:00:00,123 fail2ban.actions [1234]: NOTICE [sshd] Ban 192.168.1.100\n"
-
-	// Create 10MB of realistic log data (about 100,000 lines)
-	var largeContent []byte
-	for len(largeContent) < 10*1024*1024 {
-		largeContent = append(largeContent, testLine...)
-	}
-
-	err := os.WriteFile(testLogFile, largeContent, 0600)
-	if err != nil {
-		b.Fatalf("Failed to create large test file: %v", err)
-	}
-
-	b.Run("LargeFileMemoryUsage", func(b *testing.B) {
-		b.ReportAllocs()
-		start := time.Now()
-
-		for i := 0; i < b.N; i++ {
-			_, err := fail2ban.GetLogLinesUltraOptimized("all", "all", 10000)
-			if err != nil {
-				b.Fatalf("Large file processing failed: %v", err)
-			}
-		}
-
-		duration := time.Since(start)
-		b.Logf("Processing 10MB file took %v", duration)
-	})
 }

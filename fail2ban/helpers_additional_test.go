@@ -1,15 +1,15 @@
 package fail2ban
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"log/slog"
+	"strings"
 	"testing"
-	"time"
-
-	"github.com/sirupsen/logrus"
 )
 
-func TestFormatDuration(t *testing.T) {
+func TestFormatDurationOptimized(t *testing.T) {
 	tests := []struct {
 		name     string
 		seconds  int64
@@ -44,9 +44,9 @@ func TestFormatDuration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := FormatDuration(tt.seconds)
+			result := formatDurationOptimized(tt.seconds)
 			if result != tt.expected {
-				t.Errorf("FormatDuration(%d) = %q, expected %q", tt.seconds, result, tt.expected)
+				t.Errorf("formatDurationOptimized(%d) = %q, expected %q", tt.seconds, result, tt.expected)
 			}
 		})
 	}
@@ -89,67 +89,58 @@ func TestContextHelpers(t *testing.T) {
 
 func TestGenerateRequestID(t *testing.T) {
 	id1 := GenerateRequestID()
-
-	// Add small delay to ensure different timestamps
-	time.Sleep(1 * time.Nanosecond)
-	id2 := GenerateRequestID()
-
 	if id1 == "" {
-		t.Error("GenerateRequestID returned empty string")
+		t.Fatal("GenerateRequestID returned empty string")
 	}
-	if id2 == "" {
-		t.Error("GenerateRequestID returned empty string")
-	}
-	// Don't check for uniqueness in tests as nanosecond timing can be flaky
 	if len(id1) < 10 {
-		t.Error("GenerateRequestID returned suspiciously short ID")
+		t.Fatalf("GenerateRequestID returned suspiciously short ID: %q", id1)
+	}
+
+	// Uniqueness is the function's whole contract: a generator returning the
+	// same ID forever must fail this test. N iterations rather than a timing
+	// sleep — the IDs must differ regardless of clock granularity.
+	seen := map[string]bool{id1: true}
+	for range 100 {
+		id := GenerateRequestID()
+		if seen[id] {
+			t.Fatalf("GenerateRequestID returned a duplicate: %q", id)
+		}
+		seen[id] = true
 	}
 }
 
-func TestTimedOperationFinishWithContext(_ *testing.T) {
-	// Capture log output
-	originalLevel := logrus.GetLevel()
-	logrus.SetLevel(logrus.DebugLevel)
-	defer logrus.SetLevel(originalLevel)
+func TestTimedOperationFinishWithContext(t *testing.T) {
+	// Install a capturing logger so we can assert what FinishWithContext emits.
+	var buf bytes.Buffer
+	capLogger := NewSlogLogger(SlogJSON)
+	capLogger.SetOutput(&buf)
+	capLogger.SetLevel(slog.LevelDebug)
+
+	orig := getLogger()
+	SetLogger(capLogger)
+	defer SetLogger(orig)
 
 	ctx := WithOperation(context.Background(), "test-operation")
 	ctx = WithRequestID(ctx, "test-request")
 
+	// Successful operation: logs the command and request-id context field.
 	timer := NewTimedOperation("test", "command", "arg1", "arg2")
-
-	// Test successful operation
 	timer.FinishWithContext(ctx, nil)
+	successLog := buf.String()
+	if !strings.Contains(successLog, "command") {
+		t.Errorf("success log missing command field: %q", successLog)
+	}
+	if !strings.Contains(successLog, "test-request") {
+		t.Errorf("success log missing request-id context field: %q", successLog)
+	}
 
-	// Test failed operation
+	// Failed operation: the error message must reach the log.
+	buf.Reset()
 	timer2 := NewTimedOperation("test-fail", "command", "arg1")
-	timer2.FinishWithContext(ctx, fmt.Errorf("test error"))
-}
-
-func TestValidationCacheSize(t *testing.T) {
-	// Clear caches first
-	ClearValidationCaches()
-
-	// Test empty cache
-	stats := GetValidationCacheStats()
-	if stats["ip_cache_size"] != 0 {
-		t.Errorf("Expected empty IP cache, got %d", stats["ip_cache_size"])
-	}
-
-	// Add something to cache
-	err := CachedValidateIP(context.Background(), "192.168.1.1")
-	if err != nil {
-		t.Fatalf("CachedValidateIP failed: %v", err)
-	}
-
-	// Check cache size increased
-	stats = GetValidationCacheStats()
-	if stats["ip_cache_size"] != 1 {
-		t.Errorf("Expected IP cache size 1, got %d", stats["ip_cache_size"])
-	}
-
-	// Test cache Size method directly
-	if ipValidationCache.Size() != 1 {
-		t.Errorf("Expected cache size 1, got %d", ipValidationCache.Size())
+	timer2.FinishWithContext(ctx, fmt.Errorf("boom-sentinel-error"))
+	failLog := buf.String()
+	if !strings.Contains(failLog, "boom-sentinel-error") {
+		t.Errorf("failure log missing error message: %q", failLog)
 	}
 }
 

@@ -6,56 +6,41 @@ package cmd
 import (
 	"context"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/sirupsen/logrus"
-
+	"github.com/ivuorinen/f2b/constants"
 	"github.com/ivuorinen/f2b/fail2ban"
-	"github.com/ivuorinen/f2b/shared"
 )
 
 // ContextualLogger provides structured logging with context propagation
 type ContextualLogger struct {
-	*logrus.Logger
-	defaultFields logrus.Fields
+	*fail2ban.SlogLogger
+	defaultFields fail2ban.Fields
 }
 
 // NewContextualLogger creates a new contextual logger using the centralized cmd.Logger
 func NewContextualLogger() *ContextualLogger {
-	// Use cmd.Logger as the backend, but with JSON formatter for structured logging
-	contextLogger := logrus.New()
-	contextLogger.SetOutput(Logger.Out)
+	// Structured JSON logger mirroring the main Logger's output and level. The
+	// JSON handler keeps logrus's timestamp/message key names (see SlogJSON).
+	contextLogger := fail2ban.NewSlogLogger(fail2ban.SlogJSON)
+	contextLogger.SetOutput(Logger.Output())
 	contextLogger.SetLevel(Logger.GetLevel())
-	contextLogger.SetFormatter(&logrus.JSONFormatter{
-		TimestampFormat: time.RFC3339Nano,
-		FieldMap: logrus.FieldMap{
-			logrus.FieldKeyTime:  "timestamp",
-			logrus.FieldKeyLevel: "level",
-			logrus.FieldKeyMsg:   "message",
-		},
-	})
 
 	return &ContextualLogger{
-		Logger: contextLogger,
-		defaultFields: logrus.Fields{
+		SlogLogger: contextLogger,
+		defaultFields: fail2ban.Fields{
 			"service": "f2b",
 			"version": getVersion(),
 		},
 	}
 }
 
-// Build-time variables set via ldflags
-var (
-	version = "dev"
-	// Additional build variables that may be used in the future
-	_ = "unknown" // commit placeholder
-	_ = "unknown" // date placeholder
-	_ = "unknown" // builtBy placeholder
-)
-
-// getVersion returns the version from build variables or default
+// getVersion returns the build version. It reads the single exported Version
+// var (set via ldflags, e.g. by goreleaser), so structured logs report the
+// real release version instead of always logging "dev".
 func getVersion() string {
-	return version
+	return Version
 }
 
 // contextKeyEntry defines a context key and its log field name
@@ -66,15 +51,15 @@ type contextKeyEntry struct {
 
 // contextKeys lists all context keys to extract for logging
 var contextKeys = []contextKeyEntry{
-	{shared.ContextKeyRequestID, string(shared.ContextKeyRequestID)},
-	{shared.ContextKeyOperation, string(shared.ContextKeyOperation)},
-	{shared.ContextKeyIP, string(shared.ContextKeyIP)},
-	{shared.ContextKeyJail, string(shared.ContextKeyJail)},
-	{shared.ContextKeyCommand, string(shared.ContextKeyCommand)},
+	{constants.ContextKeyRequestID, string(constants.ContextKeyRequestID)},
+	{constants.ContextKeyOperation, string(constants.ContextKeyOperation)},
+	{constants.ContextKeyIP, string(constants.ContextKeyIP)},
+	{constants.ContextKeyJail, string(constants.ContextKeyJail)},
+	{constants.ContextKeyCommand, string(constants.ContextKeyCommand)},
 }
 
 // WithContext creates a logger entry with context values
-func (cl *ContextualLogger) WithContext(ctx context.Context) *logrus.Entry {
+func (cl *ContextualLogger) WithContext(ctx context.Context) fail2ban.LoggerEntry {
 	entry := cl.WithFields(cl.defaultFields)
 
 	// Extract context values and add as fields using table-driven approach
@@ -113,7 +98,7 @@ func WithCommand(ctx context.Context, command string) context.Context {
 	if command == "" {
 		return ctx
 	}
-	return context.WithValue(ctx, shared.ContextKeyCommand, command)
+	return context.WithValue(ctx, constants.ContextKeyCommand, command)
 }
 
 // WithRequestID adds request ID context and returns a new context.
@@ -127,23 +112,19 @@ func (cl *ContextualLogger) LogOperation(ctx context.Context, operation string, 
 	start := time.Now()
 	ctx = WithOperation(ctx, operation)
 
-	// Get metrics instance
-	metrics := GetGlobalMetrics()
+	// Ensure the operation carries a request ID so every log line it emits
+	// (start, completion, and any nested operation logs) shares one correlatable
+	// request_id in the structured output.
+	if ctx.Value(constants.ContextKeyRequestID) == nil {
+		ctx = WithRequestID(ctx, fail2ban.GenerateRequestID())
+	}
 
-	cl.WithContext(ctx).WithField("action", shared.ActionStart).Info("Operation started")
+	cl.WithContext(ctx).WithField("action", constants.ActionStart).Info("Operation started")
 
 	err := fn()
 	duration := time.Since(start)
 
 	entry := cl.WithContext(ctx).WithField("duration_ms", duration.Milliseconds())
-
-	// Record metrics based on operation type
-	success := err == nil
-	if command := ctx.Value(shared.ContextKeyCommand); command != nil {
-		if cmdStr, ok := command.(string); ok {
-			metrics.RecordCommandExecution(cmdStr, duration, success)
-		}
-	}
 
 	if err != nil {
 		entry.WithError(err).Error("Operation failed")
@@ -165,11 +146,7 @@ func (cl *ContextualLogger) LogBanOperation(
 	ctx = WithIP(ctx, ip)
 	ctx = WithJail(ctx, jail)
 
-	// Record metrics
-	metrics := GetGlobalMetrics()
-	metrics.RecordBanOperation(operation, duration, success)
-
-	entry := cl.WithContext(ctx).WithFields(logrus.Fields{
+	entry := cl.WithContext(ctx).WithFields(fail2ban.Fields{
 		"success":     success,
 		"duration_ms": duration.Milliseconds(),
 	})
@@ -181,37 +158,32 @@ func (cl *ContextualLogger) LogBanOperation(
 	}
 }
 
-// LogCommandExecution logs command execution with context
-func (cl *ContextualLogger) LogCommandExecution(
-	ctx context.Context,
-	command string,
-	args []string,
-	duration time.Duration,
-	err error,
-) {
-	ctx = WithCommand(ctx, command)
-
-	entry := cl.WithContext(ctx).WithFields(logrus.Fields{
-		"args":        args,
-		"duration_ms": duration.Milliseconds(),
-	})
-
-	if err != nil {
-		entry.WithError(err).Error("Command execution failed")
-	} else {
-		entry.Info("Command executed successfully")
-	}
-}
-
-// Global contextual logger instance
-var contextualLogger = NewContextualLogger()
+// Global contextual logger instance, built lazily on first use so it picks
+// up the log level configured during package init (CI/test quieting in
+// output.go) instead of the pre-init default.
+var (
+	contextualLogger     *ContextualLogger
+	contextualLoggerOnce sync.Once
+)
 
 // GetContextualLogger returns the global contextual logger
 func GetContextualLogger() *ContextualLogger {
+	contextualLoggerOnce.Do(func() {
+		if contextualLogger == nil {
+			contextualLogger = NewContextualLogger()
+		}
+	})
 	return contextualLogger
 }
 
-// SetContextualLogger sets a new global contextual logger
+// SetContextualLogger sets a new global contextual logger.
+//
+// Not synchronized: call only during startup or from tests before concurrent
+// readers exist — a call while workers run is a data race by contract.
 func SetContextualLogger(logger *ContextualLogger) {
+	contextualLoggerOnce.Do(func() {
+		// Consume the once so the lazy initializer in GetContextualLogger
+		// never overwrites this explicitly-set logger.
+	})
 	contextualLogger = logger
 }

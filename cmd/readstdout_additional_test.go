@@ -7,59 +7,42 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// pipeWithData wires a fresh pipe into env, writes data to the writer, closes
+// it, and returns once the write completes.
+func pipeWithData(t *testing.T, env *TestEnvironment, data string) {
+	t.Helper()
+	r, w, err := os.Pipe()
+	assert.NoError(t, err)
+	env.stdoutReader = r
+	env.stdoutWriter = w
+	done := make(chan struct{})
+	go func() {
+		_, _ = w.Write([]byte(data))
+		_ = w.Close()
+		close(done)
+	}()
+	<-done
+}
+
 // TestReadStdout_WithData tests reading stdout with actual data
 func TestReadStdout_WithData(t *testing.T) {
 	env := NewTestEnvironment()
 	defer env.Cleanup()
 
-	// Set up pipes and write test data
-	r, w, err := os.Pipe()
-	assert.NoError(t, err)
-	env.stdoutReader = r
-	env.stdoutWriter = w
+	pipeWithData(t, env, "test output data")
 
-	// Write test data in background goroutine with synchronization
-	testData := "test output data"
-	done := make(chan struct{})
-	go func() {
-		_, _ = w.Write([]byte(testData))
-		_ = w.Close()
-		close(done)
-	}()
-
-	// Wait for write and close to complete
-	<-done
-
-	output := env.ReadStdout()
-	assert.Equal(t, testData, output, "Should read the test data from stdout")
+	assert.Equal(t, "test output data", env.ReadStdout(), "Should read the test data from stdout")
 }
 
-// TestReadStdout_WriterAlreadyClosed tests the scenario where writer is pre-closed
+// TestReadStdout_WriterAlreadyClosed tests the scenario where the writer is
+// closed before ReadStdout is called (ReadStdout must tolerate the double-close).
 func TestReadStdout_WriterAlreadyClosed(t *testing.T) {
 	env := NewTestEnvironment()
 	defer env.Cleanup()
 
-	// Set up pipes
-	r, w, err := os.Pipe()
-	assert.NoError(t, err)
-	env.stdoutReader = r
-	env.stdoutWriter = w
+	pipeWithData(t, env, "pre-closed data")
 
-	// Write data and close writer before calling ReadStdout
-	testData := "pre-closed data"
-	done := make(chan struct{})
-	go func() {
-		_, _ = w.Write([]byte(testData))
-		_ = w.Close()
-		close(done)
-	}()
-
-	// Wait for write and close to complete
-	<-done
-	// Don't set env.stdoutWriter to nil - ReadStdout will close it
-
-	output := env.ReadStdout()
-	assert.Equal(t, testData, output, "Should read data even if writer was pre-closed")
+	assert.Equal(t, "pre-closed data", env.ReadStdout(), "Should read data even if writer was pre-closed")
 }
 
 // TestReadStdout_NilReader tests behavior when reader is nil
@@ -102,26 +85,11 @@ func TestReadStdout_MultipleReads(t *testing.T) {
 	env := NewTestEnvironment()
 	defer env.Cleanup()
 
-	// Set up pipes
-	r, w, err := os.Pipe()
-	assert.NoError(t, err)
-	env.stdoutReader = r
-	env.stdoutWriter = w
-
-	testData := "single read data"
-	done := make(chan struct{})
-	go func() {
-		_, _ = w.Write([]byte(testData))
-		_ = w.Close()
-		close(done)
-	}()
-
-	// Wait for write and close to complete
-	<-done
+	pipeWithData(t, env, "single read data")
 
 	// First read gets the data
 	output1 := env.ReadStdout()
-	assert.Equal(t, testData, output1)
+	assert.Equal(t, "single read data", output1)
 
 	// Second read should return empty (writer already closed by first read)
 	output2 := env.ReadStdout()

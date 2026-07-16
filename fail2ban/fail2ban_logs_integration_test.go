@@ -140,7 +140,7 @@ func TestIntegrationConcurrentLogReading(t *testing.T) {
 	var wg sync.WaitGroup
 	errors := make(chan error, 10)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
@@ -250,8 +250,9 @@ func TestIntegrationCompressedLogReading(t *testing.T) {
 	// Test reading compressed log files
 	compressedLog := filepath.Join("testdata", "fail2ban_compressed.log.gz")
 
+	// Checked-in fixture: missing means broken tree, so fail instead of skip.
 	if _, err := os.Stat(compressedLog); os.IsNotExist(err) {
-		t.Skip("Compressed test data file not found:", compressedLog)
+		t.Fatal("checked-in compressed test data file missing:", compressedLog)
 	}
 
 	detector := NewGzipDetector()
@@ -290,47 +291,27 @@ func TestIntegrationCompressedLogReading(t *testing.T) {
 	}
 }
 
-func TestIntegrationParallelLogProcessing(t *testing.T) {
-	// Test parallel processing of multiple jails
+func TestIntegrationMultiJailLogProcessing(t *testing.T) {
+	// Test log retrieval across multiple jails.
 	testLogFile := filepath.Join("testdata", "fail2ban_multi_jail.log")
 
 	// Set up test environment using secure helper
 	cleanup := setupTestLogEnvironment(t, testLogFile)
 	defer cleanup()
 
-	// Process multiple jails in parallel
 	jails := []string{"sshd", "nginx", "postfix", "dovecot"}
-	ctx := context.Background()
 
-	// Use parallel processing to read logs for each jail
-	pool := NewWorkerPool[string, []string](4)
-
-	start := time.Now()
-	results, err := pool.Process(ctx, jails, func(_ context.Context, jail string) ([]string, error) {
-		return GetLogLines(context.Background(), jail, "")
-	})
-	duration := time.Since(start)
-
-	if err != nil {
-		t.Fatalf("Parallel processing failed: %v", err)
-	}
-
-	// Verify results
 	totalLines := 0
-	for i, result := range results {
-		if result.Error != nil {
-			t.Errorf("Error processing jail %s: %v", jails[i], result.Error)
+	for _, jail := range jails {
+		lines, err := GetLogLines(context.Background(), jail, "")
+		if err != nil {
+			t.Errorf("Error processing jail %s: %v", jail, err)
 			continue
 		}
-		totalLines += len(result.Value)
+		totalLines += len(lines)
 	}
 
-	t.Logf("Processed %d jails in %v, total lines: %d", len(jails), duration, totalLines)
-
-	// Should be faster than sequential
-	if duration > 50*time.Millisecond {
-		t.Logf("Warning: Parallel processing took %v", duration)
-	}
+	t.Logf("Processed %d jails, total lines: %d", len(jails), totalLines)
 }
 
 func TestIntegrationMemoryUsage(t *testing.T) {
@@ -351,7 +332,7 @@ func TestIntegrationMemoryUsage(t *testing.T) {
 	runtime.ReadMemStats(&initialStats)
 
 	// Process log multiple times to check for leaks
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		lines, err := GetLogLines(context.Background(), "", "")
 		if err != nil {
 			t.Fatalf("Iteration %d failed: %v", i, err)
@@ -428,7 +409,7 @@ func BenchmarkLogParsing(b *testing.B) {
 	defer SetLogDir(origLogDir)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := GetLogLines(context.Background(), "sshd", "")
 		if err != nil {
 			b.Fatalf("Benchmark failed: %v", err)
@@ -448,15 +429,15 @@ func BenchmarkBanRecordParsing(b *testing.B) {
 	dateFmt := "2006-01-02 15:04:05"
 
 	// Realistic output with 20 ban records
-	var records []string
-	for i := 0; i < 20; i++ {
+	records := make([]string, 0, 20)
+	for i := range 20 {
 		records = append(records,
 			fmt.Sprintf("192.168.1.%d %s + %s remaining", i+100, now.Format(dateFmt), future.Format(dateFmt)))
 	}
 	output := strings.Join(records, "\n")
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := parser.ParseBanRecords(output, "sshd")
 		if err != nil {
 			b.Fatalf("Benchmark failed: %v", err)

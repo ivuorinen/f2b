@@ -2,12 +2,11 @@ package fail2ban
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
 
-	"github.com/ivuorinen/f2b/shared"
+	"github.com/ivuorinen/f2b/constants"
 )
 
 // RealClient is the default implementation of Client, using the local fail2ban-client binary.
@@ -39,20 +38,21 @@ func NewClientWithContext(ctx context.Context, logDir, filterDir string) (*RealC
 	}
 
 	// Resolve the absolute path to prevent PATH hijacking
-	resolvedPath, err := exec.LookPath(shared.Fail2BanClientCommand)
+	resolvedPath, err := exec.LookPath(constants.Fail2BanClientCommand)
 	if err != nil {
-		if _, ok := GetRunner().(*MockRunner); !ok {
-			return nil, fmt.Errorf("%s not found in PATH", shared.Fail2BanClientCommand)
+		if !IsTestEnvironment() {
+			return nil, fmt.Errorf("%s not found in PATH", constants.Fail2BanClientCommand)
 		}
-		// For mock runner, use the plain command name
-		resolvedPath = shared.Fail2BanClientCommand
+		// In tests the real binary may be absent; fall back to the plain command
+		// name so an injected mock runner still receives the expected argv.
+		resolvedPath = constants.Fail2BanClientCommand
 	}
 
 	if logDir == "" {
-		logDir = shared.DefaultLogDir
+		logDir = constants.DefaultLogDir
 	}
 	if filterDir == "" {
-		filterDir = shared.DefaultFilterDir
+		filterDir = constants.DefaultFilterDir
 	}
 
 	// Validate log directory using centralized helper with context
@@ -64,7 +64,7 @@ func NewClientWithContext(ctx context.Context, logDir, filterDir string) (*RealC
 	// Validate filter directory using centralized helper with context
 	validatedFilterDir, err := ValidateClientFilterPath(ctx, filterDir)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", shared.ErrInvalidFilterDirectory, err)
+		return nil, fmt.Errorf("%s: %w", constants.ErrInvalidFilterDirectory, err)
 	}
 
 	rc := &RealClient{
@@ -74,21 +74,14 @@ func NewClientWithContext(ctx context.Context, logDir, filterDir string) (*RealC
 	}
 
 	// Version check - use sudo if needed with context
-	out, err := RunnerCombinedOutputWithSudoContext(ctx, rc.Path, "-V")
-	if err != nil {
-		return nil, fmt.Errorf("version check failed: %w", err)
+	if err := verifyMinimumVersion(ctx, rc.Path); err != nil {
+		return nil, err
 	}
-	rawVersion := strings.TrimSpace(string(out))
-	parsedVersion, err := ExtractFail2BanVersion(rawVersion)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse fail2ban version: %w", err)
-	}
-	if CompareVersions(parsedVersion, "0.11.0") < 0 {
-		return nil, fmt.Errorf("fail2ban >=0.11.0 required, got %s", rawVersion)
-	}
-	// Ping - use sudo if needed with context
-	if _, err := RunnerCombinedOutputWithSudoContext(ctx, rc.Path, "ping"); err != nil {
-		return nil, errors.New("fail2ban service not running")
+	// Ping - use sudo if needed with context. Wrap the underlying error so the
+	// real cause (socket permission denied, validation failure, timeout) is not
+	// masked as a stopped service.
+	if _, err := RunnerCombinedOutputWithSudoContext(ctx, rc.Path, constants.CommandArgPing); err != nil {
+		return nil, fmt.Errorf("fail2ban service not running: %w", err)
 	}
 	jails, err := rc.fetchJailsWithContext(ctx)
 	if err != nil {
@@ -96,6 +89,25 @@ func NewClientWithContext(ctx context.Context, logDir, filterDir string) (*RealC
 	}
 	rc.Jails = jails
 	return rc, nil
+}
+
+// verifyMinimumVersion runs `fail2ban-client -V`, parses the reported version,
+// and returns an error if it is below the minimum f2b supports.
+func verifyMinimumVersion(ctx context.Context, path string) error {
+	const minVersion = "0.11.0"
+	out, err := RunnerCombinedOutputWithSudoContext(ctx, path, constants.CommandArgVersion)
+	if err != nil {
+		return fmt.Errorf("version check failed: %w", err)
+	}
+	rawVersion := strings.TrimSpace(string(out))
+	parsedVersion, err := ExtractFail2BanVersion(rawVersion)
+	if err != nil {
+		return fmt.Errorf("failed to parse fail2ban version: %w", err)
+	}
+	if CompareVersions(parsedVersion, minVersion) < 0 {
+		return fmt.Errorf("fail2ban >=%s required, got %s", minVersion, rawVersion)
+	}
+	return nil
 }
 
 // ListJails returns the list of available jails for this client.

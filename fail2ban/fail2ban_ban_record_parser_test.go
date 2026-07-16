@@ -5,7 +5,33 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ivuorinen/f2b/constants"
 )
+
+// A 6/7-field line whose fields aren't timestamps is an exotic variant, not
+// garbage: it must produce a simple-format fallback record, not an error.
+func TestParseBanRecordSixFieldNonTimestampFallback(t *testing.T) {
+	parser, err := NewBanRecordParser()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	record, err := parser.ParseBanRecordLine("192.168.1.100 foo bar + baz qux", "sshd")
+	if err != nil {
+		t.Fatalf("expected fallback record, got error: %v", err)
+	}
+	if record == nil {
+		t.Fatal("expected fallback record, got nil")
+		return
+	}
+	if record.IP != "192.168.1.100" {
+		t.Errorf("IP = %q, want 192.168.1.100", record.IP)
+	}
+	if record.Remaining != constants.UnknownValue {
+		t.Errorf("Remaining = %q, want %q", record.Remaining, constants.UnknownValue)
+	}
+}
 
 func TestBanRecordParser(t *testing.T) {
 	parser, err := NewBanRecordParser()
@@ -87,7 +113,33 @@ func TestBanRecordParser(t *testing.T) {
 			if record.Jail != tt.jail {
 				t.Errorf("Jail mismatch: got %s, want %s", record.Jail, tt.jail)
 			}
+
+			// Full-format rows carry a known ban timestamp; assert it exactly
+			// (simple-format rows are skipped inside the helper).
+			validateTimeParsing(t, record, tt.line)
 		})
+	}
+}
+
+// TestParseBanRecordLineRejectsUnsafeJail exercises the jail-safety guard in
+// ParseBanRecordLine (empty / path-separator / traversal jail names). Without
+// this, the guard is mutation-blind: no test ever passed it an unsafe jail.
+func TestParseBanRecordLineRejectsUnsafeJail(t *testing.T) {
+	parser, err := NewBanRecordParser()
+	if err != nil {
+		t.Fatal(err)
+	}
+	line := "192.168.1.100 2023-12-01 14:30:45 + 2023-12-02 14:30:45 remaining"
+	unsafeJails := []string{"", "..", "../etc", "a/b", `a\b`, "foo/../bar"}
+	for _, jail := range unsafeJails {
+		if _, err := parser.ParseBanRecordLine(line, jail); err == nil {
+			t.Errorf("ParseBanRecordLine accepted unsafe jail %q, want error", jail)
+		}
+	}
+	// A safe jail on the same line must still succeed, so the guard is not
+	// simply rejecting everything.
+	if _, err := parser.ParseBanRecordLine(line, "sshd"); err != nil {
+		t.Errorf("ParseBanRecordLine rejected safe jail %q: %v", "sshd", err)
 	}
 }
 
@@ -143,12 +195,17 @@ func TestParseBanRecordLineOptimized(t *testing.T) {
 	if record.Jail != "sshd" {
 		t.Errorf("Jail mismatch: got %s, want sshd", record.Jail)
 	}
+
+	// Assert the parsed ban timestamp, not just IP/jail.
+	validateTimeParsing(t, record, line)
 }
 
 func TestParseBanRecordsOptimized(t *testing.T) {
-	output := "192.168.1.100 2023-12-01 14:30:45 + 2023-12-02 14:30:45 remaining\n" +
-		"192.168.1.101 2023-12-01 15:00:00 + 2023-12-02 15:00:00 remaining"
-	records, err := ParseBanRecordsOptimized(output, "sshd")
+	lines := []string{
+		"192.168.1.100 2023-12-01 14:30:45 + 2023-12-02 14:30:45 remaining",
+		"192.168.1.101 2023-12-01 15:00:00 + 2023-12-02 15:00:00 remaining",
+	}
+	records, err := ParseBanRecordsOptimized(strings.Join(lines, "\n"), "sshd")
 
 	if err != nil {
 		t.Fatalf("ParseBanRecordsOptimized failed: %v", err)
@@ -156,6 +213,15 @@ func TestParseBanRecordsOptimized(t *testing.T) {
 
 	if len(records) != 2 {
 		t.Fatalf("Expected 2 records, got %d", len(records))
+	}
+
+	// Assert each record's IP and parsed ban timestamp, not just the count.
+	wantIPs := []string{"192.168.1.100", "192.168.1.101"}
+	for i := range records {
+		if records[i].IP != wantIPs[i] {
+			t.Errorf("record %d IP = %q, want %q", i, records[i].IP, wantIPs[i])
+		}
+		validateTimeParsing(t, &records[i], lines[i])
 	}
 }
 
@@ -167,7 +233,7 @@ func BenchmarkParseBanRecordLine(b *testing.B) {
 	line := "192.168.1.100 2023-12-01 14:30:45 + 2023-12-02 14:30:45 remaining"
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = parser.ParseBanRecordLine(line, "sshd")
 	}
 }
@@ -180,7 +246,7 @@ func BenchmarkParseBanRecords(b *testing.B) {
 	output := strings.Repeat("192.168.1.100 2023-12-01 14:30:45 + 2023-12-02 14:30:45 remaining\n", 100)
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = parser.ParseBanRecords(output, "sshd")
 	}
 }
@@ -223,10 +289,10 @@ func TestBanRecordParserConcurrent(t *testing.T) {
 
 	results := make(chan error, numGoroutines)
 
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		go func() {
 			var err error
-			for j := 0; j < numOperations; j++ {
+			for range numOperations {
 				_, err = parser.ParseBanRecordLine(line, "sshd")
 				if err != nil {
 					break
@@ -236,7 +302,7 @@ func TestBanRecordParserConcurrent(t *testing.T) {
 		}()
 	}
 
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		if err := <-results; err != nil {
 			t.Errorf("Concurrent parsing failed: %v", err)
 		}
@@ -440,24 +506,22 @@ func validateParsedRecord(t *testing.T, record *BanRecord, tt struct {
 	}
 }
 
-// validateTimeParsing validates that the time was parsed correctly from the record
+// validateTimeParsing asserts that BannedAt was parsed exactly from the line's
+// ban timestamp. Full format is "IP date time + date time [remaining]" (>= 6
+// fields); the ban timestamp is always parts[1] (date) and parts[2] (time).
 func validateTimeParsing(t *testing.T, record *BanRecord, line string) {
 	t.Helper()
-	if len(strings.Fields(line)) < 8 {
-		return // Not full format
+	parts := strings.Fields(line)
+	if len(parts) < 6 {
+		return // simple format: BannedAt is time.Now(), no exact value to assert
 	}
 
-	parts := strings.Fields(line)
-	expectedDate := parts[1]
-	expectedTime := parts[2]
-
-	// Check if using current time instead of parsed time
-	now := time.Now()
-	if record.BannedAt.Year() == now.Year() &&
-		record.BannedAt.Month() == now.Month() &&
-		record.BannedAt.Day() == now.Day() &&
-		record.BannedAt.Hour() == now.Hour() {
-		t.Logf("Warning: Ban time might be using current time instead of parsed time")
-		t.Logf("Expected to parse date %s time %s", expectedDate, expectedTime)
+	wantStr := parts[1] + " " + parts[2]
+	want, err := time.ParseInLocation(constants.TimeFormat, wantStr, time.Local)
+	if err != nil {
+		t.Fatalf("test setup: cannot parse expected ban time %q: %v", wantStr, err)
+	}
+	if !record.BannedAt.Equal(want) {
+		t.Errorf("BannedAt = %v, want %v (parsed from %q)", record.BannedAt, want, wantStr)
 	}
 }

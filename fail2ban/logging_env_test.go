@@ -2,8 +2,6 @@ package fail2ban
 
 import (
 	"testing"
-
-	"github.com/sirupsen/logrus"
 )
 
 func TestSetLogger(t *testing.T) {
@@ -12,7 +10,7 @@ func TestSetLogger(t *testing.T) {
 	defer SetLogger(originalLogger)
 
 	// Create a test logger
-	testLogger := NewLogrusAdapter(logrus.New())
+	testLogger := NewSlogLogger(SlogText)
 
 	// Set the logger
 	SetLogger(testLogger)
@@ -37,9 +35,9 @@ func TestSetLogger_Concurrent(t *testing.T) {
 
 	// Test concurrent access to SetLogger and getLogger
 	done := make(chan bool)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		go func() {
-			testLogger := NewLogrusAdapter(logrus.New())
+			testLogger := NewSlogLogger(SlogText)
 			SetLogger(testLogger)
 			_ = getLogger()
 			done <- true
@@ -47,7 +45,7 @@ func TestSetLogger_Concurrent(t *testing.T) {
 	}
 
 	// Wait for all goroutines
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		<-done
 	}
 
@@ -221,9 +219,8 @@ func TestConfigureCITestLogging(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.setup(t)
 
-			// Create a new logrus logger to test with
-			testLogrusLogger := logrus.New()
-			testLogger := NewLogrusAdapter(testLogrusLogger)
+			// Create a new logger to test with
+			testLogger := NewSlogLogger(SlogText)
 			SetLogger(testLogger)
 
 			// Call ConfigureCITestLogging

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ivuorinen/f2b/shared"
+	"github.com/ivuorinen/f2b/constants"
 
 	"github.com/spf13/cobra"
 
@@ -24,7 +24,7 @@ func createTimeoutContext(base context.Context, config *Config) (context.Context
 	if base == nil {
 		base = context.Background()
 	}
-	timeout := shared.DefaultCommandTimeout
+	timeout := constants.DefaultCommandTimeout
 	if config != nil && config.CommandTimeout > 0 {
 		timeout = config.CommandTimeout
 	}
@@ -44,90 +44,36 @@ func IsTestEnvironment() bool {
 
 // Command creation helpers
 
-// NewCommand creates a new cobra command with standard setup
+// NewCommand creates a new cobra command with standard setup.
+// SilenceErrors/SilenceUsage are set so a runtime failure (e.g. fail2ban down)
+// is reported once by our own error handler instead of being reprinted by
+// cobra and followed by a full usage dump as if it were a syntax error.
 func NewCommand(use, short string, aliases []string, runE func(*cobra.Command, []string) error) *cobra.Command {
 	return &cobra.Command{
-		Use:     use,
-		Short:   short,
-		Aliases: aliases,
-		RunE:    runE,
+		Use:           use,
+		Short:         short,
+		Aliases:       aliases,
+		RunE:          runE,
+		SilenceErrors: true,
+		SilenceUsage:  true,
 	}
-}
-
-// NewContextualCommand creates a command with standardized context and logging setup
-func NewContextualCommand(
-	use, short string,
-	aliases []string,
-	config *Config,
-	handler func(context.Context, *cobra.Command, []string) error,
-) *cobra.Command {
-	return NewCommand(use, short, aliases, func(cmd *cobra.Command, args []string) error {
-		// Get the contextual logger
-		logger := GetContextualLogger()
-
-		// Create timeout context based on Cobra's context so signals/cancellations propagate
-		ctx, cancel := createTimeoutContext(cmd.Context(), config)
-		defer cancel()
-
-		// Extract command name from use string (first word)
-		cmdName := use
-		if spaceIndex := strings.Index(use, " "); spaceIndex != -1 {
-			cmdName = use[:spaceIndex]
-		}
-
-		// Add command context
-		ctx = WithCommand(ctx, cmdName)
-
-		// Log operation with timing
-		return logger.LogOperation(ctx, cmdName+"_command", func() error {
-			return handler(ctx, cmd, args)
-		})
-	})
 }
 
 // AddLogFlags adds common log-related flags to a command
 func AddLogFlags(cmd *cobra.Command) {
-	cmd.Flags().IntP(shared.FlagLimit, "n", 0, "Show only the last N log lines")
-}
-
-// IsSkipCommand returns true if the command doesn't require a fail2ban client
-func IsSkipCommand(command string) bool {
-	skipCommands := []string{
-		"service",
-		"version",
-		"test-filter",
-		"completion",
-		"help",
-	}
-
-	for _, skip := range skipCommands {
-		if command == skip {
-			return true
-		}
-	}
-	return false
-}
-
-// AddWatchFlags adds common watch-related flags to a command
-func AddWatchFlags(cmd *cobra.Command, interval *time.Duration) {
-	cmd.Flags().DurationVarP(interval, shared.FlagInterval, "i", shared.DefaultPollingInterval, "Polling interval")
+	cmd.Flags().IntP(constants.FlagLimit, "n", 0, "Show only the last N log lines")
 }
 
 // Validation helpers
 
-// ValidateIPArgument validates that an IP address is provided in args
-func ValidateIPArgument(args []string) (string, error) {
-	return ValidateIPArgumentWithContext(context.Background(), args)
-}
-
 // ValidateIPArgumentWithContext validates that an IP address is provided in args with context support
-func ValidateIPArgumentWithContext(ctx context.Context, args []string) (string, error) {
+func ValidateIPArgumentWithContext(_ context.Context, args []string) (string, error) {
 	if len(args) < 1 {
 		return "", fmt.Errorf("IP address required")
 	}
 	ip := args[0]
 	// Validate the IP address
-	if err := fail2ban.CachedValidateIP(ctx, ip); err != nil {
+	if err := fail2ban.ValidateIP(ip); err != nil {
 		return "", err
 	}
 	return ip, nil
@@ -154,19 +100,6 @@ func ValidateServiceAction(action string) error {
 	return nil
 }
 
-// GetJailsFromArgs gets jail list from arguments or client
-func GetJailsFromArgs(client fail2ban.Client, args []string, startIndex int) ([]string, error) {
-	if len(args) > startIndex {
-		return []string{strings.ToLower(args[startIndex])}, nil
-	}
-
-	jails, err := client.ListJails()
-	if err != nil {
-		return nil, err
-	}
-	return jails, nil
-}
-
 // GetJailsFromArgsWithContext gets jail list from arguments or client with timeout context
 func GetJailsFromArgsWithContext(
 	ctx context.Context,
@@ -175,7 +108,8 @@ func GetJailsFromArgsWithContext(
 	startIndex int,
 ) ([]string, error) {
 	if len(args) > startIndex {
-		return []string{strings.ToLower(args[startIndex])}, nil
+		// fail2ban jail names are case-sensitive; pass through verbatim.
+		return []string{args[startIndex]}, nil
 	}
 
 	jails, err := client.ListJailsWithContext(ctx)
@@ -200,7 +134,7 @@ func ParseOptionalArgs(args []string, count int) []string {
 func HandleClientError(err error) error {
 	if err != nil {
 		PrintError(err)
-		return err
+		return printedError{err}
 	}
 	return nil
 }
@@ -209,28 +143,6 @@ func HandleClientError(err error) error {
 type errorPatternMatch struct {
 	patterns    []string
 	remediation string
-}
-
-// errorTypePattern maps error message patterns to their corresponding handler function
-type errorTypePattern struct {
-	patterns []string
-	handler  func(error) error
-}
-
-// errorTypePatterns defines patterns for inferring error types from non-contextual errors
-var errorTypePatterns = []errorTypePattern{
-	{
-		patterns: []string{"invalid", "required", "malformed", "format"},
-		handler:  HandleValidationError,
-	},
-	{
-		patterns: []string{"permission", "sudo", "unauthorized", "forbidden"},
-		handler:  HandlePermissionError,
-	},
-	{
-		patterns: []string{"not found", "not running", "connection", "timeout"},
-		handler:  HandleSystemError,
-	},
 }
 
 // handleCategorizedError is a shared helper for handling categorized errors with pattern matching
@@ -245,10 +157,9 @@ func handleCategorizedError(
 	}
 
 	// Check if it's already a contextual error of this category
-	var contextErr *fail2ban.ContextualError
-	if errors.As(err, &contextErr) && contextErr.GetCategory() == category {
+	if contextErr, ok := errors.AsType[*fail2ban.ContextualError](err); ok && contextErr.GetCategory() == category {
 		PrintError(err)
-		return err
+		return printedError{err}
 	}
 
 	// Check for pattern matches
@@ -258,7 +169,7 @@ func handleCategorizedError(
 			if strings.Contains(errMsg, pattern) {
 				newErr := createError(err, pm.remediation)
 				PrintError(newErr)
-				return newErr
+				return printedError{newErr}
 			}
 		}
 	}
@@ -321,45 +232,10 @@ func HandleSystemError(err error) error {
 	)
 }
 
-// HandleErrorWithContext automatically chooses the appropriate error handler based on error context
-func HandleErrorWithContext(err error) error {
-	if err == nil {
-		return nil
-	}
-
-	// Check if it's already a contextual error and route accordingly
-	var contextErr *fail2ban.ContextualError
-	if errors.As(err, &contextErr) {
-		switch contextErr.GetCategory() {
-		case fail2ban.ErrorCategoryValidation:
-			return HandleValidationError(err)
-		case fail2ban.ErrorCategoryPermission:
-			return HandlePermissionError(err)
-		case fail2ban.ErrorCategorySystem:
-			return HandleSystemError(err)
-		default:
-			return HandleClientError(err)
-		}
-	}
-
-	// For non-contextual errors, try to infer the type from patterns
-	errMsg := strings.ToLower(err.Error())
-	for _, ep := range errorTypePatterns {
-		for _, pattern := range ep.patterns {
-			if strings.Contains(errMsg, pattern) {
-				return ep.handler(err)
-			}
-		}
-	}
-
-	// Default to generic client error handling
-	return HandleClientError(err)
-}
-
 // Output helpers
 
 // OutputResults outputs results in the specified format
-func OutputResults(cmd *cobra.Command, results interface{}, config *Config) {
+func OutputResults(cmd *cobra.Command, results any, config *Config) {
 	if config != nil && config.Format == JSONFormat {
 		PrintOutputTo(GetCmdOutput(cmd), results, JSONFormat)
 	} else {
@@ -370,12 +246,12 @@ func OutputResults(cmd *cobra.Command, results interface{}, config *Config) {
 // InterpretBanStatus interprets ban operation status codes
 func InterpretBanStatus(code int, operation string) string {
 	switch operation {
-	case shared.MetricsBan:
+	case constants.MetricsBan:
 		if code == 1 {
 			return "Already banned"
 		}
 		return "Banned"
-	case shared.MetricsUnban:
+	case constants.MetricsUnban:
 		if code == 1 {
 			return "Already unbanned"
 		}
@@ -396,9 +272,9 @@ type OperationResult struct {
 
 // OperationType defines a ban or unban operation with its associated metadata
 type OperationType struct {
-	// MetricsType is the metrics key for this operation (e.g., shared.MetricsBan)
+	// MetricsType is the metrics key for this operation (e.g., constants.MetricsBan)
 	MetricsType string
-	// Message is the log message for this operation (e.g., shared.MsgBanResult)
+	// Message is the log message for this operation (e.g., constants.MsgBanResult)
 	Message string
 	// Operation is the function to execute without context
 	Operation func(client fail2ban.Client, ip, jail string) (int, error)
@@ -408,8 +284,8 @@ type OperationType struct {
 
 // BanOperationType defines the ban operation
 var BanOperationType = OperationType{
-	MetricsType: shared.MetricsBan,
-	Message:     shared.MsgBanResult,
+	MetricsType: constants.MetricsBan,
+	Message:     constants.MsgBanResult,
 	Operation: func(c fail2ban.Client, ip, jail string) (int, error) {
 		return c.BanIP(ip, jail)
 	},
@@ -420,8 +296,8 @@ var BanOperationType = OperationType{
 
 // UnbanOperationType defines the unban operation
 var UnbanOperationType = OperationType{
-	MetricsType: shared.MetricsUnban,
-	Message:     shared.MsgUnbanResult,
+	MetricsType: constants.MetricsUnban,
+	Message:     constants.MsgUnbanResult,
 	Operation: func(c fail2ban.Client, ip, jail string) (int, error) {
 		return c.UnbanIP(ip, jail)
 	},
@@ -446,7 +322,7 @@ func ProcessOperation(
 		}
 
 		status := InterpretBanStatus(code, opType.MetricsType)
-		Logger.WithFields(map[string]interface{}{
+		Logger.WithFields(map[string]any{
 			"ip":     ip,
 			"jail":   jail,
 			"status": status,
@@ -494,7 +370,7 @@ func ProcessOperationWithContext(
 		logger.LogBanOperation(jailCtx, opType.MetricsType, ip, jail, true, duration)
 
 		// Log the operation-specific message (ban vs unban)
-		Logger.WithFields(map[string]interface{}{
+		Logger.WithFields(map[string]any{
 			"ip":     ip,
 			"jail":   jail,
 			"status": status,
@@ -578,39 +454,9 @@ func FormatStatusResult(jail, status string) string {
 
 // String processing helpers
 
-// TrimmedString safely trims whitespace and returns empty string when input is empty
-func TrimmedString(s string) string {
-	return strings.TrimSpace(s)
-}
-
 // IsEmptyString checks if a string is empty after trimming whitespace
 func IsEmptyString(s string) bool {
 	return strings.TrimSpace(s) == ""
-}
-
-// NonEmptyString checks if a string has content after trimming whitespace
-func NonEmptyString(s string) bool {
-	return strings.TrimSpace(s) != ""
-}
-
-// Error handling helpers
-
-// WrapError provides consistent error wrapping with operation context
-func WrapError(err error, operation string) error {
-	if err == nil {
-		return nil
-	}
-	return fmt.Errorf("%s failed: %w", operation, err)
-}
-
-// WrapErrorf provides formatted error wrapping with context
-func WrapErrorf(err error, format string, args ...interface{}) error {
-	if err == nil {
-		return nil
-	}
-	// Append ": %w" to format and add err as final argument for single formatting
-	allArgs := append(args, err)
-	return fmt.Errorf(format+": %w", allArgs...)
 }
 
 // Command output helpers

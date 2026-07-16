@@ -8,13 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	"github.com/ivuorinen/f2b/constants"
 	"github.com/ivuorinen/f2b/fail2ban"
-	"github.com/ivuorinen/f2b/shared"
 )
 
 const (
@@ -24,17 +24,14 @@ const (
 	PlainFormat = "plain"
 )
 
-// Logger is the global logger for the CLI.
-var Logger = logrus.New()
+// Logger is the global logger for the CLI. It writes human-readable text to
+// os.Stderr and satisfies fail2ban.LoggerInterface, so the fail2ban package
+// logs through it (wired in main).
+var Logger = fail2ban.NewSlogLogger(fail2ban.SlogText)
 
 func init() {
-	// Set logrus to output to stderr and use a readable format by default.
-	Logger.SetOutput(os.Stderr)
-	Logger.SetFormatter(&logrus.TextFormatter{
-		FullTimestamp: true,
-	})
-
-	// Configure both cmd.Logger and global logrus for CI environments
+	// Reduce log verbosity in CI/test environments. The logger already writes
+	// text to os.Stderr by construction.
 	configureCIFriendlyLogging()
 }
 
@@ -43,23 +40,22 @@ func configureCIFriendlyLogging() {
 	// Detect CI environments by checking common CI environment variables
 	// If in CI or test environment, reduce logging noise unless explicitly overridden
 	if (IsCI() || IsTestEnvironment()) && os.Getenv("F2B_LOG_LEVEL") == "" && os.Getenv("F2B_VERBOSE_TESTS") == "" {
-		// Set both the cmd.Logger and global logrus to error level
-		Logger.SetLevel(logrus.ErrorLevel)
-		logrus.SetLevel(logrus.ErrorLevel)
+		Logger.SetLevel(slog.LevelError)
 	}
 }
 
 // PrintOutput prints data to stdout in the specified format (PlainFormat or JSONFormat).
-func PrintOutput(data interface{}, format string) {
+func PrintOutput(data any, format string) {
 	switch format {
 	case JSONFormat:
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(data); err != nil {
-			Logger.WithError(err).Error(shared.MsgFailedToEncodeJSON)
-			// Fallback to plain text output
-			if _, printErr := fmt.Fprintln(os.Stdout, data); printErr != nil {
-				Logger.WithError(printErr).Error(shared.MsgFailedToWriteOutput)
+			Logger.WithError(err).Error(constants.MsgFailedToEncodeJSON)
+			// Fallback goes to stderr: injecting plain text into the JSON
+			// stream would corrupt it for downstream consumers (jq etc.).
+			if _, printErr := fmt.Fprintln(os.Stderr, data); printErr != nil {
+				Logger.WithError(printErr).Error(constants.MsgFailedToWriteOutput)
 			}
 		}
 	default:
@@ -68,16 +64,17 @@ func PrintOutput(data interface{}, format string) {
 }
 
 // PrintOutputTo prints data to the specified writer in the given format.
-func PrintOutputTo(w io.Writer, data interface{}, format string) {
+func PrintOutputTo(w io.Writer, data any, format string) {
 	switch format {
 	case JSONFormat:
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(data); err != nil {
-			Logger.WithError(err).Error(shared.MsgFailedToEncodeJSON)
-			// Fallback to plain text output
-			if _, printErr := fmt.Fprintln(w, data); printErr != nil {
-				Logger.WithError(printErr).Error(shared.MsgFailedToWriteOutput)
+			Logger.WithError(err).Error(constants.MsgFailedToEncodeJSON)
+			// Fallback goes to stderr: injecting plain text into the JSON
+			// stream would corrupt it for downstream consumers (jq etc.).
+			if _, printErr := fmt.Fprintln(os.Stderr, data); printErr != nil {
+				Logger.WithError(printErr).Error(constants.MsgFailedToWriteOutput)
 			}
 		}
 	default:
@@ -87,6 +84,21 @@ func PrintOutputTo(w io.Writer, data interface{}, format string) {
 	}
 }
 
+// printedError marks an error that was already reported to the user via
+// PrintError, so main doesn't print it a second time. Unwrap keeps
+// errors.Is/errors.As working on the underlying error.
+type printedError struct{ error }
+
+func (p printedError) Unwrap() error { return p.error }
+
+// IsPrinted reports whether err (or an error it wraps) was already reported
+// to the user by an error handler. main prints unmarked errors before exiting
+// so cobra/config failures aren't silent under SilenceErrors.
+func IsPrinted(err error) bool {
+	var p printedError
+	return errors.As(err, &p)
+}
+
 // PrintError logs and prints an error to stderr with enhanced context if available.
 func PrintError(err error) {
 	if err == nil {
@@ -94,28 +106,20 @@ func PrintError(err error) {
 	}
 
 	// Check if error provides enhanced context
-	var contextErr *fail2ban.ContextualError
-	if errors.As(err, &contextErr) {
-		Logger.WithFields(map[string]interface{}{
+	if contextErr, ok := errors.AsType[*fail2ban.ContextualError](err); ok {
+		Logger.WithFields(map[string]any{
 			"error":    err.Error(),
 			"category": string(contextErr.GetCategory()),
-		}).Error(shared.MsgCommandFailed)
+		}).Error(constants.MsgCommandFailed)
 
-		fmt.Fprintln(os.Stderr, shared.ErrorPrefix, err)
+		fmt.Fprintln(os.Stderr, constants.ErrorPrefix, err)
 		if remediation := contextErr.GetRemediation(); remediation != "" {
 			fmt.Fprintln(os.Stderr, "Hint:", remediation)
 		}
 	} else {
-		Logger.WithError(err).Error(shared.MsgCommandFailed)
-		fmt.Fprintln(os.Stderr, shared.ErrorPrefix, err)
+		Logger.WithError(err).Error(constants.MsgCommandFailed)
+		fmt.Fprintln(os.Stderr, constants.ErrorPrefix, err)
 	}
-}
-
-// PrintErrorf logs and prints a formatted error to stderr.
-func PrintErrorf(format string, args ...interface{}) {
-	msg := fmt.Sprintf(format, args...)
-	Logger.Error(msg)
-	fmt.Fprintln(os.Stderr, shared.ErrorPrefix, msg)
 }
 
 // GetCmdOutput returns the command's output writer if available, otherwise os.Stdout
@@ -124,12 +128,4 @@ func GetCmdOutput(cmd *cobra.Command) io.Writer {
 		return cmd.OutOrStdout()
 	}
 	return os.Stdout
-}
-
-// GetCmdError returns the command's error writer if available, otherwise os.Stderr
-func GetCmdError(cmd *cobra.Command) io.Writer {
-	if cmd != nil && cmd.ErrOrStderr() != nil {
-		return cmd.ErrOrStderr()
-	}
-	return os.Stderr
 }

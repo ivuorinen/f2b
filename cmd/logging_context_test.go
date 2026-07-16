@@ -7,23 +7,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ivuorinen/f2b/shared"
+	"github.com/ivuorinen/f2b/constants"
+	"github.com/ivuorinen/f2b/fail2ban"
 )
 
 // setupTestLogger creates a ContextualLogger with a buffer for testing
 func setupTestLogger(t *testing.T) (*ContextualLogger, *bytes.Buffer) {
 	t.Helper()
 	var buf bytes.Buffer
-	logger := logrus.New()
+	logger := fail2ban.NewSlogLogger(fail2ban.SlogJSON)
 	logger.SetOutput(&buf)
-	logger.SetFormatter(&logrus.TextFormatter{
-		DisableTimestamp: true,
-	})
-	return &ContextualLogger{Logger: logger}, &buf
+	return &ContextualLogger{SlogLogger: logger}, &buf
 }
 
 // TestWithRequestID tests the WithRequestID function
@@ -35,62 +32,9 @@ func TestWithRequestID(t *testing.T) {
 	ctxWithID := WithRequestID(ctx, requestID)
 
 	// Verify request ID is in context
-	value := ctxWithID.Value(shared.ContextKeyRequestID)
+	value := ctxWithID.Value(constants.ContextKeyRequestID)
 	require.NotNil(t, value)
 	assert.Equal(t, requestID, value)
-}
-
-// TestLogCommandExecution tests the LogCommandExecution method
-func TestLogCommandExecution(t *testing.T) {
-	tests := []struct {
-		name     string
-		command  string
-		args     []string
-		duration time.Duration
-		err      error
-		contains string
-	}{
-		{
-			name:     "successful command execution",
-			command:  "fail2ban-client",
-			args:     []string{"status", "sshd"},
-			duration: 100 * time.Millisecond,
-			err:      nil,
-			contains: "Command executed successfully",
-		},
-		{
-			name:     "failed command execution",
-			command:  "fail2ban-client",
-			args:     []string{"invalid"},
-			duration: 50 * time.Millisecond,
-			err:      errors.New("command not found"),
-			contains: "Command execution failed",
-		},
-		{
-			name:     "command with no args",
-			command:  "fail2ban-client",
-			args:     []string{},
-			duration: 10 * time.Millisecond,
-			err:      nil,
-			contains: "Command executed successfully",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cl, buf := setupTestLogger(t)
-			ctx := context.Background()
-
-			// Log command execution
-			cl.LogCommandExecution(ctx, tt.command, tt.args, tt.duration, tt.err)
-
-			// Verify output
-			output := buf.String()
-			assert.Contains(t, output, tt.contains)
-			assert.Contains(t, output, tt.command)
-			assert.Contains(t, output, "duration_ms")
-		})
-	}
 }
 
 // TestSetContextualLogger tests the SetContextualLogger function
@@ -100,8 +44,8 @@ func TestSetContextualLogger(t *testing.T) {
 	defer SetContextualLogger(originalLogger)
 
 	// Create new logger
-	logger := logrus.New()
-	newLogger := &ContextualLogger{Logger: logger}
+	logger := fail2ban.NewSlogLogger(fail2ban.SlogText)
+	newLogger := &ContextualLogger{SlogLogger: logger}
 
 	// Set new logger
 	SetContextualLogger(newLogger)

@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
 )
 
@@ -101,7 +100,11 @@ func TestSymlinkHandling(t *testing.T) {
 
 	symlinkPath := filepath.Join(tempDir, "dangerous_symlink")
 	if err := os.Symlink(outsideFile, symlinkPath); err != nil {
-		t.Skipf("failed to create symlink (may not be supported): %v", err)
+		// Hard-fail rather than skip: this is a security assertion, and on the
+		// unix CI this project targets symlink creation in a tempdir always
+		// succeeds. A silent skip here would let the symlink-escape check vanish
+		// from a green run.
+		t.Fatalf("failed to create symlink required for this security test: %v", err)
 	}
 
 	// Test with symlinks disabled
@@ -160,19 +163,8 @@ func TestFileTypeValidation(t *testing.T) {
 		t.Errorf("non-existent file should pass validation: %v", err)
 	}
 
-	// Test special files (should fail validation if validateFileType rejects them)
-	// Note: Creating actual device files requires elevated privileges, so we can
-	// test the function's behavior with mock paths or skip if not supported
-
-	// Example: Named pipe (FIFO)
-	pipePath := filepath.Join(tempDir, "test.pipe")
-	if err := syscall.Mkfifo(pipePath, 0600); err == nil {
-		err = validateFileType(pipePath)
-		if err == nil {
-			t.Error("named pipe should fail validation if special files are not allowed")
-		}
-		_ = os.Remove(pipePath)
-	}
+	// Special files (FIFO) are covered in fail2ban_path_security_unix_test.go:
+	// creating them needs syscall.Mkfifo, which Windows lacks.
 }
 
 // TestUnicodeNormalization tests unicode character normalization
@@ -341,7 +333,7 @@ func BenchmarkPathValidation(b *testing.B) {
 	testPath := filepath.Join(tempDir, "test.log")
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, err := ValidatePathWithSecurity(testPath, config)
 		if err != nil {
 			b.Fatalf("unexpected error: %v", err)

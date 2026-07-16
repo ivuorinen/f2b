@@ -14,6 +14,7 @@ func UnbanCmd(client fail2ban.Client, config *Config) *cobra.Command {
 		Description:   "Unban an IP address",
 		Aliases:       []string{"unbanip", "ub"},
 		OperationName: "unban_command",
-		Processor:     &UnbanProcessor{},
+		SingleOp:      ProcessUnbanOperationWithContext,
+		ParallelOp:    ProcessUnbanOperationParallelWithContext,
 	})
 }

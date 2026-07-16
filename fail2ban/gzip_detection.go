@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ivuorinen/f2b/shared"
+	"github.com/ivuorinen/f2b/constants"
 )
 
 // safeCloseFile closes a file and logs any error.
@@ -19,7 +19,7 @@ func safeCloseFile(f *os.File, path string) {
 	}
 	if closeErr := f.Close(); closeErr != nil {
 		getLogger().WithError(closeErr).
-			WithField(shared.LogFieldFile, path).
+			WithField(constants.LogFieldFile, path).
 			Warn("Failed to close file")
 	}
 }
@@ -32,7 +32,7 @@ func safeCloseReader(r io.ReadCloser, path string) {
 	}
 	if closeErr := r.Close(); closeErr != nil {
 		getLogger().WithError(closeErr).
-			WithField(shared.LogFieldFile, path).
+			WithField(constants.LogFieldFile, path).
 			Warn("Failed to close reader")
 	}
 }
@@ -49,7 +49,7 @@ func NewGzipDetector() *GzipDetector {
 // then falling back to magic byte detection for better performance
 func (gd *GzipDetector) IsGzipFile(path string) (bool, error) {
 	// Fast path: check file extension first
-	if strings.HasSuffix(strings.ToLower(path), shared.GzipExtension) {
+	if strings.HasSuffix(strings.ToLower(path), constants.GzipExtension) {
 		return true, nil
 	}
 
@@ -108,8 +108,15 @@ func (gd *GzipDetector) OpenGzipAwareReader(path string) (io.ReadCloser, error) 
 			return nil, err
 		}
 
+		// Bound the decompressed stream to guard against gzip bombs: a small
+		// .gz of highly repetitive log text can expand to many GB. Cap reads at
+		// DefaultMaxFileSize so decompression cannot exhaust memory. One extra
+		// byte lets Read detect (and warn about) truncation instead of
+		// silently cutting a legitimately large log at exactly the cap.
+		limited := io.LimitReader(gz, constants.DefaultMaxFileSize+1)
+
 		// Return a composite closer that closes both gzip reader and file
-		return &gzipFileReader{gz: gz, file: f}, nil
+		return &gzipFileReader{reader: limited, gz: gz, file: f, path: path}, nil
 	}
 
 	return f, nil
@@ -142,14 +149,35 @@ func (gd *GzipDetector) CreateGzipAwareScannerWithBuffer(path string, maxLineSiz
 	return scanner, cleanup, nil
 }
 
-// gzipFileReader wraps both gzip.Reader and os.File to ensure both are closed
+// gzipFileReader wraps both gzip.Reader and os.File to ensure both are closed.
+// reader is the (possibly size-limited) stream used for reads; gz and file are
+// retained so both are closed.
 type gzipFileReader struct {
-	gz   *gzip.Reader
-	file *os.File
+	reader io.Reader
+	gz     *gzip.Reader
+	file   *os.File
+	path   string
+	read   int64
+	warned bool
 }
 
-func (gfr *gzipFileReader) Read(p []byte) (n int, err error) {
-	return gfr.gz.Read(p)
+func (gfr *gzipFileReader) Read(p []byte) (int, error) {
+	n, err := gfr.reader.Read(p)
+	gfr.read += int64(n)
+	if gfr.read > constants.DefaultMaxFileSize {
+		// The sentinel byte past the cap was consumed: the decompressed
+		// stream is larger than the cap. Truncate at the cap and end the
+		// stream, warning once so the loss is visible.
+		n -= int(gfr.read - constants.DefaultMaxFileSize)
+		gfr.read = constants.DefaultMaxFileSize
+		if !gfr.warned {
+			gfr.warned = true
+			getLogger().WithField(constants.LogFieldFile, gfr.path).
+				Warn("Decompressed log exceeds size cap; remaining content dropped")
+		}
+		return n, io.EOF
+	}
+	return n, err
 }
 
 func (gfr *gzipFileReader) Close() error {

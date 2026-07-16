@@ -20,12 +20,12 @@ func TestLogDir_ConcurrentAccess(t *testing.T) {
 	errors := make(chan string, numGoroutines*opsPerGoroutine)
 
 	// Start multiple goroutines that set and get log directory
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
 
-			for j := 0; j < opsPerGoroutine; j++ {
+			for j := range opsPerGoroutine {
 				if j%2 == 0 {
 					// Set log directory
 					testDir := fmt.Sprintf("/tmp/test-logs-%d-%d", id, j)
@@ -87,7 +87,7 @@ func TestLogDir_ConcurrentSetAndRead(t *testing.T) {
 	errors := make(chan string, numReaders*100)
 
 	// Start writer goroutines
-	for i := 0; i < numWriters; i++ {
+	for i := range numWriters {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
@@ -107,7 +107,7 @@ func TestLogDir_ConcurrentSetAndRead(t *testing.T) {
 	}
 
 	// Start reader goroutines
-	for i := 0; i < numReaders; i++ {
+	for i := range numReaders {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
