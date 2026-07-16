@@ -118,23 +118,30 @@ func TestParseLogLineWithRealData(t *testing.T) {
 			// Exercise the PRODUCTION filter path (passesFilters / containsIPToken),
 			// not just the test-local extractors above — this is what GetLogLines
 			// actually uses to decide whether a line matches a jail/IP query.
-			if tt.wantJail != "" {
-				if !passesFilters(tt.line, LogReadConfig{JailFilter: tt.wantJail}) {
-					t.Errorf("passesFilters(jail=%q) = false, want true for line %q", tt.wantJail, tt.line)
-				}
-				if passesFilters(tt.line, LogReadConfig{JailFilter: "no-such-jail"}) {
-					t.Errorf("passesFilters(jail=no-such-jail) = true, want false for line %q", tt.line)
-				}
-			}
-			if tt.wantIP != "" {
-				if !containsIPToken(tt.line, tt.wantIP) {
-					t.Errorf("containsIPToken(%q) = false, want true for line %q", tt.wantIP, tt.line)
-				}
-				if containsIPToken(tt.line, "203.0.113.255") {
-					t.Errorf("containsIPToken(absent IP) = true, want false for line %q", tt.line)
-				}
-			}
+			assertProductionFilterPath(t, tt.line, tt.wantJail, tt.wantIP)
 		})
+	}
+}
+
+// assertProductionFilterPath checks that the production filter predicates
+// (passesFilters / containsIPToken) match and reject as expected for a line.
+func assertProductionFilterPath(t *testing.T, line, wantJail, wantIP string) {
+	t.Helper()
+	if wantJail != "" {
+		if !passesFilters(line, LogReadConfig{JailFilter: wantJail}) {
+			t.Errorf("passesFilters(jail=%q) = false, want true for line %q", wantJail, line)
+		}
+		if passesFilters(line, LogReadConfig{JailFilter: "no-such-jail"}) {
+			t.Errorf("passesFilters(jail=no-such-jail) = true, want false for line %q", line)
+		}
+	}
+	if wantIP != "" {
+		if !containsIPToken(line, wantIP) {
+			t.Errorf("containsIPToken(%q) = false, want true for line %q", wantIP, line)
+		}
+		if containsIPToken(line, "203.0.113.255") {
+			t.Errorf("containsIPToken(absent IP) = true, want false for line %q", line)
+		}
 	}
 }
 
@@ -489,54 +496,56 @@ func isNumeric(s string) bool {
 // oldest rotated lines and drop the newest when MaxLines trims.
 func TestParseLogFilesOrdering(t *testing.T) {
 	t.Run("numbered scheme", func(t *testing.T) {
-		current, rotated := parseLogFiles([]string{
-			"/var/log/fail2ban.log.1",
+		assertRotatedOrder(t,
+			[]string{
+				"/var/log/fail2ban.log.1",
+				"/var/log/fail2ban.log",
+				"/var/log/fail2ban.log.3.gz",
+				"/var/log/fail2ban.log.2.gz",
+			},
 			"/var/log/fail2ban.log",
-			"/var/log/fail2ban.log.3.gz",
-			"/var/log/fail2ban.log.2.gz",
-		})
-		if current != "/var/log/fail2ban.log" {
-			t.Fatalf("current = %q", current)
-		}
-		want := []string{
-			"/var/log/fail2ban.log.3.gz",
-			"/var/log/fail2ban.log.2.gz",
-			"/var/log/fail2ban.log.1",
-		}
-		if len(rotated) != len(want) {
-			t.Fatalf("rotated = %d files, want %d", len(rotated), len(want))
-		}
-		for i, r := range rotated {
-			if r.path != want[i] {
-				t.Errorf("rotated[%d] = %q, want %q", i, r.path, want[i])
-			}
-		}
+			[]string{
+				"/var/log/fail2ban.log.3.gz",
+				"/var/log/fail2ban.log.2.gz",
+				"/var/log/fail2ban.log.1",
+			},
+		)
 	})
 
 	t.Run("dateext scheme oldest first", func(t *testing.T) {
-		current, rotated := parseLogFiles([]string{
-			"/var/log/fail2ban.log-20240301",
+		assertRotatedOrder(t,
+			[]string{
+				"/var/log/fail2ban.log-20240301",
+				"/var/log/fail2ban.log",
+				"/var/log/fail2ban.log-20240101.gz",
+				"/var/log/fail2ban.log-20240201",
+			},
 			"/var/log/fail2ban.log",
-			"/var/log/fail2ban.log-20240101.gz",
-			"/var/log/fail2ban.log-20240201",
-		})
-		if current != "/var/log/fail2ban.log" {
-			t.Fatalf("current = %q", current)
-		}
-		want := []string{
-			"/var/log/fail2ban.log-20240101.gz",
-			"/var/log/fail2ban.log-20240201",
-			"/var/log/fail2ban.log-20240301",
-		}
-		if len(rotated) != len(want) {
-			t.Fatalf("rotated = %d files, want %d", len(rotated), len(want))
-		}
-		for i, r := range rotated {
-			if r.path != want[i] {
-				t.Errorf("rotated[%d] = %q, want %q", i, r.path, want[i])
-			}
-		}
+			[]string{
+				"/var/log/fail2ban.log-20240101.gz",
+				"/var/log/fail2ban.log-20240201",
+				"/var/log/fail2ban.log-20240301",
+			},
+		)
 	})
+}
+
+// assertRotatedOrder checks parseLogFiles returns the expected current log and
+// rotated ordering (oldest-first) for the given file set.
+func assertRotatedOrder(t *testing.T, files []string, wantCurrent string, wantRotated []string) {
+	t.Helper()
+	current, rotated := parseLogFiles(files)
+	if current != wantCurrent {
+		t.Fatalf("current = %q, want %q", current, wantCurrent)
+	}
+	if len(rotated) != len(wantRotated) {
+		t.Fatalf("rotated = %d files, want %d", len(rotated), len(wantRotated))
+	}
+	for i, r := range rotated {
+		if r.path != wantRotated[i] {
+			t.Errorf("rotated[%d] = %q, want %q", i, r.path, wantRotated[i])
+		}
+	}
 }
 
 // TestContainsIPToken covers whole-token matching including IPv4-mapped IPv6

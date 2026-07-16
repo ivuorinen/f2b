@@ -189,78 +189,87 @@ func TestSecurityAudit_PathSecurity(t *testing.T) {
 	defer fail2ban.SetLogDir(originalLogDir)
 
 	t.Run("PathTraversalProtection", func(t *testing.T) {
-		// Every payload is driven through the real validation boundary
-		// (ValidateLogPath, the gate all log reads pass through) and must be
-		// rejected. Payloads that only encode traversal for other stacks
-		// (Windows backslashes, exotic encodings) may survive validation as
-		// literal file names — for those, the resolved path must still stay
-		// inside the log directory and never surface /etc/passwd content.
-		pathTraversalAttempts := []string{
-			"../../../etc/passwd",
-			"..%252f..%252f..%252fetc%252fpasswd",
-			"...//...//etc/passwd",
-			"..;/..;/etc/passwd",
-			"..%00/etc/passwd",
-			"logs/../../../etc/passwd",
-			"logs%2f%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd",
-			"%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd",
-		}
-
-		for _, maliciousPath := range pathTraversalAttempts {
-			resolved, err := fail2ban.ValidateLogPath(context.Background(), maliciousPath, tempDir)
-			if err == nil {
-				t.Errorf("traversal payload %q was accepted, resolved to %q", maliciousPath, resolved)
-			}
-		}
-
-		// End-to-end: with a traversal-named file planted next to the real
-		// log, a full read must return only the legitimate log content.
-		testFile := filepath.Join(tempDir, "test.log")
-		if err := os.WriteFile(testFile, []byte("legit"), 0600); err != nil {
-			t.Fatalf("writing fixture: %v", err)
-		}
-		lines, err := fail2ban.GetLogLines(context.Background(), "all", "all")
-		if err != nil {
-			t.Fatalf("GetLogLines failed: %v", err)
-		}
-		for _, line := range lines {
-			if strings.Contains(line, "root:") {
-				t.Fatalf("log read leaked passwd-like content: %q", line)
-			}
-		}
+		assertPathTraversalRejected(t, tempDir)
 	})
-
 	t.Run("FileOperationSecurity", func(t *testing.T) {
-		// Test that file operations are secure
-		testCases := []struct {
-			name     string
-			testFunc func() error
-		}{
-			{
-				name: "LogFileReading",
-				testFunc: func() error {
-					// Create legitimate log file
-					logFile := filepath.Join(tempDir, "fail2ban.log")
-					content := "2024-01-01 12:00:00,123 fail2ban.actions [1234]: NOTICE [sshd] Ban 192.168.1.100\n"
-					if err := os.WriteFile(logFile, []byte(content), 0600); err != nil {
-						return err
-					}
-
-					_, err := fail2ban.GetLogLines(context.Background(), "sshd", "192.168.1.100")
-					return err
-				},
-			},
-		}
-
-		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
-				err := tc.testFunc()
-				if err != nil {
-					t.Errorf("Secure operation failed: %v", err)
-				}
-			})
-		}
+		assertFileOperationSecurity(t, tempDir)
 	})
+}
+
+// assertPathTraversalRejected drives traversal payloads through ValidateLogPath
+// (all must be rejected) and verifies an end-to-end read never surfaces
+// passwd-like content even when a traversal-named file sits beside the real log.
+func assertPathTraversalRejected(t *testing.T, tempDir string) {
+	t.Helper()
+	// Payloads that only encode traversal for other stacks (Windows
+	// backslashes, exotic encodings) may survive validation as literal file
+	// names — for those, the resolved path must still stay inside the log
+	// directory and never surface /etc/passwd content.
+	pathTraversalAttempts := []string{
+		"../../../etc/passwd",
+		"..%252f..%252f..%252fetc%252fpasswd",
+		"...//...//etc/passwd",
+		"..;/..;/etc/passwd",
+		"..%00/etc/passwd",
+		"logs/../../../etc/passwd",
+		"logs%2f%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd",
+		"%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd",
+	}
+
+	for _, maliciousPath := range pathTraversalAttempts {
+		resolved, err := fail2ban.ValidateLogPath(context.Background(), maliciousPath, tempDir)
+		if err == nil {
+			t.Errorf("traversal payload %q was accepted, resolved to %q", maliciousPath, resolved)
+		}
+	}
+
+	// End-to-end: with a traversal-named file planted next to the real log, a
+	// full read must return only the legitimate log content.
+	testFile := filepath.Join(tempDir, "test.log")
+	if err := os.WriteFile(testFile, []byte("legit"), 0600); err != nil {
+		t.Fatalf("writing fixture: %v", err)
+	}
+	lines, err := fail2ban.GetLogLines(context.Background(), "all", "all")
+	if err != nil {
+		t.Fatalf("GetLogLines failed: %v", err)
+	}
+	for _, line := range lines {
+		if strings.Contains(line, "root:") {
+			t.Fatalf("log read leaked passwd-like content: %q", line)
+		}
+	}
+}
+
+// assertFileOperationSecurity verifies that legitimate file operations succeed.
+func assertFileOperationSecurity(t *testing.T, tempDir string) {
+	t.Helper()
+	testCases := []struct {
+		name     string
+		testFunc func() error
+	}{
+		{
+			name: "LogFileReading",
+			testFunc: func() error {
+				// Create legitimate log file
+				logFile := filepath.Join(tempDir, "fail2ban.log")
+				content := "2024-01-01 12:00:00,123 fail2ban.actions [1234]: NOTICE [sshd] Ban 192.168.1.100\n"
+				if err := os.WriteFile(logFile, []byte(content), 0600); err != nil {
+					return err
+				}
+
+				_, err := fail2ban.GetLogLines(context.Background(), "sshd", "192.168.1.100")
+				return err
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.testFunc(); err != nil {
+				t.Errorf("Secure operation failed: %v", err)
+			}
+		})
+	}
 }
 
 // TestSecurityAudit_ErrorMessages audits error messages for information leakage
