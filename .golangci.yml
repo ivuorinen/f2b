@@ -75,6 +75,11 @@ linters:
     gocyclo:
       min-complexity: 20
 
+    # Cognitive complexity gate mirroring SonarCloud go:S3776 (threshold 15) so
+    # over-complex functions are caught locally before CI.
+    gocognit:
+      min-complexity: 15
+
     misspell:
       locale: US
 
@@ -86,8 +91,48 @@ linters:
     errorlint:
       errorf: false # Allow %v instead of %w for some cases
 
+    revive:
+      # golangci-lint's default revive rules are kept explicit so the custom
+      # rule below extends the set rather than replacing it.
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: empty-block
+        - name: error-naming
+        - name: error-return
+        - name: error-strings
+        - name: errorf
+        - name: exported
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: redefines-builtin-id
+        - name: superfluous-else
+        - name: time-naming
+        - name: unexported-return
+        - name: unreachable-code
+        - name: unused-parameter
+        - name: var-declaration
+        - name: var-naming
+        # Mirror SonarCloud go:S107: flag functions with more than 7 parameters.
+        - name: argument-limit
+          arguments: [7]
+
     lll:
       line-length: 120 # Set maximum line length to 120 characters
+
+  exclusions:
+    rules:
+      # Test functions are table-driven with many subtests and are naturally
+      # branchy; exclude them from cognitive-complexity, matching the SonarCloud
+      # go:S3776 exclusion for *_test.go in sonar-project.properties.
+      - path: _test\.go
+        linters:
+          - gocognit
 
 formatters:
   enable:

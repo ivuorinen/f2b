@@ -14,7 +14,10 @@ PRINT_ALPACA: false # Print Alpaca logo in console
 SARIF_REPORTER: true # Generate SARIF report
 SHOW_SKIPPED_LINTERS: false # Show skipped linters in MegaLinter log
 
-FILTER_REGEX_EXCLUDE: '(\.serena/)'
+# Exclude generated (docs/api/), vendored (.claude/skills/), and
+# machine-managed (docs/audit/) trees from all linters. docs/api.md (the
+# hand-written guide) is intentionally NOT matched — only the docs/api/ dir.
+FILTER_REGEX_EXCLUDE: '(\.serena/|docs/api/|\.claude/skills/|docs/audit/)'
 
 DISABLE_LINTERS:
   - REPOSITORY_DEVSKIM
@@ -22,3 +25,6 @@ DISABLE_LINTERS:
   - GO_GOLANGCI_LINT # stuck in go version 1.24
   - JSON_V8R # not needed
   - YAML_V8R # not needed
+
+ACTION_ZIZMOR_UNSECURED_ENV_VARIABLES:
+  - GITHUB_TOKEN
