@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"slices"
 	"strings"
 
@@ -22,24 +23,7 @@ func StatusCmd(client fail2ban.Client, config *Config) *cobra.Command {
 			defer cancel()
 
 			if len(args) == 0 {
-				jails, err := client.ListJailsWithContext(ctx)
-				if err != nil {
-					// Log error but continue with empty jail list for help display
-					Logger.WithError(err).Warn("Failed to fetch jails for help display")
-					jails = []string{}
-				}
-				PrintOutputTo(
-					GetCmdOutput(cmd),
-					"Usage: "+cmd.Root().Use+" status all   (show all jails)",
-					config.Format,
-				)
-				PrintOutputTo(
-					GetCmdOutput(cmd),
-					"       "+cmd.Root().Use+" status <jail> (show specific jail)",
-					config.Format,
-				)
-				PrintOutputTo(GetCmdOutput(cmd), "Available jails: "+strings.Join(jails, " "), config.Format)
-				return nil
+				return printStatusUsage(ctx, cmd, client, config)
 			}
 
 			// Jail names are case-sensitive; keep the argument verbatim and
@@ -75,4 +59,20 @@ func StatusCmd(client fail2ban.Client, config *Config) *cobra.Command {
 			PrintOutputTo(GetCmdOutput(cmd), status, config.Format)
 			return nil
 		})
+}
+
+// printStatusUsage prints the status command usage help, listing the currently
+// available jails. A jail-list error is non-fatal here: it degrades to an
+// empty list so the help still prints.
+func printStatusUsage(ctx context.Context, cmd *cobra.Command, client fail2ban.Client, config *Config) error {
+	jails, err := client.ListJailsWithContext(ctx)
+	if err != nil {
+		Logger.WithError(err).Warn("Failed to fetch jails for help display")
+		jails = []string{}
+	}
+	out := GetCmdOutput(cmd)
+	PrintOutputTo(out, "Usage: "+cmd.Root().Use+" status all   (show all jails)", config.Format)
+	PrintOutputTo(out, "       "+cmd.Root().Use+" status <jail> (show specific jail)", config.Format)
+	PrintOutputTo(out, "Available jails: "+strings.Join(jails, " "), config.Format)
+	return nil
 }

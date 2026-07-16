@@ -87,64 +87,68 @@ func ExecuteIPCommand(
 	cmdConfig IPCommandConfig,
 ) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
-		// Get the contextual logger
 		logger := GetContextualLogger()
 
-		// cmd.Context() inherits Cobra's signal cancellation. Keep a reference
-		// to it (rootCtx) so the multi-jail parallel path can use the full
-		// ParallelTimeout rather than being capped by CommandTimeout.
-		rootCtx := cmd.Context()
-		ctx, cancel := createTimeoutContext(rootCtx, config)
+		// cmd.Context() inherits Cobra's signal cancellation; runIPOperation
+		// reaches it again via cmd.Context() so the multi-jail parallel path
+		// can use the full ParallelTimeout rather than being capped by
+		// CommandTimeout.
+		ctx, cancel := createTimeoutContext(cmd.Context(), config)
 		defer cancel()
-
-		// Add command context
 		ctx = WithCommand(ctx, cmdConfig.CommandName)
 
-		// Log operation with timing
 		return logger.LogOperation(ctx, cmdConfig.OperationName, func() error {
-			// Validate IP argument
-			ip, err := ValidateIPArgumentWithContext(ctx, args)
-			if err != nil {
-				return HandleValidationError(err)
-			}
-
-			// Add IP to context
-			ctx = WithIP(ctx, ip)
-
-			// Get jails from arguments or client (with timeout context)
-			jails, err := GetJailsFromArgsWithContext(ctx, client, args, 1)
-			if err != nil {
-				return HandleClientError(err)
-			}
-
-			// Guard against a silent no-op: with no jail argument and no jails
-			// configured, the operation loop would run zero times and report
-			// success without banning anything.
-			if len(jails) == 0 {
-				return HandleValidationError(
-					fmt.Errorf("no jails configured; nothing to %s", cmdConfig.CommandName),
-				)
-			}
-
-			// Process operation with timeout context
-			results, err := processIPOperation(rootCtx, ctx, config, cmdConfig, client, ip, jails)
-			finalFormat := resolveOutputFormat(config, cmd)
-			if err != nil {
-				// Partial failure still changed firewall state in the jails
-				// that succeeded — show the per-jail results (failed jails
-				// carry the error in their Status) before reporting the error.
-				if len(results) > 0 {
-					if outErr := outputOperationResults(cmd, results, config, finalFormat); outErr != nil {
-						Logger.WithError(outErr).Warn("failed to print partial results")
-					}
-				}
-				return HandleClientError(err)
-			}
-
-			// Output results in the appropriate format
-			return outputOperationResults(cmd, results, config, finalFormat)
+			return runIPOperation(ctx, cmd, client, config, cmdConfig, args)
 		})
 	}
+}
+
+// runIPOperation executes the validated IP command body: validate the IP and
+// jails, run the per-jail operation, and print results (including partial
+// results when the operation fails after changing some jails).
+func runIPOperation(
+	ctx context.Context,
+	cmd *cobra.Command,
+	client fail2ban.Client,
+	config *Config,
+	cmdConfig IPCommandConfig,
+	args []string,
+) error {
+	ip, err := ValidateIPArgumentWithContext(ctx, args)
+	if err != nil {
+		return HandleValidationError(err)
+	}
+	ctx = WithIP(ctx, ip)
+
+	jails, err := GetJailsFromArgsWithContext(ctx, client, args, 1)
+	if err != nil {
+		return HandleClientError(err)
+	}
+	// Guard against a silent no-op: with no jail argument and no jails
+	// configured, the operation loop would run zero times and report success
+	// without banning anything.
+	if len(jails) == 0 {
+		return HandleValidationError(
+			fmt.Errorf("no jails configured; nothing to %s", cmdConfig.CommandName),
+		)
+	}
+
+	// processIPOperation takes the signal-scoped root context (cmd.Context())
+	// for its parallel path plus the timeout ctx for single-jail work.
+	results, err := processIPOperation(cmd.Context(), ctx, config, cmdConfig, client, ip, jails)
+	finalFormat := resolveOutputFormat(config, cmd)
+	if err != nil {
+		// Partial failure still changed firewall state in the jails that
+		// succeeded — show the per-jail results (failed jails carry the error
+		// in their Status) before reporting the error.
+		if len(results) > 0 {
+			if outErr := outputOperationResults(cmd, results, config, finalFormat); outErr != nil {
+				Logger.WithError(outErr).Warn("failed to print partial results")
+			}
+		}
+		return HandleClientError(err)
+	}
+	return outputOperationResults(cmd, results, config, finalFormat)
 }
 
 // NewIPCommand creates a new IP-based command using the unified pattern

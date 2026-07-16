@@ -34,47 +34,27 @@ func LogsWatchCmd(ctx context.Context, client fail2ban.Client, config *Config) *
 
 			// Parse optional arguments
 			parsedArgs := ParseOptionalArgs(args, 2)
-			jail := parsedArgs[0]
-			ip := parsedArgs[1]
-
-			// Use memory-efficient approach with configurable limits
-			maxLines := limit
-			if maxLines <= 0 {
-				maxLines = constants.DefaultLogLinesLimit // Default safe limit
-			}
-			// The fail2ban layer rejects limits above MaxLogLinesLimit; clamp
-			// here so an oversized -n degrades gracefully instead of erroring.
-			if maxLines > constants.MaxLogLinesLimit {
-				Logger.WithField("limit", maxLines).
-					Warnf("limit exceeds maximum, clamping to %d", constants.MaxLogLinesLimit)
-				maxLines = constants.MaxLogLinesLimit
+			watch := logWatch{
+				out:      GetCmdOutput(cobraCmd),
+				client:   client,
+				jail:     parsedArgs[0],
+				ip:       parsedArgs[1],
+				maxLines: resolveMaxLines(limit),
+				config:   config,
 			}
 
 			// Get initial log lines with memory limits (with file timeout)
-			prev, err := getLogLinesWithLimitAndContext(watchCtx, client, jail, ip, maxLines, config.FileTimeout)
+			prev, err := getLogLinesWithLimitAndContext(
+				watchCtx, client, watch.jail, watch.ip, watch.maxLines, config.FileTimeout,
+			)
 			if err != nil {
 				return HandleClientError(err)
 			}
-
-			out := GetCmdOutput(cobraCmd)
 			if len(prev) > 0 {
-				PrintOutputTo(out, strings.Join(prev, "\n"), config.Format)
+				PrintOutputTo(watch.out, strings.Join(prev, "\n"), config.Format)
 			}
 
-			if interval <= 0 {
-				interval = constants.DefaultPollingInterval
-			}
-			ticker := time.NewTicker(interval)
-			defer ticker.Stop()
-
-			for {
-				select {
-				case <-watchCtx.Done():
-					return nil
-				case <-ticker.C:
-					prev = pollLogsOnce(watchCtx, out, client, jail, ip, maxLines, config, prev)
-				}
-			}
+			return watch.run(watchCtx, prev, interval)
 		})
 
 	cmd.Flags().IntVarP(
@@ -86,28 +66,64 @@ func LogsWatchCmd(ctx context.Context, client fail2ban.Client, config *Config) *
 	return cmd
 }
 
-// pollLogsOnce fetches the current log window and prints only the lines
-// appended since prev, returning the new window to carry forward. A transient
-// fetch error is logged and prev is returned unchanged so the watcher keeps
-// polling instead of exiting.
-func pollLogsOnce(
-	ctx context.Context,
-	out io.Writer,
-	client fail2ban.Client,
-	jail, ip string,
-	maxLines int,
-	config *Config,
-	prev []string,
-) []string {
-	curr, err := getLogLinesWithLimitAndContext(ctx, client, jail, ip, maxLines, config.FileTimeout)
+// logWatch holds the invariant target of a logs-watch session: everything a
+// single poll needs except the context and the previous window.
+type logWatch struct {
+	out      io.Writer
+	client   fail2ban.Client
+	jail, ip string
+	maxLines int
+	config   *Config
+}
+
+// pollOnce fetches the current log window and prints only the lines appended
+// since prev, returning the new window to carry forward. A transient fetch
+// error is logged and prev is returned unchanged so the watcher keeps polling
+// instead of exiting.
+func (w logWatch) pollOnce(ctx context.Context, prev []string) []string {
+	curr, err := getLogLinesWithLimitAndContext(ctx, w.client, w.jail, w.ip, w.maxLines, w.config.FileTimeout)
 	if err != nil {
 		Logger.WithError(err).Warn("logs-watch poll failed; continuing")
 		return prev
 	}
 	if newLines := newTailLines(prev, curr); len(newLines) > 0 {
-		PrintOutputTo(out, strings.Join(newLines, "\n"), config.Format)
+		PrintOutputTo(w.out, strings.Join(newLines, "\n"), w.config.Format)
 	}
 	return curr
+}
+
+// run polls on the given interval, printing newly appended lines, until ctx is
+// canceled (SIGINT/SIGTERM via ExecuteContext).
+func (w logWatch) run(ctx context.Context, prev []string, interval time.Duration) error {
+	if interval <= 0 {
+		interval = constants.DefaultPollingInterval
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			prev = w.pollOnce(ctx, prev)
+		}
+	}
+}
+
+// resolveMaxLines returns the effective line limit: the default when unset, and
+// clamped to MaxLogLinesLimit (the fail2ban layer rejects larger values) so an
+// oversized -n degrades gracefully instead of erroring.
+func resolveMaxLines(limit int) int {
+	maxLines := limit
+	if maxLines <= 0 {
+		maxLines = constants.DefaultLogLinesLimit
+	}
+	if maxLines > constants.MaxLogLinesLimit {
+		Logger.WithField("limit", maxLines).
+			Warnf("limit exceeds maximum, clamping to %d", constants.MaxLogLinesLimit)
+		maxLines = constants.MaxLogLinesLimit
+	}
+	return maxLines
 }
 
 // logLinesLimiter is the optional capability of clients that can apply the

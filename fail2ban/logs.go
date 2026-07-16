@@ -123,48 +123,55 @@ func collectLogLines(ctx context.Context, logDir string, baseConfig LogReadConfi
 	}
 
 	currentLog, rotated := parseLogFiles(files)
-
-	var allLines []string
-
-	appendAndTrim := func(lines []string) {
-		if len(lines) == 0 {
-			return
-		}
-		allLines = append(allLines, lines...)
-		if baseConfig.MaxLines > 0 && len(allLines) > baseConfig.MaxLines {
-			allLines = allLines[len(allLines)-baseConfig.MaxLines:]
-		}
-	}
-
-	// readAndAppend reads one log file and appends its lines. A context
-	// cancellation is fatal (returned); any other read error is logged and the
-	// file skipped.
-	readAndAppend := func(path string, isCurrent bool) error {
-		fileLines, err := readLogLinesFromFile(ctx, path, baseConfig, isCurrent)
-		if err != nil {
-			if ctx != nil && errors.Is(err, ctx.Err()) {
-				return err
-			}
-			getLogger().WithError(err).WithField(constants.LogFieldFile, path).Error("Failed to read log file")
-			return nil
-		}
-		appendAndTrim(fileLines)
-		return nil
-	}
+	c := &logCollector{config: baseConfig}
 
 	// Rotated logs are read oldest-first, then the current log last.
 	for _, rotatedFile := range rotated {
-		if err := readAndAppend(rotatedFile.path, false); err != nil {
+		if err := c.readAndAppend(ctx, rotatedFile.path, false); err != nil {
 			return nil, err
 		}
 	}
 	if currentLog != "" {
-		if err := readAndAppend(currentLog, true); err != nil {
+		if err := c.readAndAppend(ctx, currentLog, true); err != nil {
 			return nil, err
 		}
 	}
 
-	return allLines, nil
+	return c.lines, nil
+}
+
+// logCollector accumulates log lines across files under a bounded window
+// (config.MaxLines), reading oldest-first.
+type logCollector struct {
+	config LogReadConfig
+	lines  []string
+}
+
+// appendAndTrim appends lines and trims the buffer to the newest MaxLines.
+func (c *logCollector) appendAndTrim(lines []string) {
+	if len(lines) == 0 {
+		return
+	}
+	c.lines = append(c.lines, lines...)
+	if c.config.MaxLines > 0 && len(c.lines) > c.config.MaxLines {
+		c.lines = c.lines[len(c.lines)-c.config.MaxLines:]
+	}
+}
+
+// readAndAppend reads one log file and appends its lines. A context
+// cancellation is fatal (returned); any other read error is logged and the file
+// skipped.
+func (c *logCollector) readAndAppend(ctx context.Context, path string, isCurrent bool) error {
+	fileLines, err := readLogLinesFromFile(ctx, path, c.config, isCurrent)
+	if err != nil {
+		if ctx != nil && errors.Is(err, ctx.Err()) {
+			return err
+		}
+		getLogger().WithError(err).WithField(constants.LogFieldFile, path).Error("Failed to read log file")
+		return nil
+	}
+	c.appendAndTrim(fileLines)
+	return nil
 }
 
 func readLogLinesFromFile(
@@ -219,30 +226,34 @@ func parseLogFiles(files []string) (string, []rotatedLog) {
 // e.g. RHEL/Fedora dateext logs, were silently dropped from `f2b log` output).
 func extractLogNumber(base string) (int, bool) {
 	if rest, ok := strings.CutPrefix(base, constants.LogFilePrefix); ok {
-		rest = strings.TrimSuffix(rest, constants.GzipExtension)
-		if rest == "" || rest == "gz" {
-			return 0, true // fail2ban.log.gz (compressed, unnumbered)
-		}
-		if n, err := strconv.Atoi(rest); err == nil {
-			// logrotate `dateformat .%Y%m%d` produces fail2ban.log.20240102:
-			// an 8-digit rest that parses as a date is a dateext date, not a
-			// rotation number, so negate it (higher date = newer log) to keep
-			// the higher-key-is-older invariant.
-			if len(rest) == 8 {
-				if _, dateErr := time.Parse("20060102", rest); dateErr == nil {
-					return -n, true
-				}
-			}
-			return n, true
-		}
+		return numberedLogKey(strings.TrimSuffix(rest, constants.GzipExtension))
 	}
 	if rest, ok := strings.CutPrefix(base, "fail2ban.log-"); ok {
-		rest = strings.TrimSuffix(rest, constants.GzipExtension)
-		if n, err := strconv.Atoi(rest); err == nil {
+		if n, err := strconv.Atoi(strings.TrimSuffix(rest, constants.GzipExtension)); err == nil {
 			return -n, true
 		}
 	}
 	return 0, false
+}
+
+// numberedLogKey resolves the ordering key for a `fail2ban.log.<rest>` name,
+// where rest already has the .gz suffix trimmed. An 8-digit rest that parses as
+// a date is a `dateformat .%Y%m%d` value, not a rotation number, so it is
+// negated (higher date = newer log) to keep the higher-key-is-older invariant.
+func numberedLogKey(rest string) (int, bool) {
+	if rest == "" || rest == "gz" {
+		return 0, true // fail2ban.log.gz (compressed, unnumbered)
+	}
+	n, err := strconv.Atoi(rest)
+	if err != nil {
+		return 0, false
+	}
+	if len(rest) == 8 {
+		if _, dateErr := time.Parse("20060102", rest); dateErr == nil {
+			return -n, true
+		}
+	}
+	return n, true
 }
 
 // rotatedLog represents a rotated log file with its rotation number.

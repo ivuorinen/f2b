@@ -181,6 +181,9 @@ func GetContextualLogger() *ContextualLogger {
 // Not synchronized: call only during startup or from tests before concurrent
 // readers exist — a call while workers run is a data race by contract.
 func SetContextualLogger(logger *ContextualLogger) {
-	contextualLoggerOnce.Do(func() {})
+	contextualLoggerOnce.Do(func() {
+		// Consume the once so the lazy initializer in GetContextualLogger
+		// never overwrites this explicitly-set logger.
+	})
 	contextualLogger = logger
 }

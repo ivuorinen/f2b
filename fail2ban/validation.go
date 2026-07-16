@@ -172,30 +172,9 @@ func ValidateCommand(command string) error {
 		return fmt.Errorf(constants.ErrInvalidCommandFormat)
 	}
 
-	// The command may arrive as an absolute path resolved via exec.LookPath
-	// (e.g. /usr/bin/fail2ban-client). Accept it when it is a clean absolute
-	// path — no ".." or "." segments — inside a trusted system directory and
-	// whose base name is allowlisted; otherwise it must be a bare executable
-	// name. Pinning the directory prevents a hostile PATH from steering
-	// LookPath to an attacker-controlled binary that would later run under sudo.
-	name := command
-	if filepath.IsAbs(command) {
-		if filepath.Clean(command) != command {
-			return fmt.Errorf(constants.ErrInvalidCommandFormat)
-		}
-		if !isTrustedCommandDir(filepath.Dir(command)) {
-			return NewCommandNotAllowedError(command + " (untrusted directory)")
-		}
-		name = filepath.Base(command)
-	} else {
-		if ContainsPathTraversal(command) {
-			// Don't include potentially malicious input in error message
-			return NewInvalidCommandError(command + " (path traversal)")
-		}
-		// A relative command must be a bare name (no paths or whitespace).
-		if strings.ContainsAny(command, "/\\ \t") {
-			return fmt.Errorf(constants.ErrInvalidCommandFormat)
-		}
+	name, err := resolveCommandName(command)
+	if err != nil {
+		return err
 	}
 
 	// Validate against allowlist (safe to include command name for allowed commands)
@@ -204,6 +183,34 @@ func ValidateCommand(command string) error {
 	}
 
 	return nil
+}
+
+// resolveCommandName validates the command's path form and returns the base
+// name to check against the allowlist. The command may arrive as an absolute
+// path resolved via exec.LookPath (e.g. /usr/bin/fail2ban-client): accept it
+// when it is a clean absolute path — no ".." or "." segments — inside a trusted
+// system directory (pinning the directory prevents a hostile PATH from steering
+// LookPath to an attacker-controlled binary that would later run under sudo);
+// otherwise it must be a bare executable name.
+func resolveCommandName(command string) (string, error) {
+	if filepath.IsAbs(command) {
+		if filepath.Clean(command) != command {
+			return "", fmt.Errorf(constants.ErrInvalidCommandFormat)
+		}
+		if !isTrustedCommandDir(filepath.Dir(command)) {
+			return "", NewCommandNotAllowedError(command + " (untrusted directory)")
+		}
+		return filepath.Base(command), nil
+	}
+	if ContainsPathTraversal(command) {
+		// Don't include potentially malicious input in error message
+		return "", NewInvalidCommandError(command + " (path traversal)")
+	}
+	// A relative command must be a bare name (no paths or whitespace).
+	if strings.ContainsAny(command, "/\\ \t") {
+		return "", fmt.Errorf(constants.ErrInvalidCommandFormat)
+	}
+	return command, nil
 }
 
 // ValidateArguments validates command arguments for security
