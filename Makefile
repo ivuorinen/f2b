@@ -9,7 +9,7 @@
 
 # Tool versions (managed by Renovate)
 # renovate: datasource=go depName=github.com/goreleaser/goreleaser/v2
-GORELEASER_VERSION := v2.16.0
+GORELEASER_VERSION := v2.17.0
 # renovate: datasource=go depName=github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 GOLANGCI_LINT_VERSION := v2.12.2
 # renovate: datasource=go depName=github.com/google/yamlfmt/cmd/yamlfmt
@@ -19,7 +19,7 @@ ACTIONLINT_VERSION := v1.7.12
 # renovate: datasource=go depName=golang.org/x/tools/cmd/goimports
 GOIMPORTS_VERSION := v0.42.0
 # renovate: datasource=go depName=github.com/editorconfig-checker/editorconfig-checker/v3/cmd/editorconfig-checker
-EDITORCONFIG_CHECKER_VERSION := v3.7.0
+EDITORCONFIG_CHECKER_VERSION := v3.8.0
 # renovate: datasource=go depName=github.com/securego/gosec/v2/cmd/gosec
 GOSEC_VERSION := v2.27.1
 # renovate: datasource=go depName=honnef.co/go/tools/cmd/staticcheck
@@ -31,7 +31,7 @@ CHECKMAKE_VERSION := v0.3.2
 # renovate: datasource=go depName=github.com/segmentio/golines
 GOLINES_VERSION := v0.13.0
 # renovate: datasource=npm depName=markdownlint-cli2
-MARKDOWNLINT_CLI2_VERSION := 0.21.0
+MARKDOWNLINT_CLI2_VERSION := 0.23.0
 # renovate: datasource=go depName=github.com/princjef/gomarkdoc/cmd/gomarkdoc
 GOMARKDOC_VERSION := v1.1.0
 GOMARKDOC := go run github.com/princjef/gomarkdoc/cmd/gomarkdoc@$(GOMARKDOC_VERSION)
