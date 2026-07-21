@@ -131,53 +131,67 @@ func TestMixedConcurrentOperations(t *testing.T) {
 
 	// Group 1: Set runners (now just validates that setting runners works concurrently)
 	for range numGoroutines / 3 {
-		wg.Go(func() {
-			for range 20 {
-				// Create a new runner with the same responses to test concurrent setting
-				mockRunner := NewMockRunner()
-				mockRunner.SetResponse("fail2ban-client status", []byte("Status: OK"))
-				mockRunner.SetResponse("fail2ban-client -V", []byte("Version: 1.0.0"))
-				mockRunner.SetResponse("sudo fail2ban-client status", []byte("Status: OK"))
-				mockRunner.SetResponse("sudo fail2ban-client -V", []byte("Version: 1.0.0"))
-				SetRunner(mockRunner)
-				time.Sleep(time.Millisecond)
-			}
-		})
+		wg.Go(mixedConcurrentSetRunnerWorker)
 	}
 
 	// Group 2: Execute regular commands (using valid fail2ban commands)
 	for range numGoroutines / 3 {
-		wg.Go(func() {
-			for range 20 {
-				output, err := RunnerCombinedOutput("fail2ban-client", "status")
-				if err != nil {
-					t.Errorf("RunnerCombinedOutput failed: %v", err)
-				}
-				if len(output) == 0 {
-					t.Error("RunnerCombinedOutput returned empty output")
-				}
-				time.Sleep(time.Millisecond)
-			}
-		})
+		wg.Go(func() { mixedConcurrentRegularWorker(t) })
 	}
 
 	// Group 3: Execute sudo commands (using valid fail2ban commands)
 	for range numGoroutines / 3 {
-		wg.Go(func() {
-			for range 20 {
-				output, err := RunnerCombinedOutputWithSudo("fail2ban-client", "-V")
-				if err != nil {
-					t.Errorf("RunnerCombinedOutputWithSudo failed: %v", err)
-				}
-				if len(output) == 0 {
-					t.Error("RunnerCombinedOutputWithSudo returned empty output")
-				}
-				time.Sleep(time.Millisecond)
-			}
-		})
+		wg.Go(func() { mixedConcurrentSudoWorker(t) })
 	}
 
 	wg.Wait()
+}
+
+// mixedConcurrentSetRunnerWorker repeatedly swaps in fresh mock runners to
+// exercise concurrent SetRunner calls.
+func mixedConcurrentSetRunnerWorker() {
+	for range 20 {
+		// Create a new runner with the same responses to test concurrent setting
+		mockRunner := NewMockRunner()
+		mockRunner.SetResponse("fail2ban-client status", []byte("Status: OK"))
+		mockRunner.SetResponse("fail2ban-client -V", []byte("Version: 1.0.0"))
+		mockRunner.SetResponse("sudo fail2ban-client status", []byte("Status: OK"))
+		mockRunner.SetResponse("sudo fail2ban-client -V", []byte("Version: 1.0.0"))
+		SetRunner(mockRunner)
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// mixedConcurrentRegularWorker repeatedly runs a regular command and verifies
+// its output.
+func mixedConcurrentRegularWorker(t *testing.T) {
+	t.Helper()
+	for range 20 {
+		output, err := RunnerCombinedOutput("fail2ban-client", "status")
+		if err != nil {
+			t.Errorf("RunnerCombinedOutput failed: %v", err)
+		}
+		if len(output) == 0 {
+			t.Error("RunnerCombinedOutput returned empty output")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// mixedConcurrentSudoWorker repeatedly runs a sudo command and verifies its
+// output.
+func mixedConcurrentSudoWorker(t *testing.T) {
+	t.Helper()
+	for range 20 {
+		output, err := RunnerCombinedOutputWithSudo("fail2ban-client", "-V")
+		if err != nil {
+			t.Errorf("RunnerCombinedOutputWithSudo failed: %v", err)
+		}
+		if len(output) == 0 {
+			t.Error("RunnerCombinedOutputWithSudo returned empty output")
+		}
+		time.Sleep(time.Millisecond)
+	}
 }
 
 // TestRunnerManagerLockOrdering verifies there are no deadlocks in the

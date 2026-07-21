@@ -115,35 +115,42 @@ func TestSudoRequirementsIntegration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Modern standardized setup with automatic cleanup
-			_, cleanup := SetupMockEnvironmentWithSudo(t, tt.hasPrivileges)
-			defer cleanup()
-
-			// Get the mock sudo checker and configure based on test case
-			mockChecker := MustMockSudoChecker(t)
-			mockChecker.MockIsRoot = tt.isRoot
-			if tt.isRoot {
-				// Root user always has privileges
-				mockChecker.MockHasPrivileges = true
-			}
-
-			// Test sudo requirements directly
-			err := CheckSudoRequirements()
-
-			if tt.expectError {
-				if err == nil {
-					t.Fatal("expected sudo requirements check to fail")
-				}
-				if !strings.Contains(err.Error(), "fail2ban operations require sudo privileges") {
-					t.Errorf("expected sudo privilege error, got: %v", err)
-				}
-				return
-			}
-
-			if err != nil {
-				t.Fatalf("unexpected sudo requirements error: %v", err)
-			}
+			assertSudoRequirementsCase(t, tt.hasPrivileges, tt.isRoot, tt.expectError)
 		})
+	}
+}
+
+// assertSudoRequirementsCase runs a single TestSudoRequirementsIntegration case.
+func assertSudoRequirementsCase(t *testing.T, hasPrivileges, isRoot, expectError bool) {
+	t.Helper()
+
+	// Modern standardized setup with automatic cleanup
+	_, cleanup := SetupMockEnvironmentWithSudo(t, hasPrivileges)
+	defer cleanup()
+
+	// Get the mock sudo checker and configure based on test case
+	mockChecker := MustMockSudoChecker(t)
+	mockChecker.MockIsRoot = isRoot
+	if isRoot {
+		// Root user always has privileges
+		mockChecker.MockHasPrivileges = true
+	}
+
+	// Test sudo requirements directly
+	err := CheckSudoRequirements()
+
+	if expectError {
+		if err == nil {
+			t.Fatal("expected sudo requirements check to fail")
+		}
+		if !strings.Contains(err.Error(), "fail2ban operations require sudo privileges") {
+			t.Errorf("expected sudo privilege error, got: %v", err)
+		}
+		return
+	}
+
+	if err != nil {
+		t.Fatalf("unexpected sudo requirements error: %v", err)
 	}
 }
 
@@ -256,26 +263,33 @@ func TestSudoErrorPropagation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Modern standardized setup with automatic cleanup
-			_, cleanup := SetupMockEnvironmentWithSudo(t, tt.hasPrivileges)
-			defer cleanup()
-
-			// Test CheckSudoRequirements directly
-			err := CheckSudoRequirements()
-
-			if tt.expectError {
-				if err == nil {
-					t.Fatal("expected error but got none")
-				}
-				if tt.errorContains != "" && !strings.Contains(err.Error(), tt.errorContains) {
-					t.Errorf("expected error to contain %q, got %q", tt.errorContains, err.Error())
-				}
-			} else {
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
-			}
+			assertSudoErrorPropagationCase(t, tt.hasPrivileges, tt.expectError, tt.errorContains)
 		})
+	}
+}
+
+// assertSudoErrorPropagationCase runs a single TestSudoErrorPropagation case.
+func assertSudoErrorPropagationCase(t *testing.T, hasPrivileges, expectError bool, errorContains string) {
+	t.Helper()
+
+	// Modern standardized setup with automatic cleanup
+	_, cleanup := SetupMockEnvironmentWithSudo(t, hasPrivileges)
+	defer cleanup()
+
+	// Test CheckSudoRequirements directly
+	err := CheckSudoRequirements()
+
+	if expectError {
+		if err == nil {
+			t.Fatal("expected error but got none")
+		}
+		if errorContains != "" && !strings.Contains(err.Error(), errorContains) {
+			t.Errorf("expected error to contain %q, got %q", errorContains, err.Error())
+		}
+	} else {
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
 	}
 }
 
@@ -349,39 +363,46 @@ func TestSudoWithDifferentCommands(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Test RequiresSudo function
-			requiresSudo := RequiresSudo(tt.command, tt.args...)
-			if requiresSudo != tt.expectsSudo {
-				t.Errorf("RequiresSudo(%s, %v) = %v, want %v", tt.command, tt.args, requiresSudo, tt.expectsSudo)
-			}
-
-			// Configure the mock runner with expected response
-			// Note: Reusing outer mock environment to avoid nested cleanup issues
-			mockRunner := MustMockRunner(t)
-			expectedCall := tt.expectedPrefix + " " + strings.Join(tt.args, " ")
-			mockRunner.SetResponse(expectedCall, []byte("mock response"))
-
-			// Execute command using mock runner directly to avoid OSRunner
-			_, err := mockRunner.CombinedOutputWithSudo(tt.command, tt.args...)
-
-			// Check that the expected command was called
-			calls := mockRunner.GetCalls()
-			found := false
-			for _, call := range calls {
-				if strings.HasPrefix(call, tt.expectedPrefix) {
-					found = true
-					break
-				}
-			}
-
-			if !found {
-				t.Errorf("Expected command with prefix %q, got calls: %v", tt.expectedPrefix, calls)
-			}
-
-			if err != nil {
-				t.Logf("Command execution resulted in error (may be expected): %v", err)
-			}
+			assertSudoCommandBehavior(t, tt.command, tt.args, tt.expectsSudo, tt.expectedPrefix)
 		})
+	}
+}
+
+// assertSudoCommandBehavior runs a single TestSudoWithDifferentCommands case.
+func assertSudoCommandBehavior(t *testing.T, command string, args []string, expectsSudo bool, expectedPrefix string) {
+	t.Helper()
+
+	// Test RequiresSudo function
+	requiresSudo := RequiresSudo(command, args...)
+	if requiresSudo != expectsSudo {
+		t.Errorf("RequiresSudo(%s, %v) = %v, want %v", command, args, requiresSudo, expectsSudo)
+	}
+
+	// Configure the mock runner with expected response
+	// Note: Reusing outer mock environment to avoid nested cleanup issues
+	mockRunner := MustMockRunner(t)
+	expectedCall := expectedPrefix + " " + strings.Join(args, " ")
+	mockRunner.SetResponse(expectedCall, []byte("mock response"))
+
+	// Execute command using mock runner directly to avoid OSRunner
+	_, err := mockRunner.CombinedOutputWithSudo(command, args...)
+
+	// Check that the expected command was called
+	calls := mockRunner.GetCalls()
+	found := false
+	for _, call := range calls {
+		if strings.HasPrefix(call, expectedPrefix) {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		t.Errorf("Expected command with prefix %q, got calls: %v", expectedPrefix, calls)
+	}
+
+	if err != nil {
+		t.Logf("Command execution resulted in error (may be expected): %v", err)
 	}
 }
 
@@ -507,42 +528,49 @@ func TestSudoMockConsistency(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mock := &MockSudoChecker{
-				MockIsRoot:      tt.isRoot,
-				MockInSudoGroup: tt.inSudoGroup,
-				MockCanUseSudo:  tt.canUseSudo,
-			}
-
-			// Test individual methods
-			if mock.IsRoot() != tt.isRoot {
-				t.Errorf("IsRoot() = %v, want %v", mock.IsRoot(), tt.isRoot)
-			}
-			if mock.InSudoGroup() != tt.inSudoGroup {
-				t.Errorf("InSudoGroup() = %v, want %v", mock.InSudoGroup(), tt.inSudoGroup)
-			}
-			if mock.CanUseSudo() != tt.canUseSudo {
-				t.Errorf("CanUseSudo() = %v, want %v", mock.CanUseSudo(), tt.canUseSudo)
-			}
-
-			// Test combined method
-			if mock.HasSudoPrivileges() != tt.expectedPrivileges {
-				t.Errorf("HasSudoPrivileges() = %v, want %v", mock.HasSudoPrivileges(), tt.expectedPrivileges)
-			}
-
-			// Test that CheckSudoRequirements behaves consistently
-			originalChecker := GetSudoChecker()
-			SetSudoChecker(mock)
-
-			err := CheckSudoRequirements()
-
-			if tt.expectedPrivileges && err != nil {
-				t.Errorf("CheckSudoRequirements() failed when privileges expected: %v", err)
-			}
-			if !tt.expectedPrivileges && err == nil {
-				t.Error("CheckSudoRequirements() succeeded when no privileges expected")
-			}
-
-			SetSudoChecker(originalChecker)
+			assertSudoMockConsistencyCase(t, tt.isRoot, tt.inSudoGroup, tt.canUseSudo, tt.expectedPrivileges)
 		})
 	}
+}
+
+// assertSudoMockConsistencyCase runs a single TestSudoMockConsistency case.
+func assertSudoMockConsistencyCase(t *testing.T, isRoot, inSudoGroup, canUseSudo, expectedPrivileges bool) {
+	t.Helper()
+
+	mock := &MockSudoChecker{
+		MockIsRoot:      isRoot,
+		MockInSudoGroup: inSudoGroup,
+		MockCanUseSudo:  canUseSudo,
+	}
+
+	// Test individual methods
+	if mock.IsRoot() != isRoot {
+		t.Errorf("IsRoot() = %v, want %v", mock.IsRoot(), isRoot)
+	}
+	if mock.InSudoGroup() != inSudoGroup {
+		t.Errorf("InSudoGroup() = %v, want %v", mock.InSudoGroup(), inSudoGroup)
+	}
+	if mock.CanUseSudo() != canUseSudo {
+		t.Errorf("CanUseSudo() = %v, want %v", mock.CanUseSudo(), canUseSudo)
+	}
+
+	// Test combined method
+	if mock.HasSudoPrivileges() != expectedPrivileges {
+		t.Errorf("HasSudoPrivileges() = %v, want %v", mock.HasSudoPrivileges(), expectedPrivileges)
+	}
+
+	// Test that CheckSudoRequirements behaves consistently
+	originalChecker := GetSudoChecker()
+	SetSudoChecker(mock)
+
+	err := CheckSudoRequirements()
+
+	if expectedPrivileges && err != nil {
+		t.Errorf("CheckSudoRequirements() failed when privileges expected: %v", err)
+	}
+	if !expectedPrivileges && err == nil {
+		t.Error("CheckSudoRequirements() succeeded when no privileges expected")
+	}
+
+	SetSudoChecker(originalChecker)
 }

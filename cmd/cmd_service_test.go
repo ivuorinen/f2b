@@ -60,32 +60,40 @@ func TestServiceCmd(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			builder := NewCommandTest(t, "service").
-				WithArgs(tt.args...).
-				WithServiceSetup(func(mock *fail2ban.MockRunner) {
-					if tt.mockResponse != "" {
-						command := "sudo service fail2ban " + strings.Join(tt.args, " ")
-						mock.SetResponse(command, []byte(tt.mockResponse))
-					}
-					if tt.mockError != nil {
-						command := "sudo service fail2ban " + strings.Join(tt.args, " ")
-						mock.SetError(command, tt.mockError)
-					}
-				})
-
-			if tt.wantError {
-				builder.ExpectError()
-			} else {
-				builder.ExpectSuccess()
-			}
-
-			if tt.wantOutput != "" {
-				builder.ExpectOutput(tt.wantOutput)
-			}
-
-			builder.Run()
+			assertServiceCmdCase(t, tt.args, tt.mockResponse, tt.mockError,
+				tt.wantOutput, tt.wantError)
 		})
 	}
+}
+
+// assertServiceCmdCase runs a single TestServiceCmd table case.
+func assertServiceCmdCase(t *testing.T, args []string, mockResponse string,
+	mockError error, wantOutput string, wantError bool) {
+	t.Helper()
+	builder := NewCommandTest(t, "service").
+		WithArgs(args...).
+		WithServiceSetup(func(mock *fail2ban.MockRunner) {
+			if mockResponse != "" {
+				command := "sudo service fail2ban " + strings.Join(args, " ")
+				mock.SetResponse(command, []byte(mockResponse))
+			}
+			if mockError != nil {
+				command := "sudo service fail2ban " + strings.Join(args, " ")
+				mock.SetError(command, mockError)
+			}
+		})
+
+	if wantError {
+		builder.ExpectError()
+	} else {
+		builder.ExpectSuccess()
+	}
+
+	if wantOutput != "" {
+		builder.ExpectOutput(wantOutput)
+	}
+
+	builder.Run()
 }
 
 func TestServiceCmdWithJSONFormat(t *testing.T) {

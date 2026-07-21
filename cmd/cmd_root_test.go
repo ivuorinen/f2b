@@ -662,46 +662,52 @@ func TestExecuteIntegration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Integration test requires manual approach:
-			// Set up environment variables using t.Setenv for automatic cleanup
-			if tt.config.LogDir != "" {
-				t.Setenv("F2B_LOG_DIR", tt.config.LogDir)
-			}
-			if tt.config.FilterDir != "" {
-				t.Setenv("F2B_FILTER_DIR", tt.config.FilterDir)
-			}
-
-			client := fail2ban.NewMockClient()
-
-			// Capture output
-			oldStdout := os.Stdout
-			r, w, err := os.Pipe()
-			if err != nil {
-				t.Fatalf("failed to create pipe: %v", err)
-			}
-			os.Stdout = w
-
-			originalArgs := os.Args
-			os.Args = tt.args
-
-			err = Execute(client, tt.config)
-
-			// Restore
-			if closeErr := w.Close(); closeErr != nil {
-				t.Fatalf("failed to close writer: %v", closeErr)
-			}
-			os.Stdout = oldStdout
-			os.Args = originalArgs
-
-			// Read output
-			var buf bytes.Buffer
-			if _, readErr := buf.ReadFrom(r); readErr != nil {
-				t.Fatalf("failed to read output: %v", readErr)
-			}
-
-			AssertError(t, err, false, tt.name)
+			assertExecuteIntegrationCase(t, tt.name, tt.args, tt.config)
 		})
 	}
+}
+
+// assertExecuteIntegrationCase runs a single TestExecuteIntegration table case.
+func assertExecuteIntegrationCase(t *testing.T, name string, args []string, config Config) {
+	t.Helper()
+	// Integration test requires manual approach:
+	// Set up environment variables using t.Setenv for automatic cleanup
+	if config.LogDir != "" {
+		t.Setenv("F2B_LOG_DIR", config.LogDir)
+	}
+	if config.FilterDir != "" {
+		t.Setenv("F2B_FILTER_DIR", config.FilterDir)
+	}
+
+	client := fail2ban.NewMockClient()
+
+	// Capture output
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create pipe: %v", err)
+	}
+	os.Stdout = w
+
+	originalArgs := os.Args
+	os.Args = args
+
+	err = Execute(client, config)
+
+	// Restore
+	if closeErr := w.Close(); closeErr != nil {
+		t.Fatalf("failed to close writer: %v", closeErr)
+	}
+	os.Stdout = oldStdout
+	os.Args = originalArgs
+
+	// Read output
+	var buf bytes.Buffer
+	if _, readErr := buf.ReadFrom(r); readErr != nil {
+		t.Fatalf("failed to read output: %v", readErr)
+	}
+
+	AssertError(t, err, false, name)
 }
 
 func TestCompletionCmdWithUnsupportedShell(t *testing.T) {

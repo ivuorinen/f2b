@@ -110,22 +110,27 @@ func TestValidateCommand(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateCommand(tt.command)
-
-			if tt.wantErr {
-				if err == nil {
-					t.Errorf("ValidateCommand() expected error but got none")
-					return
-				}
-				if !strings.Contains(err.Error(), tt.errMsg) {
-					t.Errorf("ValidateCommand() error = %v, want error containing %q", err, tt.errMsg)
-				}
-			} else {
-				if err != nil {
-					t.Errorf("ValidateCommand() unexpected error = %v", err)
-				}
-			}
+			assertValidateCommandCase(t, tt.command, tt.wantErr, tt.errMsg)
 		})
+	}
+}
+
+func assertValidateCommandCase(t *testing.T, command string, wantErr bool, errMsg string) {
+	t.Helper()
+	err := ValidateCommand(command)
+
+	if wantErr {
+		if err == nil {
+			t.Errorf("ValidateCommand() expected error but got none")
+			return
+		}
+		if !strings.Contains(err.Error(), errMsg) {
+			t.Errorf("ValidateCommand() error = %v, want error containing %q", err, errMsg)
+		}
+	} else {
+		if err != nil {
+			t.Errorf("ValidateCommand() unexpected error = %v", err)
+		}
 	}
 }
 
@@ -165,18 +170,7 @@ func TestValidateCommandConcurrency(t *testing.T) {
 	for range concurrency {
 		go func() {
 			defer func() { done <- true }()
-			for range iterations {
-				// Test with valid commands
-				if err := ValidateCommand("fail2ban-client"); err != nil {
-					errChan <- err
-					return
-				}
-				// Test with invalid commands
-				if err := ValidateCommand("malicious"); err == nil {
-					errChan <- fmt.Errorf("ValidateCommand should have rejected malicious command")
-					return
-				}
-			}
+			runValidateCommandConcurrencyWorker(errChan, iterations)
 		}()
 	}
 
@@ -191,6 +185,21 @@ func TestValidateCommandConcurrency(t *testing.T) {
 	for err := range errChan {
 		if err != nil {
 			t.Errorf("Concurrent ValidateCommand() failed: %v", err)
+		}
+	}
+}
+
+func runValidateCommandConcurrencyWorker(errChan chan<- error, iterations int) {
+	for range iterations {
+		// Test with valid commands
+		if err := ValidateCommand("fail2ban-client"); err != nil {
+			errChan <- err
+			return
+		}
+		// Test with invalid commands
+		if err := ValidateCommand("malicious"); err == nil {
+			errChan <- fmt.Errorf("ValidateCommand should have rejected malicious command")
+			return
 		}
 	}
 }

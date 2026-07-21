@@ -846,36 +846,50 @@ func TestGetBanRecordsWithInvalidTimes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up mock response (the command uses sudo)
-			mockRunner.SetResponse("sudo fail2ban-client get sshd banip --with-time", []byte(tt.mockResponse))
-
-			// Get ban records
-			records, err := client.GetBanRecords([]string{"sshd"})
-			if err != nil {
-				t.Fatalf("GetBanRecords failed: %v", err)
-			}
-
-			// Check count
-			if len(records) != tt.expectedCount {
-				t.Errorf("expected %d records, got %d", tt.expectedCount, len(records))
-			}
-
-			// For entries with invalid unban time (but valid ban time), verify fallback worked
-			if tt.name == "invalid unban time - entry should use fallback" && len(records) > 0 {
-				// The first record should have a reasonable remaining time (not zero)
-				if records[0].Remaining == "00:00:00:00" {
-					t.Errorf("expected fallback time calculation, got zero remaining time")
-				}
-			}
-
-			// For entries using short format fallback
-			if tt.name == "short format fallback" && len(records) > 0 {
-				for _, record := range records {
-					if record.Remaining != "unknown" {
-						t.Errorf("expected 'unknown' remaining time for short format, got %s", record.Remaining)
-					}
-				}
-			}
+			assertInvalidTimeRecords(t, client, mockRunner, tt.name, tt.mockResponse, tt.expectedCount)
 		})
+	}
+}
+
+// assertInvalidTimeRecords runs a single GetBanRecords case for
+// TestGetBanRecordsWithInvalidTimes and verifies count and fallback handling.
+func assertInvalidTimeRecords(
+	t *testing.T,
+	client *RealClient,
+	mockRunner *MockRunner,
+	name, mockResponse string,
+	expectedCount int,
+) {
+	t.Helper()
+
+	// Set up mock response (the command uses sudo)
+	mockRunner.SetResponse("sudo fail2ban-client get sshd banip --with-time", []byte(mockResponse))
+
+	// Get ban records
+	records, err := client.GetBanRecords([]string{"sshd"})
+	if err != nil {
+		t.Fatalf("GetBanRecords failed: %v", err)
+	}
+
+	// Check count
+	if len(records) != expectedCount {
+		t.Errorf("expected %d records, got %d", expectedCount, len(records))
+	}
+
+	// For entries with invalid unban time (but valid ban time), verify fallback worked
+	if name == "invalid unban time - entry should use fallback" && len(records) > 0 {
+		// The first record should have a reasonable remaining time (not zero)
+		if records[0].Remaining == "00:00:00:00" {
+			t.Errorf("expected fallback time calculation, got zero remaining time")
+		}
+	}
+
+	// For entries using short format fallback
+	if name == "short format fallback" && len(records) > 0 {
+		for _, record := range records {
+			if record.Remaining != "unknown" {
+				t.Errorf("expected 'unknown' remaining time for short format, got %s", record.Remaining)
+			}
+		}
 	}
 }

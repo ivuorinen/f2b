@@ -142,31 +142,36 @@ func TestCreateGzipAwareScanner(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			scanner, cleanup, err := detector.CreateGzipAwareScanner(tt.file)
-			if err != nil {
-				t.Fatalf("CreateGzipAwareScanner failed: %v", err)
-			}
-			defer cleanup()
-
-			var lines []string
-			for scanner.Scan() {
-				lines = append(lines, scanner.Text())
-			}
-
-			if err := scanner.Err(); err != nil {
-				t.Fatalf("Scanner error: %v", err)
-			}
-
-			if len(lines) != len(tt.expectedLines) {
-				t.Fatalf("Line count = %d, want %d", len(lines), len(tt.expectedLines))
-			}
-
-			for i, line := range lines {
-				if line != tt.expectedLines[i] {
-					t.Errorf("Line %d = %q, want %q", i, line, tt.expectedLines[i])
-				}
-			}
+			assertGzipScanner(t, detector, tt.file, tt.expectedLines)
 		})
+	}
+}
+
+func assertGzipScanner(t *testing.T, detector *GzipDetector, file string, expectedLines []string) {
+	t.Helper()
+	scanner, cleanup, err := detector.CreateGzipAwareScanner(file)
+	if err != nil {
+		t.Fatalf("CreateGzipAwareScanner failed: %v", err)
+	}
+	defer cleanup()
+
+	var lines []string
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("Scanner error: %v", err)
+	}
+
+	if len(lines) != len(expectedLines) {
+		t.Fatalf("Line count = %d, want %d", len(lines), len(expectedLines))
+	}
+
+	for i, line := range lines {
+		if line != expectedLines[i] {
+			t.Errorf("Line %d = %q, want %q", i, line, expectedLines[i])
+		}
 	}
 }
 

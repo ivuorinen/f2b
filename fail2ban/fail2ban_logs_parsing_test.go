@@ -273,28 +273,35 @@ func TestGetLogLinesWithRealTestData(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			lines, err := GetLogLines(context.Background(), tt.jail, tt.ip)
-			if err != nil {
-				t.Fatalf("GetLogLines failed: %v", err)
-			}
-
-			assertMinimumLines(t, lines, tt.wantMinimum, "lines")
-
-			// Check that lines contain expected content
-			if tt.checkLine != "" {
-				assertContainsText(t, lines, tt.checkLine)
-			}
-
-			// Verify filtering works correctly
-			for _, line := range lines {
-				if tt.jail != "" && !strings.Contains(line, "["+tt.jail+"]") && !strings.Contains(line, "rollover") {
-					t.Errorf("Line doesn't match jail filter: %s", line)
-				}
-				if tt.ip != "" && !strings.Contains(line, tt.ip) {
-					t.Errorf("Line doesn't match IP filter: %s", line)
-				}
-			}
+			assertGetLogLinesCase(t, tt.jail, tt.ip, tt.wantMinimum, tt.checkLine)
 		})
+	}
+}
+
+// assertGetLogLinesCase runs GetLogLines for a jail/IP query and asserts the
+// minimum line count, expected content, and per-line filter correctness.
+func assertGetLogLinesCase(t *testing.T, jail, ip string, wantMinimum int, checkLine string) {
+	t.Helper()
+	lines, err := GetLogLines(context.Background(), jail, ip)
+	if err != nil {
+		t.Fatalf("GetLogLines failed: %v", err)
+	}
+
+	assertMinimumLines(t, lines, wantMinimum, "lines")
+
+	// Check that lines contain expected content
+	if checkLine != "" {
+		assertContainsText(t, lines, checkLine)
+	}
+
+	// Verify filtering works correctly
+	for _, line := range lines {
+		if jail != "" && !strings.Contains(line, "["+jail+"]") && !strings.Contains(line, "rollover") {
+			t.Errorf("Line doesn't match jail filter: %s", line)
+		}
+		if ip != "" && !strings.Contains(line, ip) {
+			t.Errorf("Line doesn't match IP filter: %s", line)
+		}
 	}
 }
 
@@ -333,29 +340,38 @@ func TestParseBanRecordsFromRealLogs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			records, err := parser.ParseBanRecords(tt.output, tt.jail)
-			if err != nil {
-				t.Fatalf("ParseBanRecords failed: %v", err)
-			}
-
-			if len(records) != tt.wantCount {
-				t.Errorf("Expected %d records, got %d", tt.wantCount, len(records))
-			}
-
-			// Check for specific IP
-			found := false
-			for _, record := range records {
-				if record.IP == tt.checkIP {
-					found = true
-					if record.Jail != tt.jail {
-						t.Errorf("Record jail mismatch: got %s, want %s", record.Jail, tt.jail)
-					}
-				}
-			}
-			if !found {
-				t.Errorf("Expected to find IP %s in records", tt.checkIP)
-			}
+			assertParsedBanRecordsFromLogs(t, parser, tt.output, tt.jail, tt.wantCount, tt.checkIP)
 		})
+	}
+}
+
+// assertParsedBanRecordsFromLogs parses a ban/unban output block and asserts
+// the record count and that checkIP is present with the expected jail.
+func assertParsedBanRecordsFromLogs(
+	t *testing.T, parser *BanRecordParser, output, jail string, wantCount int, checkIP string,
+) {
+	t.Helper()
+	records, err := parser.ParseBanRecords(output, jail)
+	if err != nil {
+		t.Fatalf("ParseBanRecords failed: %v", err)
+	}
+
+	if len(records) != wantCount {
+		t.Errorf("Expected %d records, got %d", wantCount, len(records))
+	}
+
+	// Check for specific IP
+	found := false
+	for _, record := range records {
+		if record.IP == checkIP {
+			found = true
+			if record.Jail != jail {
+				t.Errorf("Record jail mismatch: got %s, want %s", record.Jail, jail)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("Expected to find IP %s in records", checkIP)
 	}
 }
 
