@@ -67,50 +67,64 @@ func TestLogsWatchCmd(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a mock client that will return different logs on subsequent calls
-			mock := &MockLogsWatchClient{
-				initialLogs: tt.mockLogs,
-				limit:       tt.limit,
-				shouldError: tt.wantError,
-			}
-
-			config := &Config{Format: "plain"}
-			cmd := LogsWatchCmd(context.Background(), mock, config)
-
-			// Set up command flags
-			if tt.limit > 0 {
-				if err := cmd.Flags().Set("limit", strconv.Itoa(tt.limit)); err != nil {
-					t.Fatalf("failed to set limit flag: %v", err)
-				}
-			}
-
-			// Capture output
-			var outBuf bytes.Buffer
-			cmd.SetOut(&outBuf)
-			cmd.SetArgs(tt.args)
-
-			// For error cases, run the command and check error immediately
-			if tt.wantError {
-				err := cmd.Execute()
-				if err == nil {
-					t.Errorf("expected error but got none")
-				}
-				return
-			}
-
-			// Success cases: run the command with an already-canceled context so
-			// it prints the initial (jail/IP-filtered, limit-tailed) lines and
-			// then exits the watch loop at <-ctx.Done() instead of blocking.
-			watchCtx, cancel := context.WithCancel(context.Background())
-			cancel()
-			if err := cmd.ExecuteContext(watchCtx); err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			got := strings.TrimRight(outBuf.String(), "\n")
-			if got != tt.wantOutput {
-				t.Errorf("output = %q, want %q", got, tt.wantOutput)
-			}
+			assertLogsWatchCase(t, tt.args, tt.mockLogs, tt.limit, tt.wantOutput, tt.wantError)
 		})
+	}
+}
+
+// assertLogsWatchCase builds a LogsWatchCmd around a mock client and verifies
+// its output (success) or that it errors (wantError) for a single case.
+func assertLogsWatchCase(
+	t *testing.T,
+	args, mockLogs []string,
+	limit int,
+	wantOutput string,
+	wantError bool,
+) {
+	t.Helper()
+
+	// Create a mock client that will return different logs on subsequent calls
+	mock := &MockLogsWatchClient{
+		initialLogs: mockLogs,
+		limit:       limit,
+		shouldError: wantError,
+	}
+
+	config := &Config{Format: "plain"}
+	cmd := LogsWatchCmd(context.Background(), mock, config)
+
+	// Set up command flags
+	if limit > 0 {
+		if err := cmd.Flags().Set("limit", strconv.Itoa(limit)); err != nil {
+			t.Fatalf("failed to set limit flag: %v", err)
+		}
+	}
+
+	// Capture output
+	var outBuf bytes.Buffer
+	cmd.SetOut(&outBuf)
+	cmd.SetArgs(args)
+
+	// For error cases, run the command and check error immediately
+	if wantError {
+		err := cmd.Execute()
+		if err == nil {
+			t.Errorf("expected error but got none")
+		}
+		return
+	}
+
+	// Success cases: run the command with an already-canceled context so
+	// it prints the initial (jail/IP-filtered, limit-tailed) lines and
+	// then exits the watch loop at <-ctx.Done() instead of blocking.
+	watchCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := cmd.ExecuteContext(watchCtx); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	got := strings.TrimRight(outBuf.String(), "\n")
+	if got != wantOutput {
+		t.Errorf("output = %q, want %q", got, wantOutput)
 	}
 }
 
@@ -317,29 +331,26 @@ func (m *MockLogsWatchClient) GetLogLines(jail, ip string) ([]string, error) {
 		logs = append(logs, fmt.Sprintf("new log line %d", m.callCount))
 	}
 
-	// Apply jail filtering if specified
-	if jail != "" && jail != "all" {
-		var filtered []string
-		for _, line := range logs {
-			if strings.Contains(line, "["+jail+"]") {
-				filtered = append(filtered, line)
-			}
-		}
-		logs = filtered
-	}
-
-	// Apply IP filtering if specified
-	if ip != "" && ip != "all" {
-		var filtered []string
-		for _, line := range logs {
-			if strings.Contains(line, ip) {
-				filtered = append(filtered, line)
-			}
-		}
-		logs = filtered
-	}
+	// Apply jail then IP filtering if specified
+	logs = mockGetLogLinesFiltered(logs, jail, "["+jail+"]")
+	logs = mockGetLogLinesFiltered(logs, ip, ip)
 
 	return logs, nil
+}
+
+// mockGetLogLinesFiltered returns logs unchanged when value is empty or "all",
+// otherwise keeps only lines containing substr.
+func mockGetLogLinesFiltered(logs []string, value, substr string) []string {
+	if value == "" || value == "all" {
+		return logs
+	}
+	var filtered []string
+	for _, line := range logs {
+		if strings.Contains(line, substr) {
+			filtered = append(filtered, line)
+		}
+	}
+	return filtered
 }
 
 // Implement other required methods for the interface

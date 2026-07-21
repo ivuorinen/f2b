@@ -330,29 +330,41 @@ func TestSecurityAudit_ErrorMessages(t *testing.T) {
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				errorMsg, err := tc.testFunc()
-				if err == nil {
-					// These are all validators fed clearly malicious input; a
-					// missing error is a security regression, not a reason to
-					// skip the leakage checks.
-					t.Fatalf("%s: expected a validation error for malicious input", tc.name)
-				}
-
-				// Check that error message doesn't contain sensitive information
-				lowerErrorMsg := strings.ToLower(errorMsg)
-				for _, pattern := range sensitivePatterns {
-					if strings.Contains(lowerErrorMsg, strings.ToLower(pattern)) {
-						t.Errorf("Error message contains sensitive pattern '%s': %s", pattern, errorMsg)
-					}
-				}
-
-				// Check that error message is not too verbose
-				if len(errorMsg) > 200 {
-					t.Errorf("Error message is too verbose (>200 chars): %s", errorMsg)
-				}
+				assertErrorMessageNoLeak(t, tc.name, tc.testFunc, sensitivePatterns)
 			})
 		}
 	})
+}
+
+// assertErrorMessageNoLeak runs a validator-error case and verifies the message
+// exists, stays under 200 chars, and leaks none of sensitivePatterns.
+func assertErrorMessageNoLeak(
+	t *testing.T,
+	name string,
+	testFunc func() (string, error),
+	sensitivePatterns []string,
+) {
+	t.Helper()
+	errorMsg, err := testFunc()
+	if err == nil {
+		// These are all validators fed clearly malicious input; a
+		// missing error is a security regression, not a reason to
+		// skip the leakage checks.
+		t.Fatalf("%s: expected a validation error for malicious input", name)
+	}
+
+	// Check that error message doesn't contain sensitive information
+	lowerErrorMsg := strings.ToLower(errorMsg)
+	for _, pattern := range sensitivePatterns {
+		if strings.Contains(lowerErrorMsg, strings.ToLower(pattern)) {
+			t.Errorf("Error message contains sensitive pattern '%s': %s", pattern, errorMsg)
+		}
+	}
+
+	// Check that error message is not too verbose
+	if len(errorMsg) > 200 {
+		t.Errorf("Error message is too verbose (>200 chars): %s", errorMsg)
+	}
 }
 
 // TestSecurityAudit_PrivilegeEscalation tests for privilege escalation vulnerabilities
@@ -436,24 +448,12 @@ func testSecurityChainValidation(t *testing.T, jail, ip string, shouldPass, test
 	t.Helper()
 	// Validate jail if we should test it
 	if testJail {
-		err := fail2ban.ValidateJail(jail)
-		if shouldPass && err != nil {
-			t.Errorf("Legitimate jail should pass: %v", err)
-		}
-		if !shouldPass && err == nil {
-			t.Errorf("Malicious jail should be rejected")
-		}
+		assertChainJailValidation(t, jail, shouldPass)
 	}
 
 	// Validate IP if we should test it
 	if testIP {
-		err := fail2ban.ValidateIP(ip)
-		if shouldPass && err != nil {
-			t.Errorf("Legitimate IP should pass: %v", err)
-		}
-		if !shouldPass && err == nil {
-			t.Errorf("Malicious IP should be rejected")
-		}
+		assertChainIPValidation(t, ip, shouldPass)
 	}
 
 	// Test end-to-end log reading (only for legitimate cases)
@@ -462,6 +462,30 @@ func testSecurityChainValidation(t *testing.T, jail, ip string, shouldPass, test
 		if err != nil {
 			t.Errorf("Legitimate log reading should succeed: %v", err)
 		}
+	}
+}
+
+// assertChainJailValidation checks ValidateJail's verdict matches shouldPass.
+func assertChainJailValidation(t *testing.T, jail string, shouldPass bool) {
+	t.Helper()
+	err := fail2ban.ValidateJail(jail)
+	if shouldPass && err != nil {
+		t.Errorf("Legitimate jail should pass: %v", err)
+	}
+	if !shouldPass && err == nil {
+		t.Errorf("Malicious jail should be rejected")
+	}
+}
+
+// assertChainIPValidation checks ValidateIP's verdict matches shouldPass.
+func assertChainIPValidation(t *testing.T, ip string, shouldPass bool) {
+	t.Helper()
+	err := fail2ban.ValidateIP(ip)
+	if shouldPass && err != nil {
+		t.Errorf("Legitimate IP should pass: %v", err)
+	}
+	if !shouldPass && err == nil {
+		t.Errorf("Malicious IP should be rejected")
 	}
 }
 

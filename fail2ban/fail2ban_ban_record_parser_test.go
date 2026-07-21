@@ -91,34 +91,43 @@ func TestBanRecordParser(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			record, err := parser.ParseBanRecordLine(tt.line, tt.jail)
-
-			if tt.wantNil {
-				if record != nil {
-					t.Errorf("Expected nil record, got %+v", record)
-				}
-				return
-			}
-
-			if err != nil {
-				t.Fatalf("Unexpected error: %v", err)
-			}
-
-			if record == nil {
-				t.Fatal("Expected record, got nil")
-			} else if record.IP != tt.wantIP {
-				t.Errorf("IP mismatch: got %s, want %s", record.IP, tt.wantIP)
-			}
-
-			if record.Jail != tt.jail {
-				t.Errorf("Jail mismatch: got %s, want %s", record.Jail, tt.jail)
-			}
-
-			// Full-format rows carry a known ban timestamp; assert it exactly
-			// (simple-format rows are skipped inside the helper).
-			validateTimeParsing(t, record, tt.line)
+			assertBanRecordParserCase(t, parser, tt.line, tt.jail, tt.wantIP, tt.wantNil)
 		})
 	}
+}
+
+// assertBanRecordParserCase parses a single line and asserts nil/IP/jail/time
+// expectations for TestBanRecordParser.
+func assertBanRecordParserCase(t *testing.T, parser *BanRecordParser, line, jail, wantIP string, wantNil bool) {
+	t.Helper()
+	record, err := parser.ParseBanRecordLine(line, jail)
+
+	if wantNil {
+		if record != nil {
+			t.Errorf("Expected nil record, got %+v", record)
+		}
+		return
+	}
+
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	if record == nil {
+		t.Fatal("Expected record, got nil")
+		return
+	}
+	if record.IP != wantIP {
+		t.Errorf("IP mismatch: got %s, want %s", record.IP, wantIP)
+	}
+
+	if record.Jail != jail {
+		t.Errorf("Jail mismatch: got %s, want %s", record.Jail, jail)
+	}
+
+	// Full-format rows carry a known ban timestamp; assert it exactly
+	// (simple-format rows are skipped inside the helper).
+	validateTimeParsing(t, record, line)
 }
 
 // TestParseBanRecordLineRejectsUnsafeJail exercises the jail-safety guard in
@@ -356,37 +365,46 @@ func TestRealWorldBanRecordPatterns(t *testing.T) {
 
 	for _, tt := range realWorldPatterns {
 		t.Run(tt.name, func(t *testing.T) {
-			records, err := parser.ParseBanRecords(tt.output, tt.jail)
-			if err != nil {
-				t.Fatalf("ParseBanRecords failed: %v", err)
-			}
-
-			if len(records) != tt.wantRecords {
-				t.Errorf("Expected %d records, got %d", tt.wantRecords, len(records))
-			}
-
-			// Check all expected IPs are present
-			ipMap := make(map[string]bool)
-			for _, record := range records {
-				ipMap[record.IP] = true
-
-				// Verify jail
-				if record.Jail != tt.jail {
-					t.Errorf("Record has wrong jail: got %s, want %s", record.Jail, tt.jail)
-				}
-
-				// Verify ban time is parsed
-				if record.BannedAt.IsZero() {
-					t.Errorf("Record for %s has zero ban time", record.IP)
-				}
-			}
-
-			for _, checkIP := range tt.checkIPs {
-				if !ipMap[checkIP] {
-					t.Errorf("Expected IP %s not found in records", checkIP)
-				}
-			}
+			assertRealWorldBanPattern(t, parser, tt.output, tt.jail, tt.wantRecords, tt.checkIPs)
 		})
+	}
+}
+
+// assertRealWorldBanPattern parses a production output block and asserts the
+// record count, jail, non-zero ban times, and expected IP presence.
+func assertRealWorldBanPattern(
+	t *testing.T, parser *BanRecordParser, output, jail string, wantRecords int, checkIPs []string,
+) {
+	t.Helper()
+	records, err := parser.ParseBanRecords(output, jail)
+	if err != nil {
+		t.Fatalf("ParseBanRecords failed: %v", err)
+	}
+
+	if len(records) != wantRecords {
+		t.Errorf("Expected %d records, got %d", wantRecords, len(records))
+	}
+
+	// Check all expected IPs are present
+	ipMap := make(map[string]bool)
+	for _, record := range records {
+		ipMap[record.IP] = true
+
+		// Verify jail
+		if record.Jail != jail {
+			t.Errorf("Record has wrong jail: got %s, want %s", record.Jail, jail)
+		}
+
+		// Verify ban time is parsed
+		if record.BannedAt.IsZero() {
+			t.Errorf("Record for %s has zero ban time", record.IP)
+		}
+	}
+
+	for _, checkIP := range checkIPs {
+		if !ipMap[checkIP] {
+			t.Errorf("Expected IP %s not found in records", checkIP)
+		}
 	}
 }
 

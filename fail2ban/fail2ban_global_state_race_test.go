@@ -91,18 +91,7 @@ func TestLogDir_ConcurrentSetAndRead(t *testing.T) {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			counter := 0
-			for {
-				select {
-				case <-done:
-					return
-				default:
-					testDir := fmt.Sprintf("/tmp/writer-%d-count-%d", id, counter)
-					SetLogDir(testDir)
-					counter++
-					time.Sleep(time.Millisecond)
-				}
-			}
+			runConcurrentLogDirWriter(done, id)
 		}(i)
 	}
 
@@ -111,18 +100,7 @@ func TestLogDir_ConcurrentSetAndRead(t *testing.T) {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for {
-				select {
-				case <-done:
-					return
-				default:
-					dir := GetLogDir()
-					if dir == "" {
-						errors <- fmt.Sprintf("Reader %d got empty log directory", id)
-					}
-					time.Sleep(time.Millisecond / 2)
-				}
-			}
+			runConcurrentLogDirReader(done, errors, id)
 		}(i)
 	}
 
@@ -135,6 +113,36 @@ func TestLogDir_ConcurrentSetAndRead(t *testing.T) {
 	close(errors)
 	for errMsg := range errors {
 		t.Errorf("%s", errMsg)
+	}
+}
+
+func runConcurrentLogDirWriter(done <-chan struct{}, id int) {
+	counter := 0
+	for {
+		select {
+		case <-done:
+			return
+		default:
+			testDir := fmt.Sprintf("/tmp/writer-%d-count-%d", id, counter)
+			SetLogDir(testDir)
+			counter++
+			time.Sleep(time.Millisecond)
+		}
+	}
+}
+
+func runConcurrentLogDirReader(done <-chan struct{}, errors chan<- string, id int) {
+	for {
+		select {
+		case <-done:
+			return
+		default:
+			dir := GetLogDir()
+			if dir == "" {
+				errors <- fmt.Sprintf("Reader %d got empty log directory", id)
+			}
+			time.Sleep(time.Millisecond / 2)
+		}
 	}
 }
 

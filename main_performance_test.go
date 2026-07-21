@@ -31,56 +31,76 @@ func BenchmarkE2E_MainAPIs(b *testing.B) {
 	// Setup mock client
 	client := setupBenchmarkClient(b)
 
-	b.Run("GetLogLines", func(b *testing.B) {
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			_, err := fail2ban.GetLogLines(context.Background(), "sshd", "192.168.1.100")
-			if err != nil {
-				b.Fatalf("GetLogLines failed: %v", err)
-			}
-		}
-	})
-
-	b.Run("GetLogLinesWithLimit", func(b *testing.B) {
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			_, err := fail2ban.GetLogLinesWithLimit(context.Background(), "sshd", "192.168.1.100", 100)
-			if err != nil {
-				b.Fatalf("GetLogLinesWithLimit failed: %v", err)
-			}
-		}
-	})
-
-	b.Run("UltraOptimized", func(b *testing.B) {
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			_, err := fail2ban.GetLogLinesUltraOptimized("sshd", "192.168.1.100", 100)
-			if err != nil {
-				b.Fatalf("GetLogLinesUltraOptimized failed: %v", err)
-			}
-		}
-	})
-
+	b.Run("GetLogLines", benchE2EGetLogLines)
+	b.Run("GetLogLinesWithLimit", benchE2EGetLogLinesWithLimit)
+	b.Run("UltraOptimized", benchE2EUltraOptimized)
 	b.Run("Client_GetBanRecords", func(b *testing.B) {
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			_, err := client.GetBanRecords([]string{"sshd"})
-			if err != nil {
-				b.Fatalf("GetBanRecords failed: %v", err)
-			}
-		}
+		benchE2EClientGetBanRecords(b, client)
 	})
-
 	b.Run("Client_GetBanRecordsWithContext", func(b *testing.B) {
-		ctx := context.Background()
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			_, err := client.GetBanRecordsWithContext(ctx, []string{"sshd"})
-			if err != nil {
-				b.Fatalf("GetBanRecordsWithContext failed: %v", err)
-			}
-		}
+		benchE2EClientGetBanRecordsWithContext(b, client)
 	})
+}
+
+// benchE2EGetLogLines benchmarks fail2ban.GetLogLines.
+func benchE2EGetLogLines(b *testing.B) {
+	b.Helper()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := fail2ban.GetLogLines(context.Background(), "sshd", "192.168.1.100")
+		if err != nil {
+			b.Fatalf("GetLogLines failed: %v", err)
+		}
+	}
+}
+
+// benchE2EGetLogLinesWithLimit benchmarks fail2ban.GetLogLinesWithLimit.
+func benchE2EGetLogLinesWithLimit(b *testing.B) {
+	b.Helper()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := fail2ban.GetLogLinesWithLimit(context.Background(), "sshd", "192.168.1.100", 100)
+		if err != nil {
+			b.Fatalf("GetLogLinesWithLimit failed: %v", err)
+		}
+	}
+}
+
+// benchE2EUltraOptimized benchmarks fail2ban.GetLogLinesUltraOptimized.
+func benchE2EUltraOptimized(b *testing.B) {
+	b.Helper()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := fail2ban.GetLogLinesUltraOptimized("sshd", "192.168.1.100", 100)
+		if err != nil {
+			b.Fatalf("GetLogLinesUltraOptimized failed: %v", err)
+		}
+	}
+}
+
+// benchE2EClientGetBanRecords benchmarks client.GetBanRecords.
+func benchE2EClientGetBanRecords(b *testing.B, client *fail2ban.RealClient) {
+	b.Helper()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := client.GetBanRecords([]string{"sshd"})
+		if err != nil {
+			b.Fatalf("GetBanRecords failed: %v", err)
+		}
+	}
+}
+
+// benchE2EClientGetBanRecordsWithContext benchmarks client.GetBanRecordsWithContext.
+func benchE2EClientGetBanRecordsWithContext(b *testing.B, client *fail2ban.RealClient) {
+	b.Helper()
+	ctx := context.Background()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := client.GetBanRecordsWithContext(ctx, []string{"sshd"})
+		if err != nil {
+			b.Fatalf("GetBanRecordsWithContext failed: %v", err)
+		}
+	}
 }
 
 // BenchmarkMemoryAllocation_Critical benchmarks memory allocations in critical paths

@@ -6,9 +6,19 @@ import (
 	"testing"
 )
 
-//nolint:gocyclo // exhaustive table-driven coverage of every mock context method
 func TestMockClientContextMethods(t *testing.T) {
 	mockClient := NewMockClient()
+
+	assertMockContextReadMethods(t, mockClient)
+	assertMockContextMutateMethods(t, mockClient)
+	assertMockContextFilterMethods(t, mockClient)
+	assertMockContextCanceled(t, mockClient)
+}
+
+// assertMockContextReadMethods verifies the status/listing WithContext methods
+// return successfully with non-empty data.
+func assertMockContextReadMethods(t *testing.T, mockClient *MockClient) {
+	t.Helper()
 	ctx := context.Background()
 
 	// Test ListJailsWithContext
@@ -37,6 +47,13 @@ func TestMockClientContextMethods(t *testing.T) {
 	if status == "" {
 		t.Error("Expected jail status output, got empty string")
 	}
+}
+
+// assertMockContextMutateMethods verifies the ban/unban/lookup WithContext
+// methods succeed and return the expected fresh-mock values.
+func assertMockContextMutateMethods(t *testing.T, mockClient *MockClient) {
+	t.Helper()
+	ctx := context.Background()
 
 	// Test BanIPWithContext
 	code, err := mockClient.BanIPWithContext(ctx, "192.168.1.100", "sshd")
@@ -75,6 +92,12 @@ func TestMockClientContextMethods(t *testing.T) {
 	if len(records) != 0 {
 		t.Errorf("Expected empty ban records, got %v", records)
 	}
+}
+
+// assertMockContextFilterMethods verifies the log/filter WithContext methods.
+func assertMockContextFilterMethods(t *testing.T, mockClient *MockClient) {
+	t.Helper()
+	ctx := context.Background()
 
 	// Test GetLogLinesWithContext
 	lines, err := mockClient.GetLogLinesWithContext(ctx, "sshd", "192.168.1.100")
@@ -98,6 +121,12 @@ func TestMockClientContextMethods(t *testing.T) {
 	if err == nil && result == "" {
 		t.Error("Expected test result or error, got neither")
 	}
+}
+
+// assertMockContextCanceled verifies the WithContext wrappers honor a canceled
+// context and return context.Canceled before running the underlying method.
+func assertMockContextCanceled(t *testing.T, mockClient *MockClient) {
+	t.Helper()
 
 	// The WithContext wrappers must honor cancellation: a canceled context
 	// returns its error before the underlying method runs. This exercises the

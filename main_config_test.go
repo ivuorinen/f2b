@@ -46,46 +46,53 @@ func TestMainConfigurationParsing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Clear env vars first to ensure clean state
-			t.Setenv("F2B_LOG_DIR", "")
-			t.Setenv("F2B_FILTER_DIR", "")
-
-			// Set up environment using t.Setenv for automatic cleanup
-			if tt.logDirEnv != "" {
-				t.Setenv("F2B_LOG_DIR", tt.logDirEnv)
-			}
-			if tt.filterDirEnv != "" {
-				t.Setenv("F2B_FILTER_DIR", tt.filterDirEnv)
-			}
-
-			// Build config from env (mimic main function)
-			config := struct {
-				LogDir    string
-				FilterDir string
-				Format    string
-			}{}
-
-			config.LogDir = os.Getenv("F2B_LOG_DIR")
-			if config.LogDir == "" {
-				config.LogDir = "/var/log"
-			}
-			config.FilterDir = os.Getenv("F2B_FILTER_DIR")
-			if config.FilterDir == "" {
-				config.FilterDir = "/etc/fail2ban/filter.d"
-			}
-			config.Format = "plain"
-
-			// Verify configuration values
-			if config.LogDir != tt.expectedLogDir {
-				t.Errorf("expected LogDir=%q, got %q", tt.expectedLogDir, config.LogDir)
-			}
-			if config.FilterDir != tt.expectedFilterDir {
-				t.Errorf("expected FilterDir=%q, got %q", tt.expectedFilterDir, config.FilterDir)
-			}
-			if config.Format != "plain" {
-				t.Errorf("expected Format=%q, got %q", "plain", config.Format)
-			}
+			runMainConfigCase(t, tt.logDirEnv, tt.filterDirEnv, tt.expectedLogDir, tt.expectedFilterDir)
 		})
+	}
+}
+
+// runMainConfigCase mimics main's env-driven config build and verifies the
+// resolved LogDir/FilterDir/Format for a single parsing case.
+func runMainConfigCase(t *testing.T, logDirEnv, filterDirEnv, expectedLogDir, expectedFilterDir string) {
+	t.Helper()
+	// Clear env vars first to ensure clean state
+	t.Setenv("F2B_LOG_DIR", "")
+	t.Setenv("F2B_FILTER_DIR", "")
+
+	// Set up environment using t.Setenv for automatic cleanup
+	if logDirEnv != "" {
+		t.Setenv("F2B_LOG_DIR", logDirEnv)
+	}
+	if filterDirEnv != "" {
+		t.Setenv("F2B_FILTER_DIR", filterDirEnv)
+	}
+
+	// Build config from env (mimic main function)
+	config := struct {
+		LogDir    string
+		FilterDir string
+		Format    string
+	}{}
+
+	config.LogDir = os.Getenv("F2B_LOG_DIR")
+	if config.LogDir == "" {
+		config.LogDir = "/var/log"
+	}
+	config.FilterDir = os.Getenv("F2B_FILTER_DIR")
+	if config.FilterDir == "" {
+		config.FilterDir = "/etc/fail2ban/filter.d"
+	}
+	config.Format = "plain"
+
+	// Verify configuration values
+	if config.LogDir != expectedLogDir {
+		t.Errorf("expected LogDir=%q, got %q", expectedLogDir, config.LogDir)
+	}
+	if config.FilterDir != expectedFilterDir {
+		t.Errorf("expected FilterDir=%q, got %q", expectedFilterDir, config.FilterDir)
+	}
+	if config.Format != "plain" {
+		t.Errorf("expected Format=%q, got %q", "plain", config.Format)
 	}
 }
 

@@ -123,31 +123,39 @@ func TestStatusCommand(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			builder := NewCommandTest(t, "status").
-				WithArgs(tt.args...).
-				WithSetup(func(mock *fail2ban.MockClient) {
-					setMockJails(mock, tt.jails)
-					if tt.statusAll != "" {
-						mock.StatusAllData = tt.statusAll
-					}
-					if tt.statusJail != nil {
-						mock.StatusJailData = tt.statusJail
-					}
-				})
-
-			if tt.wantError {
-				builder.ExpectError()
-			} else {
-				builder.ExpectSuccess()
-			}
-
-			if tt.wantOutput != "" {
-				builder.ExpectOutput(tt.wantOutput)
-			}
-
-			builder.Run()
+			assertStatusCommandCase(t, tt.args, tt.jails, tt.statusAll,
+				tt.statusJail, tt.wantOutput, tt.wantError)
 		})
 	}
+}
+
+// assertStatusCommandCase runs a single TestStatusCommand table case.
+func assertStatusCommandCase(t *testing.T, args, jails []string, statusAll string,
+	statusJail map[string]string, wantOutput string, wantError bool) {
+	t.Helper()
+	builder := NewCommandTest(t, "status").
+		WithArgs(args...).
+		WithSetup(func(mock *fail2ban.MockClient) {
+			setMockJails(mock, jails)
+			if statusAll != "" {
+				mock.StatusAllData = statusAll
+			}
+			if statusJail != nil {
+				mock.StatusJailData = statusJail
+			}
+		})
+
+	if wantError {
+		builder.ExpectError()
+	} else {
+		builder.ExpectSuccess()
+	}
+
+	if wantOutput != "" {
+		builder.ExpectOutput(wantOutput)
+	}
+
+	builder.Run()
 }
 
 func TestBannedCommand(t *testing.T) {

@@ -159,47 +159,55 @@ func TestPrintError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Capture stderr
-			oldStderr := os.Stderr
-			r, w, err := os.Pipe()
-			if err != nil {
-				t.Fatalf("failed to create pipe: %v", err)
-			}
-			os.Stderr = w
-
-			// Capture log output
-			oldOutput := Logger.Output()
-			var logBuf bytes.Buffer
-			Logger.SetOutput(&logBuf)
-
-			PrintError(tt.err)
-
-			if err := w.Close(); err != nil {
-				t.Fatalf("failed to close pipe writer: %v", err)
-			}
-			os.Stderr = oldStderr
-			Logger.SetOutput(oldOutput)
-
-			var stderrBuf bytes.Buffer
-			if _, err := stderrBuf.ReadFrom(r); err != nil {
-				t.Fatalf("failed to read stderr: %v", err)
-			}
-			stderrOutput := stderrBuf.String()
-			logOutput := logBuf.String()
-
-			if tt.expectLog {
-				if !strings.Contains(logOutput, "Command failed") {
-					t.Errorf("expected error to be logged, got: %s", logOutput)
-				}
-				if !strings.Contains(stderrOutput, "Error: test error message") {
-					t.Errorf("expected error in stderr, got: %s", stderrOutput)
-				}
-			} else {
-				if stderrOutput != "" {
-					t.Errorf("expected no stderr output for nil error, got: %s", stderrOutput)
-				}
-			}
+			assertPrintErrorCase(t, tt.err, tt.expectLog)
 		})
+	}
+}
+
+// assertPrintErrorCase runs PrintError for a single case and verifies the
+// captured stderr and log output against the expectLog expectation.
+func assertPrintErrorCase(t *testing.T, err error, expectLog bool) {
+	t.Helper()
+
+	// Capture stderr
+	oldStderr := os.Stderr
+	r, w, perr := os.Pipe()
+	if perr != nil {
+		t.Fatalf("failed to create pipe: %v", perr)
+	}
+	os.Stderr = w
+
+	// Capture log output
+	oldOutput := Logger.Output()
+	var logBuf bytes.Buffer
+	Logger.SetOutput(&logBuf)
+
+	PrintError(err)
+
+	if cerr := w.Close(); cerr != nil {
+		t.Fatalf("failed to close pipe writer: %v", cerr)
+	}
+	os.Stderr = oldStderr
+	Logger.SetOutput(oldOutput)
+
+	var stderrBuf bytes.Buffer
+	if _, rerr := stderrBuf.ReadFrom(r); rerr != nil {
+		t.Fatalf("failed to read stderr: %v", rerr)
+	}
+	stderrOutput := stderrBuf.String()
+	logOutput := logBuf.String()
+
+	if expectLog {
+		if !strings.Contains(logOutput, "Command failed") {
+			t.Errorf("expected error to be logged, got: %s", logOutput)
+		}
+		if !strings.Contains(stderrOutput, "Error: test error message") {
+			t.Errorf("expected error in stderr, got: %s", stderrOutput)
+		}
+	} else {
+		if stderrOutput != "" {
+			t.Errorf("expected no stderr output for nil error, got: %s", stderrOutput)
+		}
 	}
 }
 
