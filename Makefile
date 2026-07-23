@@ -21,7 +21,7 @@ GOIMPORTS_VERSION := v0.42.0
 # renovate: datasource=go depName=github.com/editorconfig-checker/editorconfig-checker/v3/cmd/editorconfig-checker
 EDITORCONFIG_CHECKER_VERSION := v3.8.0
 # renovate: datasource=go depName=github.com/securego/gosec/v2/cmd/gosec
-GOSEC_VERSION := v2.27.1
+GOSEC_VERSION := v2.28.0
 # renovate: datasource=go depName=honnef.co/go/tools/cmd/staticcheck
 STATICCHECK_VERSION := v0.7.0
 # renovate: datasource=go depName=github.com/mgechev/revive
@@ -31,7 +31,7 @@ CHECKMAKE_VERSION := v0.3.2
 # renovate: datasource=go depName=github.com/segmentio/golines
 GOLINES_VERSION := v0.13.0
 # renovate: datasource=npm depName=markdownlint-cli2
-MARKDOWNLINT_CLI2_VERSION := 0.23.0
+MARKDOWNLINT_CLI2_VERSION := 0.23.1
 # renovate: datasource=go depName=github.com/princjef/gomarkdoc/cmd/gomarkdoc
 GOMARKDOC_VERSION := v1.1.0
 GOMARKDOC := go run github.com/princjef/gomarkdoc/cmd/gomarkdoc@$(GOMARKDOC_VERSION)
