@@ -48,7 +48,7 @@ repos:
         exclude: ^docs/(api|audit)/ # generated (docs/api) / machine-managed (docs/audit) markdown
 
   - repo: https://github.com/tcort/markdown-link-check
-    rev: v3.14.2
+    rev: v3.15.0
     hooks:
       - id: markdown-link-check
         args: [-q, -c, .markdown-link-check.json]
