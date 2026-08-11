@@ -72,7 +72,7 @@ repos:
         files: ^Makefile$
 
   - repo: https://github.com/bridgecrewio/checkov.git
-    rev: "3.3.8"
+    rev: "3.3.9"
     hooks:
       - id: checkov
         args:
