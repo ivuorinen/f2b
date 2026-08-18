@@ -19,7 +19,7 @@ ACTIONLINT_VERSION := v1.7.12
 # renovate: datasource=go depName=golang.org/x/tools/cmd/goimports
 GOIMPORTS_VERSION := v0.42.0
 # renovate: datasource=go depName=github.com/editorconfig-checker/editorconfig-checker/v3/cmd/editorconfig-checker
-EDITORCONFIG_CHECKER_VERSION := v3.8.0
+EDITORCONFIG_CHECKER_VERSION := v3.11.1
 # renovate: datasource=go depName=github.com/securego/gosec/v2/cmd/gosec
 GOSEC_VERSION := v2.28.0
 # renovate: datasource=go depName=honnef.co/go/tools/cmd/staticcheck
