@@ -43,18 +43,10 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: "3.x"
-
-      - name: Install Python dependencies
-        run: pip install pyyaml==6.0.3
-
       - name: golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
-          version: v2.12.2
+          version: v2.13.2
           install-mode: goinstall
 
       - name: Run integration tests and collect coverage
@@ -71,10 +63,10 @@ jobs:
       - name: Run PR Lint
         # Custom PR linting action that performs additional PR-specific checks
         # https://github.com/ivuorinen/actions
-        uses: ivuorinen/actions/pr-lint@de31e11dda6488eabe95e951ebb61c6d9d500865 # v2026.06.30
+        uses: ivuorinen/actions/pr-lint@7ade03bb39e406bc0876e000b08534418b6ca914 # v2026.08.28
 
-  pre-commit:
-    name: pre-commit
+  prek:
+    name: prek
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -91,13 +83,11 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
-      - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - name: Run prek hooks
+        # prek manages its own Python and hook environments, so this Go repo
+        # needs no Python setup. prek-version is pinned rather than left at the
+        # action's `latest` default; keep it in sync with PREK_VERSION in the
+        # Makefile.
+        uses: j178/prek-action@4e14d07f9231acabce116ccfca13b13dd9755ece # v3.0.0
         with:
-          python-version: "3.x"
-
-      - name: Install pre-commit
-        run: pip install pre-commit==4.6.0
-
-      - name: Run pre-commit on all files
-        run: pre-commit run --all-files --show-diff-on-failure
+          prek-version: 0.5.0

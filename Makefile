@@ -4,14 +4,14 @@
 .PHONY: ci ci-coverage test-verbose test-coverage update-deps fmt-md
 .PHONY: docs-api
 .PHONY: lint-go lint-md lint-yaml lint-actions lint-make
-.PHONY: security dev-setup pre-commit-setup
+.PHONY: security dev-setup prek-setup
 .PHONY: release-dry-run release release-snapshot release-check _check-tag
 
 # Tool versions (managed by Renovate)
 # renovate: datasource=go depName=github.com/goreleaser/goreleaser/v2
 GORELEASER_VERSION := v2.17.1
 # renovate: datasource=go depName=github.com/golangci/golangci-lint/v2/cmd/golangci-lint
-GOLANGCI_LINT_VERSION := v2.12.2
+GOLANGCI_LINT_VERSION := v2.13.2
 # renovate: datasource=go depName=github.com/google/yamlfmt/cmd/yamlfmt
 YAMLFMT_VERSION := v0.21.0
 # renovate: datasource=go depName=github.com/rhysd/actionlint/cmd/actionlint
@@ -35,6 +35,8 @@ MARKDOWNLINT_CLI2_VERSION := 0.23.2
 # renovate: datasource=go depName=github.com/princjef/gomarkdoc/cmd/gomarkdoc
 GOMARKDOC_VERSION := v1.1.0
 GOMARKDOC := go run github.com/princjef/gomarkdoc/cmd/gomarkdoc@$(GOMARKDOC_VERSION)
+# renovate: datasource=github-releases depName=j178/prek
+PREK_VERSION := v0.5.0
 
 # Public API packages documented by `make docs-api` (skips the root main package).
 API_PACKAGES := cmd constants fail2ban
@@ -89,10 +91,10 @@ fmt-check: ## Fail if any Go file is not gofmt-formatted (does not modify files)
 		{ echo "The following files are not gofmt-formatted:"; echo "$$unformatted"; exit 1; }
 
 fmt-md: ## Format Markdown files
-	@pre-commit run mdformat --all-files
+	@prek run mdformat --all-files
 
-lint: ## Run all linters using pre-commit (preferred method)
-	@pre-commit run --all-files
+lint: ## Run all linters using prek (preferred method)
+	@prek run --all-files
 
 lint-go: ## Run only Go linters
 	go vet ./...
@@ -128,11 +130,18 @@ clean: ## Clean build artifacts
 	go clean
 
 # Development targets
-dev-setup: pre-commit-setup ## Set up development environment
+dev-setup: prek-setup ## Set up development environment
 
-pre-commit-setup: ## Install and configure pre-commit hooks
-	@command -v pre-commit >/dev/null 2>&1 || pip install pre-commit
-	@pre-commit install
+# An installed prek satisfies `command -v` at ANY version, so a stale local
+# binary would silently disagree with the version CI pins. Warn on mismatch
+# rather than reinstall: prek is often managed by mise/brew, and overwriting a
+# developer's toolchain is worse than the drift it fixes.
+prek-setup: ## Install and configure prek git hooks
+	@command -v prek >/dev/null 2>&1 || curl --proto '=https' --tlsv1.2 -LsSf \
+		https://github.com/j178/prek/releases/download/$(PREK_VERSION)/prek-installer.sh | sh
+	@have="$$(prek --version 2>/dev/null | awk '{print $$NF}')"; want="$(PREK_VERSION:v%=%)"; \
+		[ "$$have" = "$$want" ] || printf 'warning: prek %s installed, pinned is %s\n' "$$have" "$$want" >&2
+	@prek install
 
 # Release targets
 release-dry-run: ## Test release process without creating artifacts
