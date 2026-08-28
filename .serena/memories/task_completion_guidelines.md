@@ -11,7 +11,7 @@
 make fmt                    # Go formatting
 
 # Run comprehensive linting (ALL must pass)
-make lint                   # Pre-commit unified linting
+make lint                   # prek unified linting
 # OR individually if debugging:
 make lint-go               # Go linting via golangci-lint
 make lint-md               # Markdown linting
@@ -83,7 +83,7 @@ Must pass ALL enabled linters:
 - Context: contextcheck, containedctx, durationcheck
 - Error handling: errorlint, errname, nilnil
 
-### Pre-commit Requirements (10+ hooks)
+### prek Hook Requirements (10+ hooks)
 
 ALL hooks must pass:
 

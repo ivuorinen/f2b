@@ -4,7 +4,7 @@
 .PHONY: ci ci-coverage test-verbose test-coverage update-deps fmt-md
 .PHONY: docs-api
 .PHONY: lint-go lint-md lint-yaml lint-actions lint-make
-.PHONY: security dev-setup pre-commit-setup
+.PHONY: security dev-setup prek-setup
 .PHONY: release-dry-run release release-snapshot release-check _check-tag
 
 # Tool versions (managed by Renovate)
@@ -89,10 +89,10 @@ fmt-check: ## Fail if any Go file is not gofmt-formatted (does not modify files)
 		{ echo "The following files are not gofmt-formatted:"; echo "$$unformatted"; exit 1; }
 
 fmt-md: ## Format Markdown files
-	@pre-commit run mdformat --all-files
+	@prek run mdformat --all-files
 
-lint: ## Run all linters using pre-commit (preferred method)
-	@pre-commit run --all-files
+lint: ## Run all linters using prek (preferred method)
+	@prek run --all-files
 
 lint-go: ## Run only Go linters
 	go vet ./...
@@ -128,11 +128,13 @@ clean: ## Clean build artifacts
 	go clean
 
 # Development targets
-dev-setup: pre-commit-setup ## Set up development environment
+dev-setup: prek-setup ## Set up development environment
 
-pre-commit-setup: ## Install and configure pre-commit hooks
-	@command -v pre-commit >/dev/null 2>&1 || pip install pre-commit
-	@pre-commit install
+prek-setup: ## Install and configure prek git hooks
+	@command -v prek >/dev/null 2>&1 || \
+		curl --proto '=https' --tlsv1.2 -LsSf \
+			https://github.com/j178/prek/releases/latest/download/prek-installer.sh | sh
+	@prek install
 
 # Release targets
 release-dry-run: ## Test release process without creating artifacts

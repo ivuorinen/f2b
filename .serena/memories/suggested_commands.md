@@ -12,12 +12,12 @@ make ci                  # Complete CI pipeline (format, lint, test)
 make update-deps         # Update all Go dependencies to latest versions
 
 # Linting (Essential for code quality)
-make lint                # Run all linters via pre-commit (PREFERRED)
-pre-commit run --all-files  # Alternative direct pre-commit usage
+make lint                # Run all linters via prek (PREFERRED)
+prek run --all-files     # Alternative direct prek usage
 
 # Setup (One-time)
 make dev-setup           # Complete development environment setup
-make pre-commit-setup    # Install pre-commit hooks only
+make prek-setup          # Install prek git hooks only
 ```
 
 ## Dependency Management (NEW)
@@ -69,8 +69,8 @@ go test ./fail2ban -run TestPath  # Path traversal tests
 ### Primary Method (Unified)
 
 ```bash
-make lint                        # Run ALL linters via pre-commit
-pre-commit run --all-files       # Direct pre-commit execution
+make lint                        # Run ALL linters via prek
+prek run --all-files             # Direct prek execution
 ```
 
 ### Individual Linters (Debugging)
@@ -93,12 +93,12 @@ actionlint .github/workflows/*.yml
 
 ```bash
 # Complete setup (recommended for new contributors)
-make dev-setup                   # Install all tools + pre-commit hooks
+make dev-setup                   # Install all tools + prek git hooks
 
 # Individual components
 make dev-deps                    # Install development dependencies
 make check-deps                  # Verify all tools installed
-make pre-commit-setup           # Install pre-commit hooks only
+make prek-setup                 # Install prek git hooks only
 ```
 
 ## Release Management
@@ -136,7 +136,7 @@ pwd                           # Current directory
 # Development tools
 go version                   # Shows Go version (e.g., go version go1.25.0 darwin/arm64)
 which golangci-lint          # Linter location
-which pre-commit             # Pre-commit location
+which prek                   # prek location
 ```
 
 ## Environment Variables

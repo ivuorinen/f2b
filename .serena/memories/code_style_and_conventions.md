@@ -42,4 +42,4 @@
 - `.golangci.yml`: Go linting configuration
 - `.markdownlint.json`: Markdown rules
 - `.yamlfmt.yaml`: YAML formatting
-- `.pre-commit-config.yaml`: Pre-commit hooks
+- `.pre-commit-config.yaml`: prek hooks

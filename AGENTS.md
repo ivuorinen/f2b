@@ -19,13 +19,13 @@ Use this guide to contribute effectively to f2b, the Go-based CLI for managing F
 - Run tests with coverage:
   `go test -covermode=atomic -coverprofile=coverage.out ./...`
   This generates a coverage profile with race-safe metrics.
-- `pre-commit run --all-files` applies formatting, linting, and link checks; run before every push.
+- `prek run --all-files` applies formatting, linting, and link checks; run before every push.
 - `make update-deps` refreshes Go dependencies when coordinating dependency upgrades.
 
 ## Coding Style & Naming Conventions
 
 - Follow `.editorconfig`: tabs for Go, two-space indentation elsewhere, max line length 120.
-- Format Go code with `gofmt` (automatically enforced by pre-commit); keep package aliases clear and explicit.
+- Format Go code with `gofmt` (automatically enforced by prek); keep package aliases clear and explicit.
 - Name tests as `<feature>_test.go` and exported Cobra command constructors as
   `<Feature>Cmd` (e.g. `BanCmd`, `StatusCmd`) for discoverability.
 - Keep docs concise and avoid hard-coded numeric claims unless required for accuracy.
@@ -42,7 +42,7 @@ Use this guide to contribute effectively to f2b, the Go-based CLI for managing F
 - Write semantic commits (`type(scope): message`) that describe the observable change, such as:
   `feat(cli): add logs-watch command`.
 - Include rationale, testing evidence, and configuration updates in PR descriptions; link issues when relevant.
-- Run `pre-commit run --all-files` and `go test ./...` before requesting review and mention the results.
+- Run `prek run --all-files` and `go test ./...` before requesting review and mention the results.
 - Keep PRs focused; split large features into reviewable increments and update docs alongside code.
 
 ## Agent Context Discipline (context-mode)

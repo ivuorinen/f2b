@@ -8,7 +8,7 @@ Claude Code **MUST** follow ALL instructions in [AGENTS.md](AGENTS.md) when work
 
 - **Security guidelines** - Never execute real sudo in tests, use mocks
 - **Code standards** - Follow .editorconfig, linting rules, testing patterns
-- **Development workflow** - Read config files first, run pre-commit checks
+- **Development workflow** - Read config files first, run prek checks
 
 ## Key References
 

@@ -351,7 +351,7 @@ For comprehensive testing guidelines, mock patterns, and security testing practi
 
 ### Code Quality & Linting
 
-This project uses [pre-commit](https://pre-commit.com/) for unified linting and formatting.
+This project uses [prek](https://github.com/j178/prek) for unified linting and formatting.
 Install the development dependencies and hooks:
 
 ```bash
@@ -365,8 +365,8 @@ Run all linters:
 make lint
 
 # Run specific hooks
-pre-commit run yamlfmt --all-files
-pre-commit run golangci-lint --all-files
+prek run yamlfmt --all-files
+prek run golangci-lint --all-files
 ```
 
 For detailed information about linting tools and configuration, see [docs/linting.md](docs/linting.md).

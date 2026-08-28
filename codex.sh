@@ -11,7 +11,7 @@ fi
 
 echo "Setting up development environment using Makefile..."
 
-# make dev-setup installs and configures pre-commit hooks; other tools
+# make dev-setup installs prek and configures its git hooks; other tools
 # (golangci-lint, yamlfmt, actionlint, ...) run on demand via `go run`
 # with versions pinned in the Makefile.
 make dev-setup
