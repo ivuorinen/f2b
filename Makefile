@@ -35,6 +35,8 @@ MARKDOWNLINT_CLI2_VERSION := 0.23.2
 # renovate: datasource=go depName=github.com/princjef/gomarkdoc/cmd/gomarkdoc
 GOMARKDOC_VERSION := v1.1.0
 GOMARKDOC := go run github.com/princjef/gomarkdoc/cmd/gomarkdoc@$(GOMARKDOC_VERSION)
+# renovate: datasource=github-releases depName=j178/prek
+PREK_VERSION := v0.5.0
 
 # Public API packages documented by `make docs-api` (skips the root main package).
 API_PACKAGES := cmd constants fail2ban
@@ -133,7 +135,7 @@ dev-setup: prek-setup ## Set up development environment
 prek-setup: ## Install and configure prek git hooks
 	@command -v prek >/dev/null 2>&1 || \
 		curl --proto '=https' --tlsv1.2 -LsSf \
-			https://github.com/j178/prek/releases/latest/download/prek-installer.sh | sh
+			https://github.com/j178/prek/releases/download/$(PREK_VERSION)/prek-installer.sh | sh
 	@prek install
 
 # Release targets

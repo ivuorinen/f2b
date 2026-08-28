@@ -32,9 +32,9 @@ make dev-setup
 
 ```bash
 make prek-setup
-# or manually:
+# or manually (keep the version in sync with PREK_VERSION in the Makefile):
 curl --proto '=https' --tlsv1.2 -LsSf \
-  https://github.com/j178/prek/releases/latest/download/prek-installer.sh | sh
+  https://github.com/j178/prek/releases/download/v0.5.0/prek-installer.sh | sh
 prek install
 ```
 
