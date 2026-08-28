@@ -37,15 +37,20 @@ func NewClientWithContext(ctx context.Context, logDir, filterDir string) (*RealC
 		}
 	}
 
-	// Resolve the absolute path to prevent PATH hijacking
-	resolvedPath, err := exec.LookPath(constants.Fail2BanClientCommand)
-	if err != nil {
-		if !IsTestEnvironment() {
+	// Tests always use the plain command name, so an injected mock runner
+	// receives the same argv on every host. Resolving here instead would make
+	// the argv depend on whether the machine happens to have fail2ban
+	// installed — the suite then passes on CI, where it is absent, and fails on
+	// a maintainer's workstation, where LookPath yields /usr/bin/fail2ban-client
+	// and no registered mock response matches.
+	resolvedPath := constants.Fail2BanClientCommand
+	if !IsTestEnvironment() {
+		// Resolve the absolute path to prevent PATH hijacking.
+		lookedUpPath, err := exec.LookPath(constants.Fail2BanClientCommand)
+		if err != nil {
 			return nil, fmt.Errorf("%s not found in PATH", constants.Fail2BanClientCommand)
 		}
-		// In tests the real binary may be absent; fall back to the plain command
-		// name so an injected mock runner still receives the expected argv.
-		resolvedPath = constants.Fail2BanClientCommand
+		resolvedPath = lookedUpPath
 	}
 
 	if logDir == "" {
