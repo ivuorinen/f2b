@@ -132,10 +132,15 @@ clean: ## Clean build artifacts
 # Development targets
 dev-setup: prek-setup ## Set up development environment
 
+# An installed prek satisfies `command -v` at ANY version, so a stale local
+# binary would silently disagree with the version CI pins. Warn on mismatch
+# rather than reinstall: prek is often managed by mise/brew, and overwriting a
+# developer's toolchain is worse than the drift it fixes.
 prek-setup: ## Install and configure prek git hooks
-	@command -v prek >/dev/null 2>&1 || \
-		curl --proto '=https' --tlsv1.2 -LsSf \
-			https://github.com/j178/prek/releases/download/$(PREK_VERSION)/prek-installer.sh | sh
+	@command -v prek >/dev/null 2>&1 || curl --proto '=https' --tlsv1.2 -LsSf \
+		https://github.com/j178/prek/releases/download/$(PREK_VERSION)/prek-installer.sh | sh
+	@have="$$(prek --version 2>/dev/null | awk '{print $$NF}')"; want="$(PREK_VERSION:v%=%)"; \
+		[ "$$have" = "$$want" ] || printf 'warning: prek %s installed, pinned is %s\n' "$$have" "$$want" >&2
 	@prek install
 
 # Release targets
