@@ -37,14 +37,18 @@ func NewClientWithContext(ctx context.Context, logDir, filterDir string) (*RealC
 		}
 	}
 
-	// Tests always use the plain command name, so an injected mock runner
-	// receives the same argv on every host. Resolving here instead would make
-	// the argv depend on whether the machine happens to have fail2ban
+	// Go test binaries always use the plain command name, so an injected mock
+	// runner receives the same argv on every host. Resolving here instead would
+	// make the argv depend on whether the machine happens to have fail2ban
 	// installed — the suite then passes on CI, where it is absent, and fails on
 	// a maintainer's workstation, where LookPath yields /usr/bin/fail2ban-client
 	// and no registered mock response matches.
+	//
+	// Gated on IsGoTestBinary, not IsTestEnvironment: the latter also trusts the
+	// GO_TEST/F2B_TEST/F2B_TEST_SUDO variables, and a bare command name set from
+	// an ordinary shell would hand PATH the choice of which binary sudo runs.
 	resolvedPath := constants.Fail2BanClientCommand
-	if !IsTestEnvironment() {
+	if !IsGoTestBinary() {
 		// Resolve the absolute path to prevent PATH hijacking.
 		lookedUpPath, err := exec.LookPath(constants.Fail2BanClientCommand)
 		if err != nil {

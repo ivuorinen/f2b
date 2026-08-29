@@ -105,6 +105,21 @@ func IsTestEnvironment() bool {
 	return flag.Lookup("test.v") != nil
 }
 
+// IsGoTestBinary reports whether this process is a `go test` binary, using only
+// the -test.v flag the testing package registers.
+//
+// Deliberately narrower than IsTestEnvironment, which also honors the
+// GO_TEST/F2B_TEST/F2B_TEST_SUDO opt-in. Those variables are settable in any
+// shell, so they must never gate anything that weakens command resolution:
+// leaving fail2ban-client as a bare name defers the lookup to exec's own PATH
+// search, which skips the trusted-directory pinning resolveCommandName applies
+// to absolute paths — the pinning that stops a hostile PATH from steering a
+// sudo-executed binary. Skipping sudo probing tolerates the env-var opt-in;
+// path resolution does not.
+func IsGoTestBinary() bool {
+	return flag.Lookup("test.v") != nil
+}
+
 // warnTestEnvOutsideGoTest rate-limits the production-shell warning above to
 // one occurrence per process.
 var warnTestEnvOutsideGoTest sync.Once
