@@ -19,7 +19,7 @@ ACTIONLINT_VERSION := v1.7.12
 # renovate: datasource=go depName=golang.org/x/tools/cmd/goimports
 GOIMPORTS_VERSION := v0.42.0
 # renovate: datasource=go depName=github.com/editorconfig-checker/editorconfig-checker/v3/cmd/editorconfig-checker
-EDITORCONFIG_CHECKER_VERSION := v3.11.2
+EDITORCONFIG_CHECKER_VERSION := v3.11.3
 # renovate: datasource=go depName=github.com/securego/gosec/v2/cmd/gosec
 GOSEC_VERSION := v2.29.0
 # renovate: datasource=go depName=honnef.co/go/tools/cmd/staticcheck
@@ -36,7 +36,7 @@ MARKDOWNLINT_CLI2_VERSION := 0.23.2
 GOMARKDOC_VERSION := v1.1.0
 GOMARKDOC := go run github.com/princjef/gomarkdoc/cmd/gomarkdoc@$(GOMARKDOC_VERSION)
 # renovate: datasource=github-releases depName=j178/prek
-PREK_VERSION := v0.5.0
+PREK_VERSION := v0.5.2
 
 # Public API packages documented by `make docs-api` (skips the root main package).
 API_PACKAGES := cmd constants fail2ban
