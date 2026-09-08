@@ -86,7 +86,7 @@ repos:
         args: ["--verbose"]
 
   - repo: https://github.com/editorconfig-checker/editorconfig-checker
-    rev: v3.11.1
+    rev: v3.11.3
     hooks:
       - id: editorconfig-checker
         exclude: ^docs/(api|audit)/ # generated (docs/api) / machine-managed (docs/audit)
