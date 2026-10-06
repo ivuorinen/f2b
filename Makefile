@@ -36,7 +36,7 @@ MARKDOWNLINT_CLI2_VERSION := 0.23.3
 GOMARKDOC_VERSION := v1.1.0
 GOMARKDOC := go run github.com/princjef/gomarkdoc/cmd/gomarkdoc@$(GOMARKDOC_VERSION)
 # renovate: datasource=github-releases depName=j178/prek
-PREK_VERSION := v0.5.3
+PREK_VERSION := v0.5.4
 
 # Public API packages documented by `make docs-api` (skips the root main package).
 API_PACKAGES := cmd constants fail2ban
