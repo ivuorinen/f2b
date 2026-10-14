@@ -9,7 +9,7 @@
 
 # Tool versions (managed by Renovate)
 # renovate: datasource=go depName=github.com/goreleaser/goreleaser/v2
-GORELEASER_VERSION := v2.18.2
+GORELEASER_VERSION := v2.18.3
 # renovate: datasource=go depName=github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 GOLANGCI_LINT_VERSION := v2.14.0
 # renovate: datasource=go depName=github.com/google/yamlfmt/cmd/yamlfmt
@@ -25,7 +25,7 @@ GOSEC_VERSION := v2.29.0
 # renovate: datasource=go depName=honnef.co/go/tools/cmd/staticcheck
 STATICCHECK_VERSION := v0.8.1
 # renovate: datasource=go depName=github.com/mgechev/revive
-REVIVE_VERSION := v1.17.0
+REVIVE_VERSION := v1.17.1
 # renovate: datasource=go depName=github.com/checkmake/checkmake/cmd/checkmake
 CHECKMAKE_VERSION := v0.3.2
 # renovate: datasource=go depName=github.com/segmentio/golines
@@ -36,7 +36,7 @@ MARKDOWNLINT_CLI2_VERSION := 0.23.3
 GOMARKDOC_VERSION := v1.1.0
 GOMARKDOC := go run github.com/princjef/gomarkdoc/cmd/gomarkdoc@$(GOMARKDOC_VERSION)
 # renovate: datasource=github-releases depName=j178/prek
-PREK_VERSION := v0.5.4
+PREK_VERSION := v0.5.5
 
 # Public API packages documented by `make docs-api` (skips the root main package).
 API_PACKAGES := cmd constants fail2ban
