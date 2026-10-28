@@ -60,6 +60,9 @@ ______________________________________________________________________
 - Jail names are now treated as case-sensitive and passed through verbatim,
   matching fail2ban semantics.
 - Bumped Go to 1.26.
+- Development tasks and tool pins moved from the Makefile to `mise.toml`, and
+  `codex.sh` is removed. The prek hooks and CI workflows run every tool through
+  mise, so `mise.toml` is the only version pin.
 
 ### Removed
 

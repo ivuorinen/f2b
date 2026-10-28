@@ -16,3 +16,7 @@ dist/*
 !fail2ban/testdata/*
 /.claude/settings.local.json
 graphify-out/
+# mise lockfile and its npm/pypi dependency locks, written locally when the
+# global `lockfile` setting is on; nothing in this repo or Renovate maintains it
+mise.lock
+/.mise/

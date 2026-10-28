@@ -420,7 +420,7 @@ func TestSecurityAudit_PrivilegeEscalation(t *testing.T) {
 func TestSecurityAudit_ConcurrentSafety(t *testing.T) {
 	t.Run("GlobalStateRaceConditions", func(t *testing.T) {
 		// Test that global state modifications are safe. The race detector
-		// (go test -race, run by `make test` and CI) is the real oracle for
+		// (go test -race, run by `mise run test-race` and CI) is the real oracle for
 		// the interleaving; the assertion below catches torn/aggregate-state
 		// corruption even without it.
 		originalLogDir := fail2ban.GetLogDir()

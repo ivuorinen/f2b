@@ -16,11 +16,10 @@ Use this guide to contribute effectively to f2b, the Go-based CLI for managing F
 - Build the CLI with:
   `go build -ldflags "-X github.com/ivuorinen/f2b/cmd.Version=1.2.3" -o f2b .`
   This embeds the release version string in the binary.
-- Run tests with coverage:
-  `go test -covermode=atomic -coverprofile=coverage.out ./...`
-  This generates a coverage profile with race-safe metrics.
+- Run tests with coverage: `mise run test-cov` (race-enabled, writes `coverage.out`).
 - `prek run --all-files` applies formatting, linting, and link checks; run before every push.
-- `make update-deps` refreshes Go dependencies when coordinating dependency upgrades.
+- `mise run update` refreshes Go dependencies and the `mise.toml` tool pins when coordinating upgrades.
+- Tool versions live only in `mise.toml`; the prek hooks and CI workflows run them through mise.
 
 ## Coding Style & Naming Conventions
 
@@ -42,7 +41,7 @@ Use this guide to contribute effectively to f2b, the Go-based CLI for managing F
 - Write semantic commits (`type(scope): message`) that describe the observable change, such as:
   `feat(cli): add logs-watch command`.
 - Include rationale, testing evidence, and configuration updates in PR descriptions; link issues when relevant.
-- Run `prek run --all-files` and `go test ./...` before requesting review and mention the results.
+- Run `prek run --all-files` and `mise run test-race` before requesting review and mention the results.
 - Keep PRs focused; split large features into reviewable increments and update docs alongside code.
 
 ## Agent Context Discipline (context-mode)

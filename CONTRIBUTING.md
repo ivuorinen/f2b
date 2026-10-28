@@ -13,11 +13,14 @@ ______________________________________________________________________
 - **Feature Requests:** Describe the problem you want to solve and your proposed solution.
 - **Questions:** If you’re unsure about something, open an issue for discussion.
 
-### 2. Fork and Branch
+### 2. Fork, Branch and Set Up
 
 - Fork the repository to your own GitHub account.
 - Create a new branch for your change:
   `git checkout -b my-feature-branch`
+- Install [mise](https://mise.jdx.dev/) and run `mise install` (Go from `go.mod`,
+  [prek](https://github.com/j178/prek) and the Go tools from `mise.toml`), then
+  `mise run setup` to install the pre-commit hook.
 
 ### 3. Make Your Changes
 
@@ -28,12 +31,14 @@ ______________________________________________________________________
 - Add or update tests for your changes, including privilege scenarios.
 - Update documentation and usage examples as needed.
 
-### 4. Run Tests
+### 4. Lint and Test
 
-- Ensure all tests pass before submitting:
+- Run the linters (golangci-lint, yamlfmt, markdownlint-cli2, actionlint, shfmt,
+  checkov, editorconfig-checker, mdformat) and the race-enabled tests that CI runs:
 
 ```bash
-go test ./...
+mise run hooks       # prek run --all-files
+mise run test-race   # go test -race ./...
 ```
 
 ### 5. Commit and Push

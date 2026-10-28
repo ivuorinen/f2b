@@ -6,7 +6,8 @@ This document describes the linting and code quality tools used in the f2b proje
 
 The project uses a unified [prek](https://github.com/j178/prek) approach for linting and code quality, ensuring
 consistency across development, CI, and git hooks. prek is a fast Rust reimplementation of pre-commit; it reads the
-same `.pre-commit-config.yaml` and manages its own hook environments, so no Python setup is required.
+same `.pre-commit-config.yaml`. The hooks pin no versions: the file checks are prek built-ins, and every other hook
+runs its tool from `mise.toml` through `mise exec` or `mise run`.
 
 ### Supported Tools
 
@@ -16,57 +17,38 @@ same `.pre-commit-config.yaml` and manages its own hook environments, so no Pyth
 - **Shell**: `shfmt`
 - **GitHub Actions**: `actionlint`, `check-github-workflows`
 - **EditorConfig**: `editorconfig-checker`
-- **Makefile**: `checkmake`
 - **Infrastructure/security**: `checkov`
-- **Hook hygiene**: `sync-pre-commit-deps`, standard `pre-commit-hooks` file checks
+- **Hook hygiene**: prek's built-in `pre-commit-hooks` file checks
 
 ## Quick Start
 
 ### Install Development Dependencies
 
-```bash
-make dev-setup
-```
-
-### Set Up prek (Recommended)
+[mise](https://mise.jdx.dev/) installs the tools pinned in `mise.toml` (prek,
+golangci-lint and the other Go tools); Go itself comes from `go.mod`.
 
 ```bash
-make prek-setup
-# or manually (keep the version in sync with PREK_VERSION in the Makefile):
-curl --proto '=https' --tlsv1.2 -LsSf \
-  https://github.com/j178/prek/releases/download/v0.5.0/prek-installer.sh | sh
-prek install
+mise install
+mise run setup   # installs the pre-commit hook
 ```
 
 ### Run All Linters
 
-**Preferred Method (Unified Tooling):**
-
 ```bash
-# Run all linting and formatting checks
-make lint
+# Run every hook: linting and formatting checks
+mise run hooks
 
-# Run only the Go linters
-make lint-go
+# Run only the Go checks (gofmt, go vet, golangci-lint)
+mise run lint
 ```
 
 **Individual Hooks:**
 
 ```bash
-# Run specific hook
 prek run yamlfmt --all-files
 prek run golangci-lint --all-files
 prek run markdownlint-cli2 --all-files
-prek run checkmake --all-files
-```
-
-**Individual Tool Commands:**
-
-```bash
-make lint-go           # Go only
-make lint-yaml         # YAML only
-make lint-actions      # GitHub Actions only
-make lint-make         # Makefile only
+prek run actionlint --all-files
 ```
 
 ## Configuration Files
@@ -88,7 +70,7 @@ make lint-make         # Makefile only
 - **Purpose**: Comprehensive Go linting with multiple analyzers
 - **Configuration**: `.golangci.yml`
 - **Features**: 50+ linters, fast caching, detailed reporting
-- **Hook**: `golangci-lint`
+- **Hook**: `golangci-lint` (runs `mise run lint`)
 
 ### Markdown Linting
 
@@ -167,45 +149,24 @@ make lint-make         # Makefile only
 - **Features**: Checks indentation, final newlines, encoding
 - **Hook**: `editorconfig-checker`
 
-### Makefile Linting
-
-#### checkmake (official repo)
-
-- **Purpose**: Makefile syntax and best practices validation
-- **Configuration**: Default rules (no config file needed)
-- **Features**:
-  - Checks for missing `.PHONY` declarations
-  - Validates target dependencies
-  - Enforces Makefile best practices
-  - Detects syntax errors and common mistakes
-- **Hook**: `checkmake`
-- **Manual Usage**: `checkmake Makefile`
-
 ## prek Integration
 
 The project uses `.pre-commit-config.yaml` for unified tooling:
 
 ### Hook Sources
 
-- **pre-commit/pre-commit-hooks**: Basic file checks
-- **pre-commit/sync-pre-commit-deps**: Keeps hook dependency pins in sync
-- **google/yamlfmt**: Official YAML formatter
-- **DavidAnson/markdownlint-cli2**: Markdown linter
-- **hukkin/mdformat**: Markdown formatter
-- **tcort/markdown-link-check**: Markdown link checker
-- **rhysd/actionlint**: GitHub Actions linter
-- **scop/pre-commit-shfmt**: Shell formatter
-- **checkmake/checkmake**: Official Makefile linter
-- **bridgecrewio/checkov**: Infrastructure/CI security scanner
-- **python-jsonschema/check-jsonschema**: Workflow schema validation
-- **editorconfig-checker/editorconfig-checker**: EditorConfig compliance
-- **local**: `golangci-lint` (run via `go run`)
+- **`repo: builtin`**: prek's own implementations of the pre-commit-hooks file checks
+  (whitespace, end of file, line endings, YAML/JSON syntax, large files, merge
+  conflicts, shebang permissions), versioned with prek
+- **`repo: local`**: `golangci-lint` (runs `mise run lint`), yamlfmt,
+  markdownlint-cli2, mdformat, markdown-link-check, actionlint, shfmt, checkov,
+  check-jsonschema and editorconfig-checker, each run with `mise exec --`
 
 ### Automatic Setup
 
 ```bash
-# Install prek and its git hooks
-make prek-setup
+# Install prek's git hooks (prek itself comes from `mise install`)
+mise run setup
 
 # Hooks will run automatically on commit
 git commit -m "your changes"
@@ -220,27 +181,27 @@ prek run --all-files
 # Run specific hook
 prek run yamlfmt
 prek run golangci-lint
-prek run checkmake
 
-# Update hook versions
-prek update
+# Update the tools the hooks run (versions live in mise.toml)
+mise run update
 ```
 
 ## CI Integration
 
 ### GitHub Actions
 
-CI lints Go code directly with the golangci-lint action, and runs the hooks
-via the official prek action (no Python setup needed):
+CI installs a pinned mise with `jdx/mise-action` and runs the same tasks as a
+local checkout, so every tool runs at its `mise.toml` version:
 
-- **`.github/workflows/lint.yml`**: Main linting workflow
-- **`.github/workflows/pr-lint.yml`**: Pull request linting
+- **`.github/workflows/lint.yml`**: `mise run lint` and `mise run test-race` on `main`
+- **`.github/workflows/pr-lint.yml`**: `mise run lint`, `mise run docs-api`,
+  `mise run test-cov` and `mise run hooks` on pull requests
 
 ### Workflow Features
 
-- `golangci/golangci-lint-action@v9.3.0` step (pinned by commit SHA)
-- Go environment setup and built-in caching
-- Same `.golangci.yml` configuration as local `make lint-go`
+- No per-tool Actions or version inputs: `mise.toml` is the only tool pin
+- mise-action caches the tool installs (except in the release workflow)
+- Same `.golangci.yml` configuration as local `mise run lint`
 
 ## Development Workflow
 
@@ -307,11 +268,12 @@ Comprehensive Go linting configuration with timeout settings and enabled/disable
 
 ## Schema Support
 
-All YAML files include schema references for better IDE support:
+Workflow, pre-commit and tool configuration YAML files include schema references
+for IDE support:
 
 - **GitHub workflows**: `$schema=https://json.schemastore.org/github-workflow.json`
 - **Pre-commit config**: `$schema=https://json.schemastore.org/pre-commit-config.json`
-- **GitHub labels**: `$schema=https://json.schemastore.org/github-labels.json`
+- **GoReleaser config**: `$schema=https://goreleaser.com/static/schema.json`
 
 ## Troubleshooting
 
@@ -323,7 +285,7 @@ All YAML files include schema references for better IDE support:
 
 #### "command not found" errors
 
-**Solution**: Run `make dev-setup` (which runs `make prek-setup`)
+**Solution**: Run `mise install`, then `mise run setup`
 
 #### YAML formatting differences
 
@@ -357,9 +319,8 @@ All YAML files include schema references for better IDE support:
 
 ### Tool Installation
 
-- All tools installed from official repositories
-- Versions pinned in `.pre-commit-config.yaml`
-- Dependencies verified before execution
+- All tools installed by mise from their official releases or package registries
+- Versions pinned only in `mise.toml`; Renovate bumps them
 
 ### Code Analysis
 
@@ -371,7 +332,7 @@ All YAML files include schema references for better IDE support:
 
 ### Optimization Tips
 
-- prek caches tool installations
+- mise installs each tool once and reuses it
 - Hooks run in parallel when possible
 - Use `golangci-lint` cache for faster Go linting
 - Skip unchanged files automatically
@@ -379,6 +340,6 @@ All YAML files include schema references for better IDE support:
 ### Benefits of prek
 
 - **Consistency**: Same tools in dev, CI, and git hooks
-- **Speed**: Cached tool installations
-- **Reliability**: No version mismatches
+- **Speed**: Tools installed once by mise
+- **Reliability**: No version mismatches: one pin per tool, in `mise.toml`
 - **Maintenance**: Centralized configuration

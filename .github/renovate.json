@@ -3,44 +3,5 @@
   "extends": [
     "github>ivuorinen/renovate-config",
     "schedule:weekly"
-  ],
-  "customManagers": [
-    {
-      "customType": "regex",
-      "managerFilePatterns": [
-        "^Makefile$",
-        ".*\\.mk$"
-      ],
-      "matchStrings": [
-        "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)\\n[A-Z_]+\\s*:?=\\s*(?<currentValue>v?\\d+\\.\\d+\\.\\d+\\S*)"
-      ],
-      "versioningTemplate": "semver"
-    },
-    {
-      "customType": "regex",
-      "managerFilePatterns": [
-        "^\\.github/workflows/release\\.yml$"
-      ],
-      "matchStrings": [
-        "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)\\n\\s*version:\\s*\"?(?<currentValue>v?\\d+\\.\\d+\\.\\d+\\S*?)\"?\\n"
-      ],
-      "versioningTemplate": "semver"
-    }
-  ],
-  "minimumReleaseAge": "3 days",
-  "packageRules": [
-    {
-      "matchManagers": [
-        "custom.regex"
-      ],
-      "matchFileNames": [
-        "Makefile",
-        "**/*.mk"
-      ],
-      "groupName": "development tools",
-      "schedule": [
-        "before 6am on monday"
-      ]
-    }
   ]
 }

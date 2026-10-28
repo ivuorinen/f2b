@@ -19,8 +19,8 @@ Claude Code **MUST** follow ALL instructions in [AGENTS.md](AGENTS.md) when work
 
 ## Current Project Status
 
-Run `make ci` (or check the CI badges in the README) for the current build,
-lint, coverage, and test status. Avoid hard-coding point-in-time numbers here.
+Run `mise run all` (or check the CI badges in the README) for the current build,
+lint, vulnerability, and test status.
 
 - **Go Version**: see `go.mod` for the authoritative version.
 
