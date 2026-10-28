@@ -445,11 +445,15 @@ func (result *CommandTestResult) AssertExactOutput(expected string) *CommandTest
 	return result
 }
 
+// errTestJSONFieldMismatch is the template for JSON field mismatches. It is a
+// test-only string, so it lives here rather than in the production constants.
+const errTestJSONFieldMismatch = "%s: expected JSON field %q to be %q, got %v"
+
 // checkJSONFieldValue validates that a JSON field value matches the expected string.
 func (result *CommandTestResult) checkJSONFieldValue(val any, fieldName, expected string) {
 	result.t.Helper()
 	if fmt.Sprintf("%v", val) != expected {
-		result.t.Fatalf(constants.ErrTestJSONFieldMismatch, result.name, fieldName, expected, val)
+		result.t.Fatalf(errTestJSONFieldMismatch, result.name, fieldName, expected, val)
 	}
 }
 

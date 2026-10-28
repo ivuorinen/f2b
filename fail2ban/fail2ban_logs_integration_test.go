@@ -28,7 +28,7 @@ func TestIntegrationFullLogProcessing(t *testing.T) {
 // testProcessFullLog tests processing of the entire log file
 func testProcessFullLog(t *testing.T) {
 	start := time.Now()
-	lines, err := GetLogLines(context.Background(), "", "")
+	lines, err := readLogs(context.Background(), "", "")
 	duration := time.Since(start)
 
 	if err != nil {
@@ -50,7 +50,7 @@ func testProcessFullLog(t *testing.T) {
 
 // testExtractBanEvents tests extraction of ban/unban events
 func testExtractBanEvents(t *testing.T) {
-	lines, err := GetLogLines(context.Background(), "sshd", "")
+	lines, err := readLogs(context.Background(), "sshd", "")
 	if err != nil {
 		t.Fatalf("Failed to get log lines: %v", err)
 	}
@@ -74,7 +74,7 @@ func testExtractBanEvents(t *testing.T) {
 // testTrackPersistentAttacker tests tracking a specific attacker across the log
 func testTrackPersistentAttacker(t *testing.T) {
 	// Track 192.168.1.100 (most frequent attacker)
-	lines, err := GetLogLines(context.Background(), "", "192.168.1.100")
+	lines, err := readLogs(context.Background(), "", "192.168.1.100")
 	if err != nil {
 		t.Fatalf("Failed to filter by IP: %v", err)
 	}
@@ -157,7 +157,7 @@ func TestIntegrationConcurrentLogReading(t *testing.T) {
 				ip = "10.0.0.50"
 			}
 
-			lines, err := GetLogLines(context.Background(), jail, ip)
+			lines, err := readLogs(context.Background(), jail, ip)
 			if err != nil {
 				errors <- err
 				return
@@ -252,10 +252,8 @@ func TestIntegrationCompressedLogReading(t *testing.T) {
 		t.Fatal("checked-in compressed test data file missing:", compressedLog)
 	}
 
-	detector := NewGzipDetector()
-
 	// Test 1: Detect gzip file
-	isGzip, err := detector.IsGzipFile(compressedLog)
+	isGzip, err := isGzipFile(compressedLog)
 	if err != nil {
 		t.Fatalf("Failed to detect gzip: %v", err)
 	}
@@ -264,7 +262,7 @@ func TestIntegrationCompressedLogReading(t *testing.T) {
 	}
 
 	// Test 2: Read compressed content
-	scanner, cleanup, err := detector.CreateGzipAwareScanner(compressedLog)
+	scanner, cleanup, err := createGzipAwareScanner(compressedLog, 0)
 	if err != nil {
 		t.Fatalf("Failed to create scanner: %v", err)
 	}
@@ -300,7 +298,7 @@ func TestIntegrationMultiJailLogProcessing(t *testing.T) {
 
 	totalLines := 0
 	for _, jail := range jails {
-		lines, err := GetLogLines(context.Background(), jail, "")
+		lines, err := readLogs(context.Background(), jail, "")
 		if err != nil {
 			t.Errorf("Error processing jail %s: %v", jail, err)
 			continue
@@ -330,7 +328,7 @@ func TestIntegrationMemoryUsage(t *testing.T) {
 
 	// Process log multiple times to check for leaks
 	for i := range 10 {
-		lines, err := GetLogLines(context.Background(), "", "")
+		lines, err := readLogs(context.Background(), "", "")
 		if err != nil {
 			t.Fatalf("Iteration %d failed: %v", i, err)
 		}
@@ -407,7 +405,7 @@ func BenchmarkLogParsing(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		_, err := GetLogLines(context.Background(), "sshd", "")
+		_, err := readLogs(context.Background(), "sshd", "")
 		if err != nil {
 			b.Fatalf("Benchmark failed: %v", err)
 		}

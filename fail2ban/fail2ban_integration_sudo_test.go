@@ -1,6 +1,7 @@
 package fail2ban
 
 import (
+	"context"
 	"slices"
 	"strings"
 	"testing"
@@ -24,21 +25,21 @@ func testClientOperations(t *testing.T, client Client, expectOperationErr bool) 
 		{
 			name: "ban IP",
 			op: func() error {
-				_, err := client.BanIP("192.168.1.100", "sshd")
+				_, err := client.BanIPWithContext(context.Background(), "192.168.1.100", "sshd")
 				return err
 			},
 		},
 		{
 			name: "unban IP",
 			op: func() error {
-				_, err := client.UnbanIP("192.168.1.100", "sshd")
+				_, err := client.UnbanIPWithContext(context.Background(), "192.168.1.100", "sshd")
 				return err
 			},
 		},
 		{
 			name: "check banned",
 			op: func() error {
-				_, err := client.BannedIn("192.168.1.100")
+				_, err := client.BannedInWithContext(context.Background(), "192.168.1.100")
 				return err
 			},
 		},

@@ -66,10 +66,29 @@ ______________________________________________________________________
 - Bumped Go to 1.26.
 - Toolchain go1.27.3 (language floor stays `go 1.26`); golangci-lint v2.15.0,
   goreleaser v2.19.0, gosec v2.30.0, prek v0.5.7, and current action pins.
+- **Security**: log directories are restricted to `/var/log` and filter
+  directories to `/etc/fail2ban`, `/usr/local/etc/fail2ban` and
+  `/opt/fail2ban` (`/home`, `/opt`, `/usr/local` trees are no longer allowed),
+  because `test-filter` makes root read the filter's logpath.
 - goreleaser no longer pushes a Homebrew formula (`brews` removed):
   ivuorinen/homebrew-tap generates it from the release's binaries.
 - Releases publish raw binaries (`f2b_<os>-<arch>`) instead of archives, for
   Linux amd64/arm64/armv6/armv7, macOS amd64/arm64 and Windows amd64.
+- **BREAKING**: `banned --format json` uses lowercase keys (`jail`, `ip`,
+  `banned_at`, `remaining`) like the `ban`/`unban` JSON output.
+- **BREAKING (for external importers)**: every `fail2ban.Client` method takes a
+  `context.Context` (the context-free twins are gone) and the interface gains
+  `GetLogLinesWithLimitContext`. `ContextualLogger.LogOperation` passes the
+  enriched context to its callback, `PrintOutput`/`PrintOutputTo` return an
+  error, `SetLogger` takes a `LoggerEntry`, `OperationType.MetricsType` is now
+  `Operation`, and validators that ignored their context argument no longer
+  take one.
+- `logs` prints one line per entry (it printed a single Go-formatted slice),
+  returns the newest lines across rotated logs, and honors a `--limit` above
+  the default.
+- A failed write to stdout is returned as the command's error and sets the exit
+  status.
+- `--log-level` help lists every accepted level.
 - Release notes exclude scoped `chore(...)`, `docs(...)` and `test(...)` commits.
 - Development tasks and tool pins moved from the Makefile to `mise.toml`, and
   `codex.sh` is removed. The prek hooks and CI workflows run every tool through
@@ -84,6 +103,15 @@ ______________________________________________________________________
 - Release builds for the BSDs, Linux 386/mips64/mips64le/ppc64le/s390x and
   Windows 386/arm64, the `ghcr.io/ivuorinen/f2b` container image, and the
   deb/rpm/apk packages.
+- Go API: `HandlePermissionError`, `NewPermissionError` and the unused error
+  categories; `ProcessOperation`, `ProcessBanOperation`,
+  `ProcessUnbanOperation` and their non-context parallel variants;
+  `OutputResults` and `TrimmedOutput`; the package-level `GetLogLines`
+  functions, `OptimizedLogProcessor` and the `GzipDetector` type; the
+  `RunnerCombinedOutput*` helpers other than the sudo-context one;
+  `ConfigureCITestLogging`, `LoggerInterface` and `LogCollectionConfig`; the ban
+  record parser's object pools and `GetStats`; the `cmd` wrappers around the
+  `fail2ban` context helpers; `ValidateFilterName` (use `ValidateFilter`).
 
 ### Security
 
@@ -92,6 +120,7 @@ ______________________________________________________________________
 - **Test isolation**: Comprehensive mocking prevents accidental privileged operations in tests
 - **Principle of least privilege**: Escalates via sudo only for commands that touch the
   root-only fail2ban socket — which is every `fail2ban-client` subcommand except `-V`/no-args
+- `--log-file` must be inside the allowed log directories.
 
 ### Fixed
 
@@ -104,5 +133,11 @@ ______________________________________________________________________
   name and never matched.
 - A sudoers grant scoped to `fail2ban-client` is accepted (`sudo -n -l fail2ban-client`), not only unrestricted sudo.
 - A canceled command no longer blocks on an orphaned child of sudo.
+- `ban`, `unban` and `test <ip>` parse the last output line of
+  `fail2ban-client`, so warnings on stderr no longer break them.
+- `service` and `banned all` honor Ctrl-C and their timeouts; the client is
+  built under the caller's context.
+- `logs` reports an error when no log file could be read instead of an empty
+  result.
 
 ______________________________________________________________________

@@ -77,13 +77,6 @@ func (btc *BoundedTimeCache) evictEntries() {
 	}).Debug("Evicted time cache entries")
 }
 
-// Size returns the current number of entries in the cache
-func (btc *BoundedTimeCache) Size() int {
-	btc.mu.RLock()
-	defer btc.mu.RUnlock()
-	return len(btc.cache)
-}
-
 // ParseWithLayout parses a time string using the specified layout with caching.
 //
 // The cache key includes the layout: the parsed time depends on it, and a key

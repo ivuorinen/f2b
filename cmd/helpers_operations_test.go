@@ -1,12 +1,10 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"testing"
 
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/ivuorinen/f2b/constants"
@@ -55,106 +53,6 @@ func TestGetJailsFromArgs(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expectJails, jails)
-			}
-		})
-	}
-}
-
-// TestHandlePermissionError tests permission error handling
-func TestHandlePermissionError(t *testing.T) {
-	tests := []struct {
-		name           string
-		inputErr       error
-		expectNil      bool
-		expectContains string
-	}{
-		{
-			name:      "nil error returns nil",
-			inputErr:  nil,
-			expectNil: true,
-		},
-		{
-			name:           "permission denied error",
-			inputErr:       errors.New("permission denied"),
-			expectNil:      false,
-			expectContains: "permission denied",
-		},
-		{
-			name:           "sudo error",
-			inputErr:       errors.New("sudo required"),
-			expectNil:      false,
-			expectContains: "sudo",
-		},
-		{
-			name:           "generic error gets categorized",
-			inputErr:       errors.New("generic error"),
-			expectNil:      false,
-			expectContains: "error",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := HandlePermissionError(tt.inputErr)
-
-			if tt.expectNil {
-				assert.Nil(t, result)
-			} else {
-				assert.NotNil(t, result)
-				if tt.expectContains != "" {
-					assert.Contains(t, result.Error(), tt.expectContains)
-				}
-			}
-		})
-	}
-}
-
-// TestOutputResults tests result output formatting
-func TestOutputResults(t *testing.T) {
-	tests := []struct {
-		name        string
-		results     any
-		format      string
-		wantContain []string
-	}{
-		{
-			name:        "json format output",
-			results:     map[string]string{"status": "ok"},
-			format:      JSONFormat,
-			wantContain: []string{`"status"`, `"ok"`},
-		},
-		{
-			name:        "plain format output",
-			results:     "plain text output",
-			format:      PlainFormat,
-			wantContain: []string{"plain text output"},
-		},
-		{
-			name:        "nil config uses plain format",
-			results:     "test output",
-			format:      "",
-			wantContain: []string{"test output"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create command with output buffer
-			cmd := &cobra.Command{}
-			var buf bytes.Buffer
-			cmd.SetOut(&buf)
-
-			var config *Config
-			if tt.format != "" {
-				config = &Config{Format: tt.format}
-			}
-
-			OutputResults(cmd, tt.results, config)
-
-			// Assert the rendered content, not merely that something was written.
-			output := buf.String()
-			for _, want := range tt.wantContain {
-				assert.Contains(t, output, want)
 			}
 		})
 	}
@@ -223,11 +121,11 @@ func TestProcessUnbanOperation(t *testing.T) {
 			mockClient := fail2ban.NewMockClient()
 			tt.setupMock(mockClient)
 
-			results, err := ProcessUnbanOperation(mockClient, tt.ip, tt.jails)
+			results, err := ProcessUnbanOperationWithContext(context.Background(), mockClient, tt.ip, tt.jails)
 
 			if tt.expectError {
 				assert.Error(t, err)
-				assert.Nil(t, results)
+				assert.Empty(t, results)
 			} else {
 				assert.NoError(t, err)
 				assert.Len(t, results, tt.expectCount)
@@ -239,53 +137,6 @@ func TestProcessUnbanOperation(t *testing.T) {
 					assert.NotEmpty(t, result.Status)
 				}
 			}
-		})
-	}
-}
-
-// TestTrimmedOutput tests output trimming
-func TestTrimmedOutput(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    []byte
-		expected string
-	}{
-		{
-			name:     "trims leading whitespace",
-			input:    []byte("  output"),
-			expected: "output",
-		},
-		{
-			name:     "trims trailing whitespace",
-			input:    []byte("output  "),
-			expected: "output",
-		},
-		{
-			name:     "trims both sides",
-			input:    []byte("  output  "),
-			expected: "output",
-		},
-		{
-			name:     "trims newlines",
-			input:    []byte("\noutput\n"),
-			expected: "output",
-		},
-		{
-			name:     "empty input",
-			input:    []byte(""),
-			expected: "",
-		},
-		{
-			name:     "whitespace only",
-			input:    []byte("   \n\t  "),
-			expected: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := TrimmedOutput(tt.input)
-			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -330,10 +181,10 @@ func TestInterpretBanStatus(t *testing.T) {
 		operation string
 		expected  string
 	}{
-		{"ban operation code 0", 0, constants.MetricsBan, "Banned"},
-		{"ban operation code 1", 1, constants.MetricsBan, "Already banned"},
-		{"unban operation code 0", 0, constants.MetricsUnban, "Unbanned"},
-		{"unban operation code 1", 1, constants.MetricsUnban, "Already unbanned"},
+		{"ban operation code 0", 0, constants.OpBan, "Banned"},
+		{"ban operation code 1", 1, constants.OpBan, "Already banned"},
+		{"unban operation code 0", 0, constants.OpUnban, "Unbanned"},
+		{"unban operation code 1", 1, constants.OpUnban, "Already unbanned"},
 		{"unknown operation", 0, "unknown", "Unknown"},
 		{"unknown operation code 1", 1, "unknown", "Unknown"},
 	}

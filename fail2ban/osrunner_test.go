@@ -41,9 +41,9 @@ func TestGetLogLinesMethod(t *testing.T) {
 	}
 
 	// Empty log dir: no lines, no error.
-	lines, err := client.GetLogLines("sshd", "192.168.1.1")
+	lines, err := client.GetLogLinesWithContext(context.Background(), "sshd", "192.168.1.1")
 	if err != nil || len(lines) != 0 {
-		t.Fatalf("GetLogLines on empty dir: lines=%v err=%v", lines, err)
+		t.Fatalf("GetLogLinesWithContext on empty dir: lines=%v err=%v", lines, err)
 	}
 }
 

@@ -6,87 +6,41 @@ import (
 	"testing"
 )
 
-// Simple tests to boost coverage for easy functions
-func TestSimpleFunctionsCoverage(t *testing.T) {
-	// Test GetLogDir
+// TestGlobalStateAccessors covers the log-dir and runner setters/getters.
+func TestGlobalStateAccessors(t *testing.T) {
 	logDir := GetLogDir()
 	if logDir == "" {
 		t.Error("GetLogDir returned empty string")
 	}
 
-	// Test SetLogDir and GetLogDir
 	originalLogDir := GetLogDir()
+	t.Cleanup(func() { SetLogDir(originalLogDir) })
 	SetLogDir("/tmp/test")
 	if GetLogDir() != "/tmp/test" {
 		t.Error("SetLogDir/GetLogDir not working properly")
 	}
-	SetLogDir(originalLogDir) // Restore
 
-	// Test NewMockRunner
 	mockRunner := NewMockRunner()
-	if mockRunner == nil {
-		t.Error("NewMockRunner returned nil")
-	}
-
-	// Test SetRunner and GetRunner
-	originalRunner := GetRunner()
-	SetRunner(mockRunner)
+	t.Cleanup(WithTestRunner(t, mockRunner))
 	if GetRunner() != mockRunner {
 		t.Error("SetRunner/GetRunner not working properly")
 	}
-	SetRunner(originalRunner) // Restore
 }
 
-func TestRunnerFunctions(t *testing.T) {
-	// Set up mock runner for testing
+// TestRunnerCombinedOutputWithSudoContext checks that the global-runner entry
+// point delegates to the current runner and returns its output.
+func TestRunnerCombinedOutputWithSudoContext(t *testing.T) {
 	mockRunner := NewMockRunner()
 	mockRunner.SetResponse("fail2ban-client status", []byte("test output"))
-	restoreRunner := WithTestRunner(t, mockRunner)
-	defer restoreRunner()
+	t.Cleanup(WithTestRunner(t, mockRunner))
 
-	// Test RunnerCombinedOutput
-	output, err := RunnerCombinedOutput("fail2ban-client", "status")
+	output, err := RunnerCombinedOutputWithSudoContext(context.Background(), "fail2ban-client", "status")
 	if err != nil {
-		t.Errorf("RunnerCombinedOutput failed: %v", err)
+		t.Fatalf("RunnerCombinedOutputWithSudoContext failed: %v", err)
 	}
 	if string(output) != "test output" {
 		t.Errorf("Expected 'test output', got %q", string(output))
 	}
-
-	// Test RunnerCombinedOutputWithSudo - note it may fallback to non-sudo
-	output, err = RunnerCombinedOutputWithSudo("fail2ban-client", "status")
-	if err != nil {
-		t.Errorf("RunnerCombinedOutputWithSudo failed: %v", err)
-	}
-	// Don't assert exact output, just that it worked
-	_ = output
-}
-
-func TestContextRunnerFunctions(t *testing.T) {
-	// Set up mock runner for testing
-	mockRunner := NewMockRunner()
-	mockRunner.SetResponse("fail2ban-client status", []byte("test output"))
-	restoreRunner := WithTestRunner(t, mockRunner)
-	defer restoreRunner()
-
-	ctx := context.Background()
-
-	// Test RunnerCombinedOutputWithContext
-	output, err := RunnerCombinedOutputWithContext(ctx, "fail2ban-client", "status")
-	if err != nil {
-		t.Errorf("RunnerCombinedOutputWithContext failed: %v", err)
-	}
-	if string(output) != "test output" {
-		t.Errorf("Expected 'test output', got %q", string(output))
-	}
-
-	// Test RunnerCombinedOutputWithSudoContext - may not use sudo
-	output, err = RunnerCombinedOutputWithSudoContext(ctx, "fail2ban-client", "status")
-	if err != nil {
-		t.Errorf("RunnerCombinedOutputWithSudoContext failed: %v", err)
-	}
-	// Don't assert exact output, just that it worked
-	_ = output
 }
 
 func TestMockRunnerMethods(t *testing.T) {
@@ -193,22 +147,13 @@ func TestRealClientHelperMethods(t *testing.T) {
 	}
 
 	// An empty log directory yields empty results without error.
-	lines, err := client.GetLogLines("sshd", "192.168.1.1")
-	if err != nil || len(lines) != 0 {
-		t.Fatalf("GetLogLines on empty dir: lines=%v err=%v", lines, err)
-	}
-	lines, err = client.GetLogLinesWithLimit("sshd", "192.168.1.1", 10)
-	if err != nil || len(lines) != 0 {
-		t.Fatalf("GetLogLinesWithLimit on empty dir: lines=%v err=%v", lines, err)
-	}
-
 	ctx := context.Background()
-	lines, err = client.GetLogLinesWithContext(ctx, "sshd", "192.168.1.1")
+	lines, err := client.GetLogLinesWithContext(ctx, "sshd", "192.168.1.1")
 	if err != nil || len(lines) != 0 {
 		t.Fatalf("GetLogLinesWithContext on empty dir: lines=%v err=%v", lines, err)
 	}
-	lines, err = client.GetLogLinesWithLimitAndContext(ctx, "sshd", "192.168.1.1", 10)
+	lines, err = client.GetLogLinesWithLimitContext(ctx, "sshd", "192.168.1.1", 10)
 	if err != nil || len(lines) != 0 {
-		t.Fatalf("GetLogLinesWithLimitAndContext on empty dir: lines=%v err=%v", lines, err)
+		t.Fatalf("GetLogLinesWithLimitContext on empty dir: lines=%v err=%v", lines, err)
 	}
 }

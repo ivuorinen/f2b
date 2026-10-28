@@ -15,6 +15,21 @@ type RealClient struct {
 	Jails     []string
 	LogDir    string
 	FilterDir string
+
+	// runner executes this client's commands. It is injected at construction
+	// so a client keeps the runner it was built with instead of whatever the
+	// process-global SetRunner holds at call time; nil (a zero-value
+	// RealClient) falls back to GetRunner().
+	runner Runner
+}
+
+// cmdRunner returns the client's injected runner, or the global runner for a
+// zero-value RealClient so struct literals in tests keep working.
+func (c *RealClient) cmdRunner() Runner {
+	if c.runner != nil {
+		return c.runner
+	}
+	return GetRunner()
 }
 
 // NewClient initializes a RealClient, verifying the environment and fail2ban-client availability.
@@ -64,32 +79,33 @@ func NewClientWithContext(ctx context.Context, logDir, filterDir string) (*RealC
 		filterDir = constants.DefaultFilterDir
 	}
 
-	// Validate log directory using centralized helper with context
-	validatedLogDir, err := ValidateClientLogPath(ctx, logDir)
+	validatedLogDir, err := ValidateClientLogPath(logDir)
 	if err != nil {
 		return nil, fmt.Errorf("invalid log directory: %w", err)
 	}
 
-	// Validate filter directory using centralized helper with context
-	validatedFilterDir, err := ValidateClientFilterPath(ctx, filterDir)
+	validatedFilterDir, err := ValidateClientFilterPath(filterDir)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", constants.ErrInvalidFilterDirectory, err)
+		// The constant already carries %w; nesting it under "%s: %w" printed a
+		// literal "%w" in the message.
+		return nil, fmt.Errorf(constants.ErrInvalidFilterDirectory, err)
 	}
 
 	rc := &RealClient{
 		Path:      resolvedPath, // Use resolved absolute path
 		LogDir:    validatedLogDir,
 		FilterDir: validatedFilterDir,
+		runner:    GetRunner(),
 	}
 
 	// Version check - use sudo if needed with context
-	if err := verifyMinimumVersion(ctx, rc.Path); err != nil {
+	if err := rc.verifyMinimumVersion(ctx); err != nil {
 		return nil, err
 	}
 	// Ping - use sudo if needed with context. Wrap the underlying error so the
 	// real cause (socket permission denied, validation failure, timeout) is not
 	// masked as a stopped service.
-	if _, err := RunnerCombinedOutputWithSudoContext(ctx, rc.Path, constants.CommandArgPing); err != nil {
+	if _, err := rc.cmdRunner().CombinedOutputWithSudoContext(ctx, rc.Path, constants.CommandArgPing); err != nil {
 		return nil, fmt.Errorf("fail2ban service not running: %w", err)
 	}
 	jails, err := rc.fetchJailsWithContext(ctx)
@@ -100,11 +116,12 @@ func NewClientWithContext(ctx context.Context, logDir, filterDir string) (*RealC
 	return rc, nil
 }
 
-// verifyMinimumVersion runs `fail2ban-client -V`, parses the reported version,
-// and returns an error if it is below the minimum f2b supports.
-func verifyMinimumVersion(ctx context.Context, path string) error {
+// verifyMinimumVersion runs `fail2ban-client -V` through the client's runner,
+// parses the reported version, and returns an error if it is below the
+// minimum f2b supports.
+func (c *RealClient) verifyMinimumVersion(ctx context.Context) error {
 	const minVersion = "0.11.0"
-	out, err := RunnerCombinedOutputWithSudoContext(ctx, path, constants.CommandArgVersion)
+	out, err := c.cmdRunner().CombinedOutputWithSudoContext(ctx, c.Path, constants.CommandArgVersion)
 	if err != nil {
 		return fmt.Errorf("version check failed: %w", err)
 	}
@@ -119,7 +136,11 @@ func verifyMinimumVersion(ctx context.Context, path string) error {
 	return nil
 }
 
-// ListJails returns the list of available jails for this client.
-func (c *RealClient) ListJails() ([]string, error) {
+// ListJailsWithContext returns the jails loaded when the client was built. It
+// honors cancellation so a canceled command does not report a stale success.
+func (c *RealClient) ListJailsWithContext(ctx context.Context) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	return c.Jails, nil
 }

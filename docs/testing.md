@@ -43,7 +43,6 @@ fail2ban/
 ├── test_helpers.go                     # SetupMockEnvironment* helpers
 └── ...
 
-main_config_test.go                     # Top-level configuration tests
 main_security_test.go                   # Top-level security tests
 ```
 

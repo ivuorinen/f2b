@@ -18,16 +18,13 @@ type ContextualLogger struct {
 	defaultFields fail2ban.Fields
 }
 
-// NewContextualLogger creates a new contextual logger using the centralized cmd.Logger
+// NewContextualLogger creates a contextual logger over the centralized
+// cmd.Logger itself. Sharing Logger keeps one format, level and output, chosen
+// in PersistentPreRunE; a second logger on the same sink would interleave two
+// formats in one stream.
 func NewContextualLogger() *ContextualLogger {
-	// Structured JSON logger mirroring the main Logger's output and level. The
-	// JSON handler keeps logrus's timestamp/message key names (see SlogJSON).
-	contextLogger := fail2ban.NewSlogLogger(fail2ban.SlogJSON)
-	contextLogger.SetOutput(Logger.Output())
-	contextLogger.SetLevel(Logger.GetLevel())
-
 	return &ContextualLogger{
-		SlogLogger: contextLogger,
+		SlogLogger: Logger,
 		defaultFields: fail2ban.Fields{
 			"service": "f2b",
 			"version": getVersion(),
@@ -71,24 +68,6 @@ func (cl *ContextualLogger) WithContext(ctx context.Context) fail2ban.LoggerEntr
 	return entry
 }
 
-// WithOperation adds operation context and returns a new context.
-// Delegates to fail2ban.WithOperation for consistent validation.
-func WithOperation(ctx context.Context, operation string) context.Context {
-	return fail2ban.WithOperation(ctx, operation)
-}
-
-// WithIP adds IP context and returns a new context.
-// Delegates to fail2ban.WithIP for consistent IP validation.
-func WithIP(ctx context.Context, ip string) context.Context {
-	return fail2ban.WithIP(ctx, ip)
-}
-
-// WithJail adds jail context and returns a new context.
-// Delegates to fail2ban.WithJail for consistent jail name validation.
-func WithJail(ctx context.Context, jail string) context.Context {
-	return fail2ban.WithJail(ctx, jail)
-}
-
 // WithCommand adds command context and returns a new context.
 // This is cmd-specific as fail2ban doesn't need command tracking.
 // Empty commands are not stored in context.
@@ -100,27 +79,24 @@ func WithCommand(ctx context.Context, command string) context.Context {
 	return context.WithValue(ctx, constants.ContextKeyCommand, command)
 }
 
-// WithRequestID adds request ID context and returns a new context.
-// Delegates to fail2ban.WithRequestID for consistent validation.
-func WithRequestID(ctx context.Context, requestID string) context.Context {
-	return fail2ban.WithRequestID(ctx, requestID)
-}
-
-// LogOperation logs the start and end of an operation with timing and metrics
-func (cl *ContextualLogger) LogOperation(ctx context.Context, operation string, fn func() error) error {
+// LogOperation logs the start and end of an operation with its duration. fn
+// receives the derived context carrying request_id and operation, so the log
+// lines fn emits correlate with the start/finish lines; a closure over the
+// caller's context produced nested lines without the id.
+func (cl *ContextualLogger) LogOperation(ctx context.Context, operation string, fn func(context.Context) error) error {
 	start := time.Now()
-	ctx = WithOperation(ctx, operation)
+	ctx = fail2ban.WithOperation(ctx, operation)
 
 	// Ensure the operation carries a request ID so every log line it emits
 	// (start, completion, and any nested operation logs) shares one correlatable
 	// request_id in the structured output.
 	if ctx.Value(constants.ContextKeyRequestID) == nil {
-		ctx = WithRequestID(ctx, fail2ban.GenerateRequestID())
+		ctx = fail2ban.WithRequestID(ctx, fail2ban.GenerateRequestID())
 	}
 
 	cl.WithContext(ctx).WithField("action", constants.ActionStart).Info("Operation started")
 
-	err := fn()
+	err := fn(ctx)
 	duration := time.Since(start)
 
 	entry := cl.WithContext(ctx).WithField("duration_ms", duration.Milliseconds())
@@ -134,16 +110,16 @@ func (cl *ContextualLogger) LogOperation(ctx context.Context, operation string, 
 	return err
 }
 
-// LogBanOperation logs ban/unban operations with structured context and metrics
+// LogBanOperation logs ban/unban operations with structured context and duration
 func (cl *ContextualLogger) LogBanOperation(
 	ctx context.Context,
 	operation, ip, jail string,
 	success bool,
 	duration time.Duration,
 ) {
-	ctx = WithOperation(ctx, operation)
-	ctx = WithIP(ctx, ip)
-	ctx = WithJail(ctx, jail)
+	ctx = fail2ban.WithOperation(ctx, operation)
+	ctx = fail2ban.WithIP(ctx, ip)
+	ctx = fail2ban.WithJail(ctx, jail)
 
 	entry := cl.WithContext(ctx).WithFields(fail2ban.Fields{
 		"success":     success,
@@ -173,16 +149,4 @@ func GetContextualLogger() *ContextualLogger {
 		}
 	})
 	return contextualLogger
-}
-
-// SetContextualLogger sets a new global contextual logger.
-//
-// Not synchronized: call only during startup or from tests before concurrent
-// readers exist — a call while workers run is a data race by contract.
-func SetContextualLogger(logger *ContextualLogger) {
-	contextualLoggerOnce.Do(func() {
-		// Consume the once so the lazy initializer in GetContextualLogger
-		// never overwrites this explicitly-set logger.
-	})
-	contextualLogger = logger
 }

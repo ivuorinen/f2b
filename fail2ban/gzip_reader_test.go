@@ -1,7 +1,6 @@
 package fail2ban
 
 import (
-	"bufio"
 	"compress/gzip"
 	"io"
 	"os"
@@ -10,11 +9,11 @@ import (
 	"testing"
 )
 
-// testIsGzipFileNonexistent tests IsGzipFile with non-existent file
+// testIsGzipFileNonexistent tests isGzipFile with non-existent file
 func testIsGzipFileNonexistent(t *testing.T) {
 	nonexistentPath := filepath.Join(t.TempDir(), "nonexistent.log")
 
-	isGzip, err := IsGzipFile(nonexistentPath)
+	isGzip, err := isGzipFile(nonexistentPath)
 	if err == nil {
 		t.Error("Expected error for non-existent file")
 	}
@@ -23,11 +22,11 @@ func testIsGzipFileNonexistent(t *testing.T) {
 	}
 }
 
-// testIsGzipFileDirectory tests IsGzipFile with directory path
+// testIsGzipFileDirectory tests isGzipFile with directory path
 func testIsGzipFileDirectory(t *testing.T) {
 	dirPath := t.TempDir()
 
-	isGzip, err := IsGzipFile(dirPath)
+	isGzip, err := isGzipFile(dirPath)
 	if err == nil {
 		t.Error("Expected error when trying to check directory as gzip file")
 	}
@@ -36,7 +35,7 @@ func testIsGzipFileDirectory(t *testing.T) {
 	}
 }
 
-// testIsGzipFileEmpty tests IsGzipFile with empty file
+// testIsGzipFileEmpty tests isGzipFile with empty file
 func testIsGzipFileEmpty(t *testing.T) {
 	tempDir := t.TempDir()
 	emptyFile := filepath.Join(tempDir, "empty.log")
@@ -46,7 +45,7 @@ func testIsGzipFileEmpty(t *testing.T) {
 		t.Fatalf("Failed to create empty file: %v", err)
 	}
 
-	isGzip, err := IsGzipFile(emptyFile)
+	isGzip, err := isGzipFile(emptyFile)
 	if err != nil {
 		t.Errorf("Should not error on empty file: %v", err)
 	}
@@ -55,11 +54,11 @@ func testIsGzipFileEmpty(t *testing.T) {
 	}
 }
 
-// testOpenGzipAwareReaderNonexistent tests OpenGzipAwareReader with non-existent file
+// testOpenGzipAwareReaderNonexistent tests openGzipAwareReader with non-existent file
 func testOpenGzipAwareReaderNonexistent(t *testing.T) {
 	nonexistentPath := filepath.Join(t.TempDir(), "nonexistent.log")
 
-	reader, err := OpenGzipAwareReader(nonexistentPath)
+	reader, err := openGzipAwareReader(nonexistentPath)
 	if err == nil {
 		t.Error("Expected error for non-existent file")
 		if reader != nil {
@@ -71,11 +70,11 @@ func testOpenGzipAwareReaderNonexistent(t *testing.T) {
 	}
 }
 
-// testCreateGzipAwareScannerNonexistent tests CreateGzipAwareScanner with non-existent file
+// testCreateGzipAwareScannerNonexistent tests createGzipAwareScanner with non-existent file
 func testCreateGzipAwareScannerNonexistent(t *testing.T) {
 	nonexistentPath := filepath.Join(t.TempDir(), "nonexistent.log")
 
-	scanner, cleanup, err := CreateGzipAwareScanner(nonexistentPath)
+	scanner, cleanup, err := createGzipAwareScanner(nonexistentPath, 0)
 	if err == nil {
 		t.Error("Expected error for non-existent file")
 	}
@@ -87,59 +86,45 @@ func testCreateGzipAwareScannerNonexistent(t *testing.T) {
 	}
 }
 
-// testCreateGzipAwareScannerWithBufferInvalidSize tests CreateGzipAwareScannerWithBuffer with invalid buffer sizes
-func testCreateGzipAwareScannerWithBufferInvalidSize(t *testing.T) {
+// testCreateGzipAwareScannerNonPositiveBuffer pins that a zero or negative
+// maxLineSize keeps bufio's default buffer instead of failing.
+func testCreateGzipAwareScannerNonPositiveBuffer(t *testing.T) {
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "test.log")
 
-	err := os.WriteFile(testFile, []byte("test content"), 0600)
-	if err != nil {
+	if err := os.WriteFile(testFile, []byte("test content"), 0600); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	// Test with zero buffer size
-	_, cleanup, err := CreateGzipAwareScannerWithBuffer(testFile, 0)
-	if err != nil {
-		t.Logf("Correctly handled zero buffer size: %v", err)
-	}
-	if cleanup != nil {
+	for _, size := range []int{0, -1} {
+		scanner, cleanup, err := createGzipAwareScanner(testFile, size)
+		if err != nil {
+			t.Fatalf("maxLineSize %d: unexpected error: %v", size, err)
+		}
+		if !scanner.Scan() || scanner.Text() != "test content" {
+			t.Errorf("maxLineSize %d: scanned %q, want %q", size, scanner.Text(), "test content")
+		}
 		cleanup()
-	}
-
-	// Test with negative buffer size
-	var scanner *bufio.Scanner
-	scanner, cleanup, err = CreateGzipAwareScannerWithBuffer(testFile, -1)
-	if err != nil {
-		t.Logf("Correctly handled negative buffer size: %v", err)
-	}
-	if cleanup != nil {
-		cleanup()
-	}
-
-	// Should handle edge cases gracefully
-	if scanner != nil {
-		// If scanner is returned, it should work
-		_ = scanner.Scan()
 	}
 }
 
 // TestGzipFunctionsErrorHandling tests error handling in gzip detection and reading functions
 func TestGzipFunctionsErrorHandling(t *testing.T) {
-	t.Run("IsGzipFile_nonexistent_file", testIsGzipFileNonexistent)
-	t.Run("IsGzipFile_directory_path", testIsGzipFileDirectory)
-	t.Run("IsGzipFile_empty_file", testIsGzipFileEmpty)
-	t.Run("OpenGzipAwareReader_nonexistent_file", testOpenGzipAwareReaderNonexistent)
-	t.Run("CreateGzipAwareScanner_nonexistent_file", testCreateGzipAwareScannerNonexistent)
-	t.Run("CreateGzipAwareScannerWithBuffer_invalid_buffer_size", testCreateGzipAwareScannerWithBufferInvalidSize)
+	t.Run("isGzipFile_nonexistent_file", testIsGzipFileNonexistent)
+	t.Run("isGzipFile_directory_path", testIsGzipFileDirectory)
+	t.Run("isGzipFile_empty_file", testIsGzipFileEmpty)
+	t.Run("openGzipAwareReader_nonexistent_file", testOpenGzipAwareReaderNonexistent)
+	t.Run("createGzipAwareScanner_nonexistent_file", testCreateGzipAwareScannerNonexistent)
+	t.Run("createGzipAwareScanner_non_positive_buffer", testCreateGzipAwareScannerNonPositiveBuffer)
 }
 
 // TestGzipFunctionsFunctionality tests the core functionality of gzip functions
 func TestGzipFunctionsFunctionality(t *testing.T) {
-	t.Run("IsGzipFile_extension_detection", testGzipExtensionDetection)
-	t.Run("IsGzipFile_magic_bytes_detection", testGzipMagicBytesDetection)
-	t.Run("OpenGzipAwareReader_plain_file", testGzipReaderPlainFile)
-	t.Run("OpenGzipAwareReader_gzip_file", testGzipReaderGzipFile)
-	t.Run("CreateGzipAwareScanner_functionality", testGzipScannerFunctionality)
+	t.Run("isGzipFile_extension_detection", testGzipExtensionDetection)
+	t.Run("isGzipFile_magic_bytes_detection", testGzipMagicBytesDetection)
+	t.Run("openGzipAwareReader_plain_file", testGzipReaderPlainFile)
+	t.Run("openGzipAwareReader_gzip_file", testGzipReaderGzipFile)
+	t.Run("createGzipAwareScanner_functionality", testGzipScannerFunctionality)
 }
 
 func testGzipExtensionDetection(t *testing.T) {
@@ -152,7 +137,7 @@ func testGzipExtensionDetection(t *testing.T) {
 		t.Fatalf("Failed to create .gz file: %v", err)
 	}
 
-	isGzip, err := IsGzipFile(gzFile)
+	isGzip, err := isGzipFile(gzFile)
 	if err != nil {
 		t.Errorf("Should not error on .gz file: %v", err)
 	}
@@ -172,7 +157,7 @@ func testGzipMagicBytesDetection(t *testing.T) {
 		t.Fatalf("Failed to create file with magic bytes: %v", err)
 	}
 
-	isGzip, err := IsGzipFile(gzFile)
+	isGzip, err := isGzipFile(gzFile)
 	if err != nil {
 		t.Errorf("Should not error on file with magic bytes: %v", err)
 	}
@@ -191,7 +176,7 @@ func testGzipReaderPlainFile(t *testing.T) {
 		t.Fatalf("Failed to create plain file: %v", err)
 	}
 
-	reader, err := OpenGzipAwareReader(plainFile)
+	reader, err := openGzipAwareReader(plainFile)
 	if err != nil {
 		t.Fatalf("Should not error on plain file: %v", err)
 	}
@@ -225,7 +210,7 @@ func testGzipReaderGzipFile(t *testing.T) {
 	_ = gzWriter.Close()
 	_ = f.Close()
 
-	reader, err := OpenGzipAwareReader(gzFile)
+	reader, err := openGzipAwareReader(gzFile)
 	if err != nil {
 		t.Fatalf("Should not error on gzip file: %v", err)
 	}
@@ -251,7 +236,7 @@ func testGzipScannerFunctionality(t *testing.T) {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
-	scanner, cleanup, err := CreateGzipAwareScanner(testFile)
+	scanner, cleanup, err := createGzipAwareScanner(testFile, 0)
 	if err != nil {
 		t.Fatalf("Should not error on valid file: %v", err)
 	}
@@ -267,11 +252,11 @@ func testGzipScannerFunctionality(t *testing.T) {
 	}
 
 	if len(scannedLines) != len(lines) {
-		t.Errorf("Line count mismatch: expected %d, got %d", len(lines), len(scannedLines))
+		t.Fatalf("Line count mismatch: expected %d, got %d", len(lines), len(scannedLines))
 	}
 
 	for i, expected := range lines {
-		if i >= len(scannedLines) || scannedLines[i] != expected {
+		if scannedLines[i] != expected {
 			t.Errorf("Line %d mismatch: expected %q, got %q", i, expected, scannedLines[i])
 		}
 	}

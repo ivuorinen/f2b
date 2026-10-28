@@ -49,7 +49,10 @@ func ProcessJailsParallel(
 		return nil, ctxErr
 	}
 
-	var allRecords []BanRecord
+	// Non-nil even when no jail has bans: `banned all --format json` encodes
+	// this slice directly, and a nil slice printed null, which jq cannot
+	// iterate.
+	allRecords := make([]BanRecord, 0)
 	var failed []error
 	for i := range jails {
 		if errs[i] != nil {

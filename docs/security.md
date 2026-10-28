@@ -57,6 +57,23 @@ Note: read operations such as `status`, `list-jails`, `banned`, and `logs`
 DO require sudo/root, because fail2ban's control socket
 (`/var/run/fail2ban/fail2ban.sock`) is root-only.
 
+### Allowed Paths
+
+`test-filter` runs `sudo fail2ban-regex <logpath> <filter>`, and fail2ban-regex
+prints the lines it reads, so every allowed directory is one root can be made to
+read. The allowlists are therefore limited to fail2ban's own locations:
+
+- Log directories (`--log-dir`, `F2B_LOG_DIR`, filter `logpath`, `--log-file`):
+  under `/var/log`
+- Filter directories (`--filter-dir`, `F2B_FILTER_DIR`): under `/etc/fail2ban`,
+  `/usr/local/etc/fail2ban` or `/opt/fail2ban`
+- `ALLOW_DEV_PATHS` (development only) additionally allows `/tmp` and macOS
+  temporary directories
+
+`/home`, `/opt` and `/usr/local` as whole trees are not allowed: under
+`sudo f2b` they let a filter file name another user's private files as its
+logpath.
+
 ### Privilege Escalation Process
 
 1. **Pre-flight Check**: Determine user capabilities before command execution
@@ -183,6 +200,11 @@ func containsPathTraversal(path string) bool {
     return false
 }
 ```
+
+**Paths** (log and filter directories, `--log-file`) go through
+`ValidatePathWithSecurity` (`fail2ban/pathsecurity.go`), which canonicalizes the
+path, resolves symlinks and requires the result to stay inside one of the
+allowed base directories listed under [Allowed Paths](#allowed-paths).
 
 ## Safe Command Execution
 
@@ -475,15 +497,14 @@ User Input → Context → Validation → Path Traversal → Privilege Check →
 
 ### Logging Security Events
 
-```go
-logger.WithFields(logrus.Fields{
-    "user":      os.Getenv("USER"),
-    "uid":       os.Getuid(),
-    "command":   "ban",
-    "target_ip": ip,
-    "jail":      jail,
-    "sudo_used": true,
-}).Info("Privileged operation executed")
+Each ban/unban emits a structured audit line through `ContextualLogger.LogBanOperation`
+(cmd/logging.go). It goes to stderr as text, or to `--log-file` as one JSON
+object per line (wrapped here for reading):
+
+```json
+{"timestamp":"2026-10-27T22:53:17.640091297+01:00","level":"info","message":"Ban operation completed",
+ "command_path":"f2b ban","service":"f2b","version":"dev","operation":"ban","ip":"192.168.1.100",
+ "jail":"sshd","command":"ban","success":true,"duration_ms":12}
 ```
 
 This comprehensive security model ensures f2b can be used safely in production environments

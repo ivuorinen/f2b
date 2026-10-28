@@ -3,10 +3,14 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -434,7 +438,7 @@ func TestCompletionCmdExecution(t *testing.T) {
 			testRoot.AddCommand(UnbanCmd(mockClient, &testConfig))
 			testRoot.AddCommand(TestIPCmd(mockClient, &testConfig))
 			testRoot.AddCommand(LogsCmd(mockClient, &testConfig))
-			testRoot.AddCommand(LogsWatchCmd(context.Background(), mockClient, &testConfig))
+			testRoot.AddCommand(LogsWatchCmd(mockClient, &testConfig))
 			testRoot.AddCommand(ServiceCmd(&testConfig))
 			testRoot.AddCommand(VersionCmd(&testConfig))
 			testRoot.AddCommand(TestFilterCmd(mockClient, &testConfig))
@@ -515,6 +519,10 @@ func TestPersistentPreRun(t *testing.T) {
 		}
 	}()
 
+	// The temp file lives under the dev-path allowlist (/tmp, /var/folders);
+	// --log-file is confined to the log allowlist.
+	t.Setenv("ALLOW_DEV_PATHS", "1")
+
 	// Test with log file flag
 	cmd := &cobra.Command{}
 	cmd.Flags().String("log-file", tmpFile.Name(), "test log file")
@@ -571,15 +579,15 @@ func TestPersistentPreRun(t *testing.T) {
 }
 
 func TestPersistentPreRunWithInvalidLogFile(t *testing.T) {
-	// Test PersistentPreRunE with invalid log file path. It must now return an
-	// error (aborting the command) rather than printing to stderr and
-	// continuing. PersistentPreRunE validates the global cfg first, so give it
-	// a valid one for the duration of the test.
+	// An unopenable path inside the allowlist must return an error (aborting
+	// the command) rather than printing to stderr and continuing.
+	// PersistentPreRunE validates the global cfg first, so give it a valid one
+	// for the duration of the test.
 	originalCfg := cfg
 	cfg = validTestConfig("plain")
 	defer func() { cfg = originalCfg }()
 	cmd := &cobra.Command{}
-	cmd.Flags().String("log-file", "/invalid/path/to/logfile.log", "invalid log file")
+	cmd.Flags().String("log-file", "/var/log/f2b-missing-dir/sub/logfile.log", "invalid log file")
 	cmd.Flags().String("log-level", "info", "test log level")
 
 	err := rootCmd.PersistentPreRunE(cmd, []string{})
@@ -588,6 +596,180 @@ func TestPersistentPreRunWithInvalidLogFile(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "failed to open log file") {
 		t.Errorf("expected error about failing to open log file, got: %v", err)
+	}
+}
+
+// TestPersistentPreRunRejectsLogFileOutsideAllowlist pins the --log-file
+// confinement: under `sudo f2b` an unchecked path let the caller create or
+// append root-owned files anywhere (e.g. /etc/cron.d/x, /root/.bashrc).
+func TestPersistentPreRunRejectsLogFileOutsideAllowlist(t *testing.T) {
+	t.Setenv("ALLOW_DEV_PATHS", "")
+	originalCfg := cfg
+	cfg = validTestConfig("plain")
+	defer func() { cfg = originalCfg }()
+
+	for _, path := range []string{"/etc/cron.d/f2b-test-x", "/root/.bashrc", "/var/logx/f2b.log", "/var/log/../etc/x"} {
+		t.Run(path, func(t *testing.T) {
+			cmd := &cobra.Command{}
+			cmd.Flags().String("log-file", path, "")
+			cmd.Flags().String("log-level", "info", "")
+			err := rootCmd.PersistentPreRunE(cmd, []string{})
+			if err == nil {
+				t.Fatalf("--log-file=%s was accepted", path)
+			}
+			if !strings.Contains(err.Error(), "outside the allowed log directories") {
+				t.Errorf("error = %v, want an allowlist rejection", err)
+			}
+		})
+	}
+}
+
+// TestWatchSignalsRecordsSignalBeforeStopReturns pins the join: a signal that
+// arrives as the command completes is recorded before stop returns. The
+// unjoined goroutine could store the exit code after main had read it.
+func TestWatchSignalsRecordsSignalBeforeStopReturns(t *testing.T) {
+	for i := range 1000 {
+		interruptCode.Store(0)
+		sigCh := make(chan os.Signal, 1)
+		canceled := make(chan struct{})
+		stop := watchSignals(sigCh, func() { close(canceled) })
+		// Let the watcher park in its receive, so the signal is handed to it
+		// directly (the case the join exists for) rather than buffered.
+		time.Sleep(100 * time.Microsecond)
+		sigCh <- syscall.SIGTERM
+		stop()
+		if got := SignalExitCode(); got != 143 {
+			t.Fatalf("iteration %d: SignalExitCode() = %d after stop, want 143", i, got)
+		}
+	}
+	interruptCode.Store(0)
+}
+
+// TestWatchSignalsCancelsOnSignal checks the live path: a signal cancels the
+// command and is recorded, and stop with no signal records nothing.
+func TestWatchSignalsCancelsOnSignal(t *testing.T) {
+	interruptCode.Store(0)
+	t.Cleanup(func() { interruptCode.Store(0) })
+
+	sigCh := make(chan os.Signal, 1)
+	canceled := make(chan struct{})
+	stop := watchSignals(sigCh, func() { close(canceled) })
+	sigCh <- os.Interrupt
+	select {
+	case <-canceled:
+	case <-time.After(5 * time.Second):
+		t.Fatal("signal did not cancel the command")
+	}
+	stop()
+	if got := SignalExitCode(); got != 130 {
+		t.Errorf("SignalExitCode() = %d, want 130", got)
+	}
+
+	interruptCode.Store(0)
+	stop = watchSignals(make(chan os.Signal, 1), func() {})
+	stop()
+	if got := SignalExitCode(); got != 0 {
+		t.Errorf("SignalExitCode() = %d without a signal, want 0", got)
+	}
+}
+
+// TestLogLevelHelpListsAcceptedLevels pins the flag contract to the parser:
+// every level the help names parses, and the help names every accepted one.
+func TestLogLevelHelpListsAcceptedLevels(t *testing.T) {
+	flag := rootCmd.PersistentFlags().Lookup("log-level")
+	if flag == nil {
+		t.Fatal("log-level flag missing")
+	}
+	for _, level := range []string{"debug", "info", "warn", "warning", "error", "fatal", "panic"} {
+		if !strings.Contains(flag.Usage, level) {
+			t.Errorf("log-level help %q does not list accepted level %q", flag.Usage, level)
+		}
+	}
+}
+
+// failWriter fails every write.
+type failWriter struct{}
+
+func (failWriter) Write([]byte) (int, error) { return 0, os.ErrClosed }
+
+// TestCompletionReportsWriteErrors pins that a failed completion write fails
+// the command instead of exiting 0 with a truncated script.
+func TestCompletionReportsWriteErrors(t *testing.T) {
+	for _, shell := range []string{"bash", "zsh", "fish", "powershell"} {
+		root := &cobra.Command{Use: "f2b"}
+		root.AddCommand(completionCmd())
+		root.SetOut(failWriter{})
+		root.SetErr(&bytes.Buffer{})
+		root.SetArgs([]string{"completion", shell})
+		if err := root.Execute(); err == nil {
+			t.Errorf("completion %s succeeded although its output write failed", shell)
+		}
+	}
+}
+
+// TestLogFormatChosenOnce pins the single log format: text on the terminal,
+// JSON for a --log-file, with the contextual logger writing through the same
+// handler so one sink never mixes formats.
+func TestLogFormatChosenOnce(t *testing.T) {
+	t.Setenv("ALLOW_DEV_PATHS", "1")
+	originalCfg := cfg
+	cfg = validTestConfig(PlainFormat)
+	oldOutput, oldLevel := Logger.Output(), Logger.GetLevel()
+	t.Cleanup(func() {
+		cleanupResources()
+		cfg = originalCfg
+		Logger.SetOutput(oldOutput)
+		Logger.SetLevel(oldLevel)
+		Logger.Reconfigure(fail2ban.SlogText)
+	})
+
+	if GetContextualLogger().SlogLogger != Logger {
+		t.Fatal("contextual logger does not share the main Logger")
+	}
+
+	run := func(logFile string) {
+		t.Helper()
+		cmd := &cobra.Command{Use: "status"}
+		cmd.Flags().String("log-file", logFile, "")
+		cmd.Flags().String("log-level", "info", "")
+		if err := rootCmd.PersistentPreRunE(cmd, nil); err != nil {
+			t.Fatalf("PersistentPreRunE: %v", err)
+		}
+	}
+
+	var terminal bytes.Buffer
+	run("")
+	Logger.SetOutput(&terminal)
+	Logger.Info("text line")
+	GetContextualLogger().WithContext(context.Background()).Info("contextual text line")
+	for line := range strings.SplitSeq(strings.TrimSpace(terminal.String()), "\n") {
+		if strings.HasPrefix(line, "{") {
+			t.Errorf("terminal log line is JSON: %s", line)
+		}
+	}
+
+	logFile := filepath.Join(t.TempDir(), "f2b.log")
+	run(logFile)
+	Logger.Info("json line")
+	GetContextualLogger().WithContext(context.Background()).Info("contextual json line")
+	cleanupResources()
+	data, err := os.ReadFile(logFile) // #nosec G304 -- test temp file
+	if err != nil {
+		t.Fatalf("read log file: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("log file has %d lines, want 2: %q", len(lines), data)
+	}
+	for _, line := range lines {
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Errorf("log file line is not JSON: %s", line)
+			continue
+		}
+		if record["command_path"] != "status" {
+			t.Errorf("log file line lacks command_path=status: %s", line)
+		}
 	}
 }
 

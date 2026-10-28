@@ -145,9 +145,10 @@ you can follow in real time:
 f2b logs-watch all 192.168.1.100
 ```
 
-Each command run emits structured logs carrying a shared `request_id` for
-correlation, so a single operation can be traced end to end in your log
-aggregator.
+`ban` and `unban` emit structured logs carrying a shared `request_id` (start,
+per-jail result, completion), so one operation can be traced end to end in your
+log aggregator. Logs go to stderr as text; with `--log-file` they are written to
+that file as JSON, one object per line.
 
 ### How do I configure timeouts?
 

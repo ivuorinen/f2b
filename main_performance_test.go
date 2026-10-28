@@ -10,137 +10,77 @@ import (
 	"github.com/ivuorinen/f2b/fail2ban"
 )
 
+// writeBenchLog writes content as dir/fail2ban.log and returns a client that
+// reads it through the single production log-read entry point.
+func writeBenchLog(b *testing.B, content []byte) *fail2ban.RealClient {
+	b.Helper()
+	tempDir := b.TempDir()
+	if err := os.WriteFile(filepath.Join(tempDir, "fail2ban.log"), content, 0600); err != nil {
+		b.Fatalf("Failed to create test log file: %v", err)
+	}
+	return &fail2ban.RealClient{LogDir: tempDir}
+}
+
 // BenchmarkE2E_MainAPIs benchmarks the main API functions end-to-end
 func BenchmarkE2E_MainAPIs(b *testing.B) {
-	// Setup test environment
-	tempDir := b.TempDir()
-	fail2ban.SetLogDir(tempDir)
-
-	// Create test log file with realistic content
-	testLogFile := filepath.Join(tempDir, "fail2ban.log")
-	testContent := []byte(`2024-01-01 12:00:00,123 fail2ban.actions [1234]: NOTICE [sshd] Ban 192.168.1.100
+	logs := writeBenchLog(b, []byte(`2024-01-01 12:00:00,123 fail2ban.actions [1234]: NOTICE [sshd] Ban 192.168.1.100
 2024-01-01 12:01:00,456 fail2ban.actions [1234]: NOTICE [sshd] Ban 192.168.1.101
 2024-01-01 12:02:00,789 fail2ban.actions [1234]: NOTICE [nginx] Ban 192.168.1.102
 2024-01-01 12:03:00,012 fail2ban.actions [1234]: NOTICE [sshd] Unban 192.168.1.100
-`)
-	err := os.WriteFile(testLogFile, testContent, 0600)
-	if err != nil {
-		b.Fatalf("Failed to create test log file: %v", err)
-	}
+`))
 
 	// Setup mock client
 	client := setupBenchmarkClient(b)
+	ctx := context.Background()
 
-	b.Run("GetLogLines", benchE2EGetLogLines)
-	b.Run("GetLogLinesWithLimit", benchE2EGetLogLinesWithLimit)
-	b.Run("UltraOptimized", benchE2EUltraOptimized)
-	b.Run("Client_GetBanRecords", func(b *testing.B) {
-		benchE2EClientGetBanRecords(b, client)
+	b.Run("GetLogLinesWithContext", func(b *testing.B) {
+		for b.Loop() {
+			if _, err := logs.GetLogLinesWithContext(ctx, "sshd", "192.168.1.100"); err != nil {
+				b.Fatalf("GetLogLinesWithContext failed: %v", err)
+			}
+		}
+	})
+	b.Run("GetLogLinesWithLimitContext", func(b *testing.B) {
+		for b.Loop() {
+			if _, err := logs.GetLogLinesWithLimitContext(ctx, "sshd", "192.168.1.100", 100); err != nil {
+				b.Fatalf("GetLogLinesWithLimitContext failed: %v", err)
+			}
+		}
 	})
 	b.Run("Client_GetBanRecordsWithContext", func(b *testing.B) {
-		benchE2EClientGetBanRecordsWithContext(b, client)
+		for b.Loop() {
+			if _, err := client.GetBanRecordsWithContext(ctx, []string{"sshd"}); err != nil {
+				b.Fatalf("GetBanRecordsWithContext failed: %v", err)
+			}
+		}
 	})
-}
-
-// benchE2EGetLogLines benchmarks fail2ban.GetLogLines.
-func benchE2EGetLogLines(b *testing.B) {
-	b.Helper()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, err := fail2ban.GetLogLines(context.Background(), "sshd", "192.168.1.100")
-		if err != nil {
-			b.Fatalf("GetLogLines failed: %v", err)
-		}
-	}
-}
-
-// benchE2EGetLogLinesWithLimit benchmarks fail2ban.GetLogLinesWithLimit.
-func benchE2EGetLogLinesWithLimit(b *testing.B) {
-	b.Helper()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, err := fail2ban.GetLogLinesWithLimit(context.Background(), "sshd", "192.168.1.100", 100)
-		if err != nil {
-			b.Fatalf("GetLogLinesWithLimit failed: %v", err)
-		}
-	}
-}
-
-// benchE2EUltraOptimized benchmarks fail2ban.GetLogLinesUltraOptimized.
-func benchE2EUltraOptimized(b *testing.B) {
-	b.Helper()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, err := fail2ban.GetLogLinesUltraOptimized("sshd", "192.168.1.100", 100)
-		if err != nil {
-			b.Fatalf("GetLogLinesUltraOptimized failed: %v", err)
-		}
-	}
-}
-
-// benchE2EClientGetBanRecords benchmarks client.GetBanRecords.
-func benchE2EClientGetBanRecords(b *testing.B, client *fail2ban.RealClient) {
-	b.Helper()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, err := client.GetBanRecords([]string{"sshd"})
-		if err != nil {
-			b.Fatalf("GetBanRecords failed: %v", err)
-		}
-	}
-}
-
-// benchE2EClientGetBanRecordsWithContext benchmarks client.GetBanRecordsWithContext.
-func benchE2EClientGetBanRecordsWithContext(b *testing.B, client *fail2ban.RealClient) {
-	b.Helper()
-	ctx := context.Background()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_, err := client.GetBanRecordsWithContext(ctx, []string{"sshd"})
-		if err != nil {
-			b.Fatalf("GetBanRecordsWithContext failed: %v", err)
-		}
-	}
 }
 
 // BenchmarkMemoryAllocation_Critical benchmarks memory allocations in critical paths
 func BenchmarkMemoryAllocation_Critical(b *testing.B) {
-	tempDir := b.TempDir()
-	fail2ban.SetLogDir(tempDir)
-
-	// Create test log file with proper line structure
-	testLogFile := filepath.Join(tempDir, "fail2ban.log")
-	testLine := "2024-01-01 12:00:00,123 fail2ban.actions [1234]: NOTICE [sshd] Ban 192.168.1.100\n"
-
 	// Create 1MB of realistic log data (about 10,000 lines)
+	testLine := "2024-01-01 12:00:00,123 fail2ban.actions [1234]: NOTICE [sshd] Ban 192.168.1.100\n"
 	var testContent []byte
 	for len(testContent) < 1024*1024 {
 		testContent = append(testContent, testLine...)
 	}
-	err := os.WriteFile(testLogFile, testContent, 0600)
-	if err != nil {
-		b.Fatalf("Failed to create test log file: %v", err)
-	}
+	logs := writeBenchLog(b, testContent)
+	ctx := context.Background()
 
 	b.Run("LargeLogProcessing", func(b *testing.B) {
 		b.ReportAllocs()
-		for i := 0; i < b.N; i++ {
-			_, err := fail2ban.GetLogLinesWithLimit(context.Background(), "all", "all", 1000)
-			if err != nil {
+		for b.Loop() {
+			if _, err := logs.GetLogLinesWithLimitContext(ctx, "all", "all", 1000); err != nil {
 				b.Fatalf("Large log processing failed: %v", err)
 			}
 		}
 	})
 
-	b.Run("StringPoolingEfficiency", func(b *testing.B) {
-		processor := fail2ban.NewOptimizedLogProcessor()
+	b.Run("FilteredLogProcessing", func(b *testing.B) {
 		b.ReportAllocs()
-		b.ResetTimer()
-
-		for i := 0; i < b.N; i++ {
-			_, err := processor.GetLogLinesOptimized("sshd", "192.168.1.100", 100)
-			if err != nil {
-				b.Fatalf("String pooling test failed: %v", err)
+		for b.Loop() {
+			if _, err := logs.GetLogLinesWithLimitContext(ctx, "sshd", "192.168.1.100", 100); err != nil {
+				b.Fatalf("Filtered log processing failed: %v", err)
 			}
 		}
 	})
@@ -148,35 +88,18 @@ func BenchmarkMemoryAllocation_Critical(b *testing.B) {
 
 // BenchmarkConcurrentPerformance benchmarks performance under concurrent load
 func BenchmarkConcurrentPerformance(b *testing.B) {
-	tempDir := b.TempDir()
-	fail2ban.SetLogDir(tempDir)
-
-	// Create test log file
-	testLogFile := filepath.Join(tempDir, "fail2ban.log")
-	testContent := []byte(`2024-01-01 12:00:00,123 fail2ban.actions [1234]: NOTICE [sshd] Ban 192.168.1.100
+	logs := writeBenchLog(b, []byte(`2024-01-01 12:00:00,123 fail2ban.actions [1234]: NOTICE [sshd] Ban 192.168.1.100
 2024-01-01 12:01:00,456 fail2ban.actions [1234]: NOTICE [sshd] Ban 192.168.1.101
-`)
-	err := os.WriteFile(testLogFile, testContent, 0600)
-	if err != nil {
-		b.Fatalf("Failed to create test log file: %v", err)
-	}
+`))
+	ctx := context.Background()
 
 	b.Run("ConcurrentLogReading", func(b *testing.B) {
 		b.RunParallel(func(pb *testing.PB) {
 			for pb.Next() {
-				_, err := fail2ban.GetLogLinesUltraOptimized("sshd", "all", 50)
-				if err != nil {
-					b.Fatalf("Concurrent log reading failed: %v", err)
+				if _, err := logs.GetLogLinesWithLimitContext(ctx, "sshd", "all", 50); err != nil {
+					b.Errorf("Concurrent log reading failed: %v", err)
+					return
 				}
-			}
-		})
-	})
-
-	b.Run("ConcurrentLogProcessing", func(b *testing.B) {
-		processor := fail2ban.NewOptimizedLogProcessor()
-		b.RunParallel(func(pb *testing.PB) {
-			for pb.Next() {
-				_, _ = processor.GetLogLinesOptimized("all", "all", 10)
 			}
 		})
 	})

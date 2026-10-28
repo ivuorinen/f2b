@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"testing"
 
 	"github.com/ivuorinen/f2b/fail2ban"
@@ -47,11 +48,11 @@ func TestDemoCommandTestFramework(t *testing.T) {
 			WithSetup(func(mock *fail2ban.MockClient) {
 				setMockJails(mock, []string{"sshd"})
 				// Pre-ban an IP for testing
-				_, _ = mock.BanIP("192.168.1.100", "sshd")
+				_, _ = mock.BanIPWithContext(context.Background(), "192.168.1.100", "sshd")
 			}).
 			ExpectSuccess().
 			Run().
-			AssertJSONField("Jail", "sshd")
+			AssertJSONField("jail", "sshd")
 	})
 
 	// Error handling example

@@ -9,11 +9,6 @@ import (
 	"github.com/ivuorinen/f2b/constants"
 )
 
-func init() {
-	// Configure logging for CI/test environments to reduce noise
-	// This now comes from the logging_env module
-}
-
 // Parsing helpers
 
 // ParseJailList parses the jail list output from fail2ban-client status
@@ -95,32 +90,6 @@ func NewTimedOperation(name, command string, args ...string) *TimedOperation {
 		Command:   command,
 		Args:      args,
 		StartTime: time.Now(),
-	}
-}
-
-// Finish completes the timed operation and logs the duration with context
-func (t *TimedOperation) Finish(err error) {
-	duration := time.Since(t.StartTime)
-
-	fields := Fields{
-		"operation": t.Name,
-		"command":   t.Command,
-		"duration":  duration,
-		"args":      strings.Join(t.Args, " "),
-	}
-
-	if err != nil {
-		getLogger().WithFields(fields).
-			WithField(constants.LogFieldError, err.Error()).
-			Warnf(constants.ErrOperationFailed, duration)
-	} else {
-		if duration > time.Second {
-			// Log slow operations as warnings for visibility
-			getLogger().WithFields(fields).Warnf(constants.ErrSlowOperation, duration)
-		} else {
-			// Log fast operations at debug level to reduce noise
-			getLogger().WithFields(fields).Debugf(constants.MsgOperationCompleted, duration)
-		}
 	}
 }
 

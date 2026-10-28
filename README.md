@@ -260,7 +260,7 @@ f2b logs-watch all 192.168.1.100       # Monitor all jails for specific IP
 f2b service status                     # Show detailed Fail2Ban service status
 f2b service start                      # Start Fail2Ban service with auto-sudo
 f2b service stop                       # Stop Fail2Ban service gracefully
-f2b service restart                    # Restart service with context-aware timeout
+f2b service restart                    # Restart service (Ctrl-C/SIGTERM cancels the wait)
 
 # Filter Testing & Validation
 f2b test-filter <jail>                 # Test and validate jail filter configuration
@@ -291,7 +291,7 @@ f2b is built as an **enterprise-grade** Go application following modern architec
 
 - **Security-First Architecture**: Automatic privilege management with extensive path traversal protections
 - **Context-Aware Operations**: Comprehensive timeout handling and graceful cancellation throughout
-- **Performance-Conscious**: Bounded parallel processing across jails
+- **Performance-Conscious**: Bounded parallel processing across jails and newest-first log reads
 - **Interface-Based Design**: Full dependency injection for testing and extensibility
 - **Thread-Safe Operations**: Proper synchronization and concurrent access protection
 

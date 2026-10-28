@@ -7,17 +7,19 @@ import (
 )
 
 // BanRecord represents a single ban entry with jail, IP, ban time, and remaining duration.
+// The JSON keys are lowercase like every other JSON output of the CLI.
 type BanRecord struct {
-	Jail      string
-	IP        string
-	BannedAt  time.Time
-	Remaining string
+	Jail      string    `json:"jail"`
+	IP        string    `json:"ip"`
+	BannedAt  time.Time `json:"banned_at"`
+	Remaining string    `json:"remaining"`
 }
 
 // Fields represents a map of structured log fields (decoupled from logrus)
 type Fields map[string]any
 
-// LoggerEntry represents a structured logging entry that can be chained
+// LoggerEntry is the structured, chainable logging interface the fail2ban
+// package logs through (SetLogger). It is also the top-level logger type.
 type LoggerEntry interface {
 	WithField(key string, value any) LoggerEntry
 	WithFields(fields Fields) LoggerEntry
@@ -30,18 +32,4 @@ type LoggerEntry interface {
 	Infof(format string, args ...any)
 	Warnf(format string, args ...any)
 	Errorf(format string, args ...any)
-}
-
-// LoggerInterface defines the top-level logging interface (decoupled from logrus).
-// It embeds LoggerEntry since both interfaces share the same method signatures.
-type LoggerInterface interface {
-	LoggerEntry
-}
-
-// LogCollectionConfig configures log line collection behavior
-type LogCollectionConfig struct {
-	Jail        string
-	IP          string
-	MaxLines    int
-	MaxFileSize int64
 }

@@ -24,8 +24,8 @@ const (
 )
 
 // Logger is the global logger for the CLI. It writes human-readable text to
-// os.Stderr and satisfies fail2ban.LoggerInterface, so the fail2ban package
-// logs through it (wired in main).
+// os.Stderr until PersistentPreRunE chooses the format, and satisfies
+// fail2ban.LoggerEntry, so the fail2ban package logs through it (wired in main).
 var Logger = fail2ban.NewSlogLogger(fail2ban.SlogText)
 
 func init() {
@@ -38,49 +38,35 @@ func init() {
 func configureCIFriendlyLogging() {
 	// Detect CI environments by checking common CI environment variables
 	// If in CI or test environment, reduce logging noise unless explicitly overridden
-	if (IsCI() || IsTestEnvironment()) && os.Getenv("F2B_LOG_LEVEL") == "" && os.Getenv("F2B_VERBOSE_TESTS") == "" {
+	if (fail2ban.IsCI() || fail2ban.IsTestEnvironment()) &&
+		os.Getenv("F2B_LOG_LEVEL") == "" && os.Getenv("F2B_VERBOSE_TESTS") == "" {
 		Logger.SetLevel(slog.LevelError)
 	}
 }
 
 // PrintOutput prints data to stdout in the specified format (PlainFormat or JSONFormat).
-func PrintOutput(data any, format string) {
-	switch format {
-	case JSONFormat:
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		if err := enc.Encode(data); err != nil {
-			Logger.WithError(err).Error(constants.MsgFailedToEncodeJSON)
-			// Fallback goes to stderr: injecting plain text into the JSON
-			// stream would corrupt it for downstream consumers (jq etc.).
-			if _, printErr := fmt.Fprintln(os.Stderr, data); printErr != nil {
-				Logger.WithError(printErr).Error(constants.MsgFailedToWriteOutput)
-			}
-		}
-	default:
-		fmt.Println(data)
-	}
+func PrintOutput(data any, format string) error {
+	return PrintOutputTo(os.Stdout, data, format)
 }
 
-// PrintOutputTo prints data to the specified writer in the given format.
-func PrintOutputTo(w io.Writer, data any, format string) {
-	switch format {
-	case JSONFormat:
+// PrintOutputTo writes data to w in the given format and returns any encode or
+// write error. Commands return it, so a failed write (full disk, closed pipe)
+// fails the command instead of exiting 0 with truncated output. Nothing is
+// written to w on an encode error, so JSON consumers never see a partial
+// document mixed with fallback text.
+func PrintOutputTo(w io.Writer, data any, format string) error {
+	if format == JSONFormat {
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
 		if err := enc.Encode(data); err != nil {
-			Logger.WithError(err).Error(constants.MsgFailedToEncodeJSON)
-			// Fallback goes to stderr: injecting plain text into the JSON
-			// stream would corrupt it for downstream consumers (jq etc.).
-			if _, printErr := fmt.Fprintln(os.Stderr, data); printErr != nil {
-				Logger.WithError(printErr).Error(constants.MsgFailedToWriteOutput)
-			}
+			return fmt.Errorf("%s: %w", constants.MsgFailedToEncodeJSON, err)
 		}
-	default:
-		if _, err := fmt.Fprintln(w, data); err != nil {
-			Logger.WithError(err).Error("Failed to write plain output")
-		}
+		return nil
 	}
+	if _, err := fmt.Fprintln(w, data); err != nil {
+		return fmt.Errorf("%s: %w", constants.MsgFailedToWriteOutput, err)
+	}
+	return nil
 }
 
 // printedError marks an error that was already reported to the user via

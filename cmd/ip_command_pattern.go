@@ -39,14 +39,11 @@ func resolveOutputFormat(config *Config, cmd *cobra.Command) string {
 	return finalFormat
 }
 
-// outputOperationResults outputs the operation results in the specified format
-func outputOperationResults(cmd *cobra.Command, results []OperationResult, _ *Config, format string) error {
+// outputOperationResults outputs the operation results in the format the
+// caller resolved (flag over config), never re-deriving it from config.
+func outputOperationResults(cmd *cobra.Command, results []OperationResult, format string) error {
 	if format == JSONFormat {
-		// Use the format resolved by the caller directly; routing through
-		// OutputResults would re-derive it from config.Format and silently
-		// print plain whenever the two diverge.
-		PrintOutputTo(GetCmdOutput(cmd), results, format)
-		return nil
+		return PrintOutputTo(GetCmdOutput(cmd), results, format)
 	}
 
 	for _, r := range results {
@@ -89,36 +86,39 @@ func ExecuteIPCommand(
 	return func(cmd *cobra.Command, args []string) error {
 		logger := GetContextualLogger()
 
-		// cmd.Context() inherits Cobra's signal cancellation; runIPOperation
-		// reaches it again via cmd.Context() so the multi-jail parallel path
-		// can use the full ParallelTimeout rather than being capped by
-		// CommandTimeout.
-		ctx, cancel := createTimeoutContext(cmd.Context(), config)
-		defer cancel()
-		ctx = WithCommand(ctx, cmdConfig.CommandName)
-
-		return logger.LogOperation(ctx, cmdConfig.OperationName, func() error {
-			return runIPOperation(ctx, cmd, client, config, cmdConfig, args)
+		// cmd.Context() inherits Cobra's signal cancellation. LogOperation
+		// wraps it with request_id/operation and hands that context to the
+		// body, which derives both the CommandTimeout context and the
+		// multi-jail ParallelTimeout context from it, so every nested log
+		// line carries the request_id.
+		rootCtx := WithCommand(cmd.Context(), cmdConfig.CommandName)
+		return logger.LogOperation(rootCtx, cmdConfig.OperationName, func(opCtx context.Context) error {
+			return runIPOperation(opCtx, cmd, client, config, cmdConfig, args)
 		})
 	}
 }
 
 // runIPOperation executes the validated IP command body: validate the IP and
 // jails, run the per-jail operation, and print results (including partial
-// results when the operation fails after changing some jails).
+// results when the operation fails after changing some jails). rootCtx has no
+// CommandTimeout; the single-jail path runs under one derived here.
 func runIPOperation(
-	ctx context.Context,
+	rootCtx context.Context,
 	cmd *cobra.Command,
 	client fail2ban.Client,
 	config *Config,
 	cmdConfig IPCommandConfig,
 	args []string,
 ) error {
-	ip, err := ValidateIPArgumentWithContext(ctx, args)
+	ctx, cancel := createTimeoutContext(rootCtx, config)
+	defer cancel()
+
+	ip, err := ValidateIPArgument(args)
 	if err != nil {
 		return HandleValidationError(err)
 	}
-	ctx = WithIP(ctx, ip)
+	rootCtx = fail2ban.WithIP(rootCtx, ip)
+	ctx = fail2ban.WithIP(ctx, ip)
 
 	jails, err := GetJailsFromArgsWithContext(ctx, client, args, 1)
 	if err != nil {
@@ -133,22 +133,22 @@ func runIPOperation(
 		)
 	}
 
-	// processIPOperation takes the signal-scoped root context (cmd.Context())
-	// for its parallel path plus the timeout ctx for single-jail work.
-	results, err := processIPOperation(cmd.Context(), ctx, config, cmdConfig, client, ip, jails)
+	// processIPOperation takes the signal-scoped root context for its parallel
+	// path plus the timeout ctx for single-jail work.
+	results, err := processIPOperation(rootCtx, ctx, config, cmdConfig, client, ip, jails)
 	finalFormat := resolveOutputFormat(config, cmd)
 	if err != nil {
 		// Partial failure still changed firewall state in the jails that
 		// succeeded — show the per-jail results (failed jails carry the error
 		// in their Status) before reporting the error.
 		if len(results) > 0 {
-			if outErr := outputOperationResults(cmd, results, config, finalFormat); outErr != nil {
+			if outErr := outputOperationResults(cmd, results, finalFormat); outErr != nil {
 				Logger.WithError(outErr).Warn("failed to print partial results")
 			}
 		}
 		return HandleClientError(err)
 	}
-	return outputOperationResults(cmd, results, config, finalFormat)
+	return outputOperationResults(cmd, results, finalFormat)
 }
 
 // NewIPCommand creates a new IP-based command using the unified pattern

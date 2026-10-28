@@ -6,6 +6,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/ivuorinen/f2b/constants"
 )
 
 // setNestedMapValue sets a value in a nested map[string]map[string]T structure with mutex protection.
@@ -20,6 +22,9 @@ func setNestedMapValue[T any](mu *sync.Mutex, mp map[string]map[string]T, jail, 
 }
 
 // MockClient is a stateful, thread-safe mock implementation of the Client interface for testing.
+//
+// Every method checks ctx first, like the real client, so tests exercise
+// cancellation instead of receiving canned data from a canceled context.
 type MockClient struct {
 	mu         sync.Mutex
 	Jails      map[string]struct{}
@@ -40,8 +45,9 @@ type MockClient struct {
 	FilterTests    map[string]string           // filter -> test result
 	// Recorded query arguments so tests can assert that jail/ip flags actually
 	// reach the client (configured LogLines/BanRecords are returned verbatim).
-	LastLogQuery        [2]string // last (jail, ip) passed to GetLogLines
-	LastBanRecordsJails []string  // last jails passed to GetBanRecords
+	LastLogQuery        [2]string // last (jail, ip) passed to a log read
+	LastLogLimit        int       // last maxLines passed to a log read
+	LastBanRecordsJails []string  // last jails passed to GetBanRecordsWithContext
 }
 
 // NewMockClient creates a new MockClient with default jails and filters.
@@ -65,8 +71,11 @@ func NewMockClient() *MockClient {
 	}
 }
 
-// ListJails returns the list of available jails.
-func (m *MockClient) ListJails() ([]string, error) {
+// ListJailsWithContext returns the sorted list of available jails.
+func (m *MockClient) ListJailsWithContext(ctx context.Context) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	jails := make([]string, 0, len(m.Jails))
@@ -78,15 +87,21 @@ func (m *MockClient) ListJails() ([]string, error) {
 	return jails, nil
 }
 
-// StatusAll returns a mock status for all jails.
-func (m *MockClient) StatusAll() (string, error) {
+// StatusAllWithContext returns a mock status for all jails.
+func (m *MockClient) StatusAllWithContext(ctx context.Context) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.StatusAllData, nil
 }
 
-// StatusJail returns a mock status for a specific jail.
-func (m *MockClient) StatusJail(jail string) (string, error) {
+// StatusJailWithContext returns a mock status for a specific jail.
+func (m *MockClient) StatusJailWithContext(ctx context.Context, jail string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.Jails[jail]; !ok {
@@ -98,8 +113,11 @@ func (m *MockClient) StatusJail(jail string) (string, error) {
 	return fmt.Sprintf("Mock status for jail %s", jail), nil
 }
 
-// BanIP bans the given IP in the specified jail. Returns 0 if banned, 1 if already banned.
-func (m *MockClient) BanIP(ip, jail string) (int, error) {
+// BanIPWithContext bans the given IP in the specified jail. Returns 0 if banned, 1 if already banned.
+func (m *MockClient) BanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -134,8 +152,11 @@ func (m *MockClient) BanIP(ip, jail string) (int, error) {
 	return 0, nil
 }
 
-// UnbanIP unbans the given IP in the specified jail. Returns 0 if unbanned, 1 if already unbanned.
-func (m *MockClient) UnbanIP(ip, jail string) (int, error) {
+// UnbanIPWithContext unbans the given IP in the specified jail. Returns 0 if unbanned, 1 if already unbanned.
+func (m *MockClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -165,8 +186,11 @@ func (m *MockClient) UnbanIP(ip, jail string) (int, error) {
 	return 0, nil
 }
 
-// BannedIn returns the list of jails in which the IP is currently banned.
-func (m *MockClient) BannedIn(ip string) ([]string, error) {
+// BannedInWithContext returns the sorted list of jails in which the IP is currently banned.
+func (m *MockClient) BannedInWithContext(ctx context.Context, ip string) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var jails []string
@@ -180,8 +204,11 @@ func (m *MockClient) BannedIn(ip string) ([]string, error) {
 	return jails, nil
 }
 
-// GetBanRecords returns ban records for the specified jails.
-func (m *MockClient) GetBanRecords(jails []string) ([]BanRecord, error) {
+// GetBanRecordsWithContext returns ban records for the specified jails.
+func (m *MockClient) GetBanRecordsWithContext(ctx context.Context, jails []string) ([]BanRecord, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.LastBanRecordsJails = jails
@@ -215,32 +242,50 @@ func (m *MockClient) GetBanRecords(jails []string) ([]BanRecord, error) {
 	return recs, nil
 }
 
-// GetLogLines returns log lines filtered by jail and/or IP.
-func (m *MockClient) GetLogLines(jail, ip string) ([]string, error) {
+// GetLogLinesWithContext returns the newest DefaultLogLinesLimit log lines
+// filtered by jail and/or IP, like the real client.
+func (m *MockClient) GetLogLinesWithContext(ctx context.Context, jail, ip string) ([]string, error) {
+	return m.GetLogLinesWithLimitContext(ctx, jail, ip, constants.DefaultLogLinesLimit)
+}
+
+// GetLogLinesWithLimitContext returns the newest maxLines log lines filtered
+// by jail and/or IP, recording the query and limit so tests can assert that
+// the command forwarded them.
+func (m *MockClient) GetLogLinesWithLimitContext(ctx context.Context, jail, ip string, maxLines int) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.LastLogQuery = [2]string{jail, ip}
+	m.LastLogLimit = maxLines
 
 	// Filter with the same semantics as the real client (passesFilters +
 	// canonical IP token matching) so tests can't pass against substring
 	// behavior the production path doesn't have (e.g. "10.0.0.1" matching
 	// inside "10.0.0.100").
-	cfg := LogReadConfig{JailFilter: jail, IPFilter: canonicalizeIPFilter(ip)}
+	cfg := prepareLogFilters(LogReadConfig{JailFilter: jail, IPFilter: ip})
 	source := m.LogLines
 	if len(source) == 0 {
 		source = m.Logs
 	}
-	var lines []string
+	lines := []string{} // never nil, like the real client
 	for _, l := range source {
 		if passesFilters(l, cfg) {
 			lines = append(lines, l)
 		}
 	}
+	if maxLines > 0 && len(lines) > maxLines {
+		lines = lines[len(lines)-maxLines:]
+	}
 	return lines, nil
 }
 
-// ListFilters returns the available Fail2Ban filters.
-func (m *MockClient) ListFilters() ([]string, error) {
+// ListFiltersWithContext returns the available Fail2Ban filters.
+func (m *MockClient) ListFiltersWithContext(ctx context.Context) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	// Return a copy so a caller mutating the result cannot corrupt mock state.
@@ -249,8 +294,11 @@ func (m *MockClient) ListFilters() ([]string, error) {
 	return filters, nil
 }
 
-// TestFilter simulates running fail2ban-regex for the given filter.
-func (m *MockClient) TestFilter(filter string) (string, error) {
+// TestFilterWithContext simulates running fail2ban-regex for the given filter.
+func (m *MockClient) TestFilterWithContext(ctx context.Context, filter string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	// Check configured filter tests first
@@ -260,59 +308,7 @@ func (m *MockClient) TestFilter(filter string) (string, error) {
 	if result, ok := m.FilterRuns[filter]; ok {
 		return result, nil
 	}
-	return "", NewFilterNotFoundError(filter)
-}
-
-// Context-aware methods for MockClient (using helpers to reduce boilerplate)
-
-// ListJailsWithContext returns a list of jails using the provided context.
-func (m *MockClient) ListJailsWithContext(ctx context.Context) ([]string, error) {
-	return wrapWithContext0(m.ListJails)(ctx)
-}
-
-// StatusAllWithContext returns the status of all jails using the provided context.
-func (m *MockClient) StatusAllWithContext(ctx context.Context) (string, error) {
-	return wrapWithContext0(m.StatusAll)(ctx)
-}
-
-// StatusJailWithContext returns the status of the specified jail using the provided context.
-func (m *MockClient) StatusJailWithContext(ctx context.Context, jail string) (string, error) {
-	return wrapWithContext1(m.StatusJail)(ctx, jail)
-}
-
-// BanIPWithContext bans the specified IP in the given jail using the provided context.
-func (m *MockClient) BanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
-	return wrapWithContext2(m.BanIP)(ctx, ip, jail)
-}
-
-// UnbanIPWithContext unbans the specified IP from the given jail using the provided context.
-func (m *MockClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
-	return wrapWithContext2(m.UnbanIP)(ctx, ip, jail)
-}
-
-// BannedInWithContext returns the jails where the IP is banned using the provided context.
-func (m *MockClient) BannedInWithContext(ctx context.Context, ip string) ([]string, error) {
-	return wrapWithContext1(m.BannedIn)(ctx, ip)
-}
-
-// GetBanRecordsWithContext returns ban records for the specified jails using the provided context.
-func (m *MockClient) GetBanRecordsWithContext(ctx context.Context, jails []string) ([]BanRecord, error) {
-	return wrapWithContext1(m.GetBanRecords)(ctx, jails)
-}
-
-// GetLogLinesWithContext returns log lines for the specified jail and IP using the provided context.
-func (m *MockClient) GetLogLinesWithContext(ctx context.Context, jail, ip string) ([]string, error) {
-	return wrapWithContext2(m.GetLogLines)(ctx, jail, ip)
-}
-
-// ListFiltersWithContext returns a list of available filters using the provided context.
-func (m *MockClient) ListFiltersWithContext(ctx context.Context) ([]string, error) {
-	return wrapWithContext0(m.ListFilters)(ctx)
-}
-
-// TestFilterWithContext tests the specified filter using the provided context.
-func (m *MockClient) TestFilterWithContext(ctx context.Context, filter string) (string, error) {
-	return wrapWithContext1(m.TestFilter)(ctx, filter)
+	return "", fmt.Errorf(ErrFilterNotFound, filter)
 }
 
 // Reset clears all bans and logs in the mock (for test isolation).
@@ -325,22 +321,22 @@ func (m *MockClient) Reset() {
 
 // Helper methods for test configuration
 
-// SetBanError configures an error to return for BanIP(ip, jail).
+// SetBanError configures an error to return for BanIPWithContext(ip, jail).
 func (m *MockClient) SetBanError(jail, ip string, err error) {
 	setNestedMapValue(&m.mu, m.BanErrors, jail, ip, err)
 }
 
-// SetBanResult configures a result code to return for BanIP(ip, jail).
+// SetBanResult configures a result code to return for BanIPWithContext(ip, jail).
 func (m *MockClient) SetBanResult(jail, ip string, result int) {
 	setNestedMapValue(&m.mu, m.BanResults, jail, ip, result)
 }
 
-// SetUnbanError configures an error to return for UnbanIP(ip, jail).
+// SetUnbanError configures an error to return for UnbanIPWithContext(ip, jail).
 func (m *MockClient) SetUnbanError(jail, ip string, err error) {
 	setNestedMapValue(&m.mu, m.UnbanErrors, jail, ip, err)
 }
 
-// SetUnbanResult configures a result code to return for UnbanIP(ip, jail).
+// SetUnbanResult configures a result code to return for UnbanIPWithContext(ip, jail).
 func (m *MockClient) SetUnbanResult(jail, ip string, result int) {
 	setNestedMapValue(&m.mu, m.UnbanResults, jail, ip, result)
 }

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"testing"
 
 	"github.com/ivuorinen/f2b/fail2ban"
@@ -35,12 +36,12 @@ func TestComprehensiveFrameworkCapabilities(t *testing.T) {
 			WithJSONFormat().
 			WithSetup(func(mock *fail2ban.MockClient) {
 				setMockJails(mock, []string{"sshd"})
-				_, _ = mock.BanIP("192.168.1.100", "sshd")
+				_, _ = mock.BanIPWithContext(context.Background(), "192.168.1.100", "sshd")
 			}).
 			ExpectSuccess().
 			Run().
-			AssertJSONField("Jail", "sshd").
-			AssertJSONField("IP", "192.168.1.100")
+			AssertJSONField("jail", "sshd").
+			AssertJSONField("ip", "192.168.1.100")
 	})
 
 	// Test 4: Complex environment setup
@@ -107,7 +108,7 @@ func TestComprehensiveFrameworkCapabilities(t *testing.T) {
 						setMockJails(mock, []string{"sshd", "apache"})
 						if tt.command == "unban" || tt.command == "test" {
 							// Pre-ban IP for unban/test scenarios
-							_, _ = mock.BanIP("192.168.1.100", "sshd")
+							_, _ = mock.BanIPWithContext(context.Background(), "192.168.1.100", "sshd")
 						}
 					})
 
@@ -143,7 +144,7 @@ func TestFrameworkPerformance(t *testing.T) {
 				WithSetup(func(mock *fail2ban.MockClient) {
 					setMockJails(mock, []string{"sshd"})
 					if cmd != "ban" && cmd != "list-jails" {
-						_, _ = mock.BanIP("192.168.1.100", "sshd")
+						_, _ = mock.BanIPWithContext(context.Background(), "192.168.1.100", "sshd")
 					}
 					if cmd == "status" && len(args) > 0 {
 						mock.StatusJailData = map[string]string{"sshd": "Status for sshd"}
@@ -175,12 +176,12 @@ func TestFrameworkEdgeCases(t *testing.T) {
 			WithJSONFormat().
 			WithSetup(func(mock *fail2ban.MockClient) {
 				setMockJails(mock, []string{"sshd"})
-				_, _ = mock.BanIP("192.168.1.100", "sshd")
-				_, _ = mock.BanIP("192.168.1.101", "sshd")
+				_, _ = mock.BanIPWithContext(context.Background(), "192.168.1.100", "sshd")
+				_, _ = mock.BanIPWithContext(context.Background(), "192.168.1.101", "sshd")
 			}).
 			ExpectSuccess().
 			Run().
-			AssertJSONField("Jail", "sshd") // Should handle array and check first element
+			AssertJSONField("jail", "sshd") // Should handle array and check first element
 	})
 
 	// Test exact output matching
@@ -206,7 +207,7 @@ func BenchmarkFrameworkOverhead(b *testing.B) {
 	b.ResetTimer()
 	for b.Loop() {
 		// Benchmark just the core client operation without cobra command overhead
-		_, err := mock.ListJails()
+		_, err := mock.ListJailsWithContext(context.Background())
 		if err != nil {
 			b.Fatalf("Client operation failed: %v", err)
 		}

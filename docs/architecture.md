@@ -266,6 +266,7 @@ fail2ban/client.go
 
 - **Bounded Time Cache**: Thread-safe caching of parsed ban-record timestamps
 - **Parallel Processing**: Multi-jail operations bounded to `runtime.NumCPU()` concurrent goroutines
+- **Newest-First Log Reads**: Log reads stop once the requested number of lines is collected
 
 ### Monitoring and Observability
 

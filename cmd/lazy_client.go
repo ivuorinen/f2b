@@ -29,95 +29,20 @@ func NewLazyClient() fail2ban.Client {
 	return &lazyClient{}
 }
 
-func (l *lazyClient) resolve() (fail2ban.Client, error) {
+// resolve builds the real client on first use under ctx, the context of the
+// operation that triggered it. Construction runs fail2ban-client -V, ping and
+// status; building under context.Background() let those ignore the command's
+// timeout and Ctrl-C. A CLI process runs one command, so the first caller's
+// context is the command's context.
+func (l *lazyClient) resolve(ctx context.Context) (fail2ban.Client, error) {
 	l.once.Do(func() {
-		l.client, l.err = fail2ban.NewClient(cfg.LogDir, cfg.FilterDir)
+		l.client, l.err = fail2ban.NewClientWithContext(ctx, cfg.LogDir, cfg.FilterDir)
 	})
 	return l.client, l.err
 }
 
-func (l *lazyClient) ListJails() ([]string, error) {
-	c, err := l.resolve()
-	if err != nil {
-		return nil, err
-	}
-	return c.ListJails()
-}
-
-func (l *lazyClient) StatusAll() (string, error) {
-	c, err := l.resolve()
-	if err != nil {
-		return "", err
-	}
-	return c.StatusAll()
-}
-
-func (l *lazyClient) StatusJail(jail string) (string, error) {
-	c, err := l.resolve()
-	if err != nil {
-		return "", err
-	}
-	return c.StatusJail(jail)
-}
-
-func (l *lazyClient) BanIP(ip, jail string) (int, error) {
-	c, err := l.resolve()
-	if err != nil {
-		return 0, err
-	}
-	return c.BanIP(ip, jail)
-}
-
-func (l *lazyClient) UnbanIP(ip, jail string) (int, error) {
-	c, err := l.resolve()
-	if err != nil {
-		return 0, err
-	}
-	return c.UnbanIP(ip, jail)
-}
-
-func (l *lazyClient) BannedIn(ip string) ([]string, error) {
-	c, err := l.resolve()
-	if err != nil {
-		return nil, err
-	}
-	return c.BannedIn(ip)
-}
-
-func (l *lazyClient) GetBanRecords(jails []string) ([]fail2ban.BanRecord, error) {
-	c, err := l.resolve()
-	if err != nil {
-		return nil, err
-	}
-	return c.GetBanRecords(jails)
-}
-
-func (l *lazyClient) GetLogLines(jail, ip string) ([]string, error) {
-	c, err := l.resolve()
-	if err != nil {
-		return nil, err
-	}
-	return c.GetLogLines(jail, ip)
-}
-
-func (l *lazyClient) ListFilters() ([]string, error) {
-	c, err := l.resolve()
-	if err != nil {
-		return nil, err
-	}
-	return c.ListFilters()
-}
-
-func (l *lazyClient) TestFilter(filter string) (string, error) {
-	c, err := l.resolve()
-	if err != nil {
-		return "", err
-	}
-	return c.TestFilter(filter)
-}
-
 func (l *lazyClient) ListJailsWithContext(ctx context.Context) ([]string, error) {
-	c, err := l.resolve()
+	c, err := l.resolve(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +50,7 @@ func (l *lazyClient) ListJailsWithContext(ctx context.Context) ([]string, error)
 }
 
 func (l *lazyClient) StatusAllWithContext(ctx context.Context) (string, error) {
-	c, err := l.resolve()
+	c, err := l.resolve(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -133,7 +58,7 @@ func (l *lazyClient) StatusAllWithContext(ctx context.Context) (string, error) {
 }
 
 func (l *lazyClient) StatusJailWithContext(ctx context.Context, jail string) (string, error) {
-	c, err := l.resolve()
+	c, err := l.resolve(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -141,7 +66,7 @@ func (l *lazyClient) StatusJailWithContext(ctx context.Context, jail string) (st
 }
 
 func (l *lazyClient) BanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
-	c, err := l.resolve()
+	c, err := l.resolve(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -149,7 +74,7 @@ func (l *lazyClient) BanIPWithContext(ctx context.Context, ip, jail string) (int
 }
 
 func (l *lazyClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
-	c, err := l.resolve()
+	c, err := l.resolve(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -157,7 +82,7 @@ func (l *lazyClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (i
 }
 
 func (l *lazyClient) BannedInWithContext(ctx context.Context, ip string) ([]string, error) {
-	c, err := l.resolve()
+	c, err := l.resolve(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +90,7 @@ func (l *lazyClient) BannedInWithContext(ctx context.Context, ip string) ([]stri
 }
 
 func (l *lazyClient) GetBanRecordsWithContext(ctx context.Context, jails []string) ([]fail2ban.BanRecord, error) {
-	c, err := l.resolve()
+	c, err := l.resolve(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -173,15 +98,25 @@ func (l *lazyClient) GetBanRecordsWithContext(ctx context.Context, jails []strin
 }
 
 func (l *lazyClient) GetLogLinesWithContext(ctx context.Context, jail, ip string) ([]string, error) {
-	c, err := l.resolve()
+	c, err := l.resolve(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return c.GetLogLinesWithContext(ctx, jail, ip)
 }
 
+func (l *lazyClient) GetLogLinesWithLimitContext(
+	ctx context.Context, jail, ip string, maxLines int,
+) ([]string, error) {
+	c, err := l.resolve(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return c.GetLogLinesWithLimitContext(ctx, jail, ip, maxLines)
+}
+
 func (l *lazyClient) ListFiltersWithContext(ctx context.Context) ([]string, error) {
-	c, err := l.resolve()
+	c, err := l.resolve(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -189,41 +124,12 @@ func (l *lazyClient) ListFiltersWithContext(ctx context.Context) ([]string, erro
 }
 
 func (l *lazyClient) TestFilterWithContext(ctx context.Context, filter string) (string, error) {
-	c, err := l.resolve()
+	c, err := l.resolve(ctx)
 	if err != nil {
 		return "", err
 	}
 	return c.TestFilterWithContext(ctx, filter)
 }
 
-// GetLogLinesWithLimitContext exposes the read-time line-limit capability
-// through the lazy wrapper. Without this the logLinesLimiter assertion in the
-// logs/logs-watch commands never matched in production (the client is always
-// a lazyClient), so any -n above the fail2ban layer's default cap silently
-// truncated to that cap.
-func (l *lazyClient) GetLogLinesWithLimitContext(
-	ctx context.Context, jail, ip string, maxLines int,
-) ([]string, error) {
-	c, err := l.resolve()
-	if err != nil {
-		return nil, err
-	}
-	if lc, ok := c.(logLinesLimiter); ok {
-		return lc.GetLogLinesWithLimitContext(ctx, jail, ip, maxLines)
-	}
-	lines, err := c.GetLogLinesWithContext(ctx, jail, ip)
-	if err != nil {
-		return nil, err
-	}
-	if maxLines > 0 && len(lines) > maxLines {
-		lines = lines[len(lines)-maxLines:]
-	}
-	return lines, nil
-}
-
-// Ensure lazyClient satisfies the Client interface and the optional
-// line-limit capability.
-var (
-	_ fail2ban.Client = (*lazyClient)(nil)
-	_ logLinesLimiter = (*lazyClient)(nil)
-)
+// Ensure lazyClient satisfies the Client interface.
+var _ fail2ban.Client = (*lazyClient)(nil)

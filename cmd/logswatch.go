@@ -15,7 +15,7 @@ import (
 )
 
 // LogsWatchCmd returns the logs-watch command with injected client and config
-func LogsWatchCmd(ctx context.Context, client fail2ban.Client, config *Config) *cobra.Command {
+func LogsWatchCmd(client fail2ban.Client, config *Config) *cobra.Command {
 	var limit int
 	var interval time.Duration
 
@@ -24,13 +24,10 @@ func LogsWatchCmd(ctx context.Context, client fail2ban.Client, config *Config) *
 		"Continuously watch Fail2Ban logs (filtered by jail and/or IP)",
 		nil,
 		func(cobraCmd *cobra.Command, args []string) error {
-			// Prefer the command's context (canceled on SIGINT/SIGTERM via
-			// ExecuteContext) so Ctrl-C exits the watch loop gracefully. Fall
-			// back to the construction-time context if none is set.
+			// The command's context is canceled on SIGINT/SIGTERM (via
+			// ExecuteContext), so Ctrl-C exits the watch loop gracefully.
+			// cobra always sets it, so no fallback context is needed.
 			watchCtx := cobraCmd.Context()
-			if watchCtx == nil {
-				watchCtx = ctx
-			}
 
 			// Parse optional arguments
 			parsedArgs := ParseOptionalArgs(args, 2)
@@ -51,7 +48,9 @@ func LogsWatchCmd(ctx context.Context, client fail2ban.Client, config *Config) *
 				return HandleClientError(err)
 			}
 			if len(prev) > 0 {
-				PrintOutputTo(watch.out, strings.Join(prev, "\n"), config.Format)
+				if err := PrintOutputTo(watch.out, strings.Join(prev, "\n"), config.Format); err != nil {
+					return err
+				}
 			}
 
 			return watch.run(watchCtx, prev, interval)
@@ -79,21 +78,24 @@ type logWatch struct {
 // pollOnce fetches the current log window and prints only the lines appended
 // since prev, returning the new window to carry forward. A transient fetch
 // error is logged and prev is returned unchanged so the watcher keeps polling
-// instead of exiting.
-func (w logWatch) pollOnce(ctx context.Context, prev []string) []string {
+// instead of exiting. A write error is returned: the output (e.g. a closed
+// pipe) is gone, and polling forever into it would never stop.
+func (w logWatch) pollOnce(ctx context.Context, prev []string) ([]string, error) {
 	curr, err := getLogLinesWithLimitAndContext(ctx, w.client, w.jail, w.ip, w.maxLines, w.config.FileTimeout)
 	if err != nil {
 		Logger.WithError(err).Warn("logs-watch poll failed; continuing")
-		return prev
+		return prev, nil
 	}
 	if newLines := newTailLines(prev, curr); len(newLines) > 0 {
-		PrintOutputTo(w.out, strings.Join(newLines, "\n"), w.config.Format)
+		if err := PrintOutputTo(w.out, strings.Join(newLines, "\n"), w.config.Format); err != nil {
+			return prev, err
+		}
 	}
-	return curr
+	return curr, nil
 }
 
 // run polls on the given interval, printing newly appended lines, until ctx is
-// canceled (SIGINT/SIGTERM via ExecuteContext).
+// canceled (SIGINT/SIGTERM via ExecuteContext) or the output fails.
 func (w logWatch) run(ctx context.Context, prev []string, interval time.Duration) error {
 	if interval <= 0 {
 		interval = constants.DefaultPollingInterval
@@ -105,7 +107,10 @@ func (w logWatch) run(ctx context.Context, prev []string, interval time.Duration
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
-			prev = w.pollOnce(ctx, prev)
+			var err error
+			if prev, err = w.pollOnce(ctx, prev); err != nil {
+				return err
+			}
 		}
 	}
 }
@@ -126,15 +131,8 @@ func resolveMaxLines(limit int) int {
 	return maxLines
 }
 
-// logLinesLimiter is the optional capability of clients that can apply the
-// line limit at read time instead of post-processing (RealClient and the
-// lazyClient wrapper implement it).
-type logLinesLimiter interface {
-	GetLogLinesWithLimitContext(ctx context.Context, jail, ip string, maxLines int) ([]string, error)
-}
-
-// getLogLinesWithLimitAndContext tries to use the new memory-efficient method with timeout context,
-// otherwise falls back to the standard method with post-processing limits
+// getLogLinesWithLimitAndContext reads the newest maxLines matching lines
+// under a per-read timeout, so one slow poll cannot stall the watch loop.
 func getLogLinesWithLimitAndContext(
 	ctx context.Context,
 	client fail2ban.Client,
@@ -142,30 +140,9 @@ func getLogLinesWithLimitAndContext(
 	maxLines int,
 	timeout time.Duration,
 ) ([]string, error) {
-	// Create timeout context for this specific operation
 	logCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-
-	// Use the read-time limit capability when the client offers it. This is a
-	// capability interface, not a *RealClient assertion: production wraps the
-	// real client in lazyClient, so a concrete-type assertion never matched
-	// and every read fell through to the default-capped fallback below.
-	if lc, ok := client.(logLinesLimiter); ok {
-		return lc.GetLogLinesWithLimitContext(logCtx, jail, ip, maxLines)
-	}
-
-	// Fallback to standard method with timeout context and post-processing limit
-	lines, err := client.GetLogLinesWithContext(logCtx, jail, ip)
-	if err != nil {
-		return nil, err
-	}
-
-	// Apply limit after the fact for other client implementations
-	if maxLines > 0 && len(lines) > maxLines {
-		lines = lines[len(lines)-maxLines:]
-	}
-
-	return lines, nil
+	return client.GetLogLinesWithLimitContext(logCtx, jail, ip, maxLines)
 }
 
 // newTailLines returns the lines in curr that were appended since prev. Both

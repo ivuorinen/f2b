@@ -12,6 +12,12 @@ import (
 	"github.com/ivuorinen/f2b/fail2ban"
 )
 
+// readLogs reads through RealClient, the single production log-read entry
+// point, from the global log directory these tests point at.
+func readLogs(ctx context.Context, jail, ip string) ([]string, error) {
+	return (&fail2ban.RealClient{LogDir: fail2ban.GetLogDir()}).GetLogLinesWithContext(ctx, jail, ip)
+}
+
 // testIPValidation tests IP address validation security
 func testIPValidation(t *testing.T) {
 	// Test malicious IP patterns
@@ -217,7 +223,7 @@ func assertPathTraversalRejected(t *testing.T, tempDir string) {
 	}
 
 	for _, maliciousPath := range pathTraversalAttempts {
-		resolved, err := fail2ban.ValidateLogPath(context.Background(), maliciousPath, tempDir)
+		resolved, err := fail2ban.ValidateLogPath(maliciousPath, tempDir)
 		if err == nil {
 			t.Errorf("traversal payload %q was accepted, resolved to %q", maliciousPath, resolved)
 		}
@@ -229,9 +235,9 @@ func assertPathTraversalRejected(t *testing.T, tempDir string) {
 	if err := os.WriteFile(testFile, []byte("legit"), 0600); err != nil {
 		t.Fatalf("writing fixture: %v", err)
 	}
-	lines, err := fail2ban.GetLogLines(context.Background(), "all", "all")
+	lines, err := readLogs(context.Background(), "all", "all")
 	if err != nil {
-		t.Fatalf("GetLogLines failed: %v", err)
+		t.Fatalf("log read failed: %v", err)
 	}
 	for _, line := range lines {
 		if strings.Contains(line, "root:") {
@@ -257,7 +263,7 @@ func assertFileOperationSecurity(t *testing.T, tempDir string) {
 					return err
 				}
 
-				_, err := fail2ban.GetLogLines(context.Background(), "sshd", "192.168.1.100")
+				_, err := readLogs(context.Background(), "sshd", "192.168.1.100")
 				return err
 			},
 		},
@@ -458,7 +464,7 @@ func testSecurityChainValidation(t *testing.T, jail, ip string, shouldPass, test
 
 	// Test end-to-end log reading (only for legitimate cases)
 	if shouldPass {
-		_, err := fail2ban.GetLogLines(context.Background(), jail, ip)
+		_, err := readLogs(context.Background(), jail, ip)
 		if err != nil {
 			t.Errorf("Legitimate log reading should succeed: %v", err)
 		}

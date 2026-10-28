@@ -17,11 +17,7 @@ func TestFilterCmd(client fail2ban.Client, config *Config) *cobra.Command {
 		nil,
 		func(cmd *cobra.Command, args []string) error {
 			// Create timeout context for filter testing (use file timeout as it involves file operations)
-			base := cmd.Context()
-			if base == nil {
-				base = context.Background()
-			}
-			ctx, cancel := context.WithTimeout(base, config.FileTimeout)
+			ctx, cancel := context.WithTimeout(cmd.Context(), config.FileTimeout)
 			defer cancel()
 
 			if len(args) < 1 {
@@ -29,7 +25,11 @@ func TestFilterCmd(client fail2ban.Client, config *Config) *cobra.Command {
 				if err != nil {
 					return HandleClientError(err)
 				}
-				PrintOutputTo(GetCmdOutput(cmd), "Available filters: "+strings.Join(filters, ", "), config.Format)
+				if err := PrintOutputTo(
+					GetCmdOutput(cmd), "Available filters: "+strings.Join(filters, ", "), config.Format,
+				); err != nil {
+					return err
+				}
 				return HandleClientError(fail2ban.ErrFilterRequiredError)
 			}
 
@@ -38,8 +38,10 @@ func TestFilterCmd(client fail2ban.Client, config *Config) *cobra.Command {
 				return HandleValidationError(err)
 			}
 
-			// Validate filter name for path traversal
-			if err := fail2ban.ValidateFilterName(filterName); err != nil {
+			// Same validator the client applies, so every filter ListFilters
+			// prints (e.g. "foo.bar") is also accepted here; a stricter
+			// cmd-only check rejected names the listing had just offered.
+			if err := fail2ban.ValidateFilter(filterName); err != nil {
 				return HandleValidationError(err)
 			}
 
@@ -48,7 +50,6 @@ func TestFilterCmd(client fail2ban.Client, config *Config) *cobra.Command {
 				return HandleClientError(err)
 			}
 
-			PrintOutputTo(GetCmdOutput(cmd), out, config.Format)
-			return nil
+			return PrintOutputTo(GetCmdOutput(cmd), out, config.Format)
 		})
 }

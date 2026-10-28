@@ -16,7 +16,7 @@ func TestIPCmd(client interface {
 		defer cancel()
 
 		// Validate IP argument
-		ip, err := ValidateIPArgumentWithContext(ctx, args)
+		ip, err := ValidateIPArgument(args)
 		if err != nil {
 			return HandleValidationError(err)
 		}
@@ -27,7 +27,6 @@ func TestIPCmd(client interface {
 		}
 
 		result := FormatBannedResult(ip, jails)
-		PrintOutputTo(GetCmdOutput(cmd), result, config.Format)
-		return nil
+		return PrintOutputTo(GetCmdOutput(cmd), result, config.Format)
 	})
 }

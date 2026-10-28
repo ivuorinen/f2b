@@ -340,3 +340,23 @@ func BenchmarkPathValidation(b *testing.B) {
 		}
 	}
 }
+
+// TestClientPathsRejectParentOfAllowedBase pins the containment edge: the
+// exact parent of an allowed base (Rel == "..") is outside it. Without that
+// check /var and /etc passed client validation.
+func TestClientPathsRejectParentOfAllowedBase(t *testing.T) {
+	t.Setenv("ALLOW_DEV_PATHS", "")
+	if _, err := ValidateClientLogPath("/var"); err == nil {
+		t.Error("ValidateClientLogPath accepted /var, the parent of the allowed /var/log")
+	}
+	if _, err := ValidateClientFilterPath("/etc"); err == nil {
+		t.Error("ValidateClientFilterPath accepted /etc, the parent of the allowed /etc/fail2ban")
+	}
+	// Control: the allowed bases themselves still pass.
+	if _, err := ValidateClientLogPath("/var/log"); err != nil {
+		t.Errorf("ValidateClientLogPath rejected the allowed base /var/log: %v", err)
+	}
+	if _, err := ValidateClientFilterPath("/etc/fail2ban"); err != nil {
+		t.Errorf("ValidateClientFilterPath rejected the allowed base /etc/fail2ban: %v", err)
+	}
+}

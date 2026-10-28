@@ -21,33 +21,25 @@ who want to contribute to the project or integrate with its components.
 
 The core interface for interacting with fail2ban operations.
 
+Every method takes a context, so each call runs under the command's timeout and
+signal cancellation.
+
 ```go
 type Client interface {
     // Jail and status operations
-    ListJails() ([]string, error)
-    StatusAll() (string, error)
-    StatusJail(string) (string, error)
-
-    // Ban operations
-    BanIP(ip, jail string) (int, error)
-    UnbanIP(ip, jail string) (int, error)
-    BannedIn(ip string) ([]string, error)
-    GetBanRecords(jails []string) ([]BanRecord, error)
-
-    // Log and filter operations
-    GetLogLines(jail, ip string) ([]string, error)
-    ListFilters() ([]string, error)
-    TestFilter(filter string) (string, error)
-
-    // Context-aware versions for timeout and cancellation support
     ListJailsWithContext(ctx context.Context) ([]string, error)
     StatusAllWithContext(ctx context.Context) (string, error)
     StatusJailWithContext(ctx context.Context, jail string) (string, error)
+
+    // Ban operations (0 = changed, 1 = already in that state)
     BanIPWithContext(ctx context.Context, ip, jail string) (int, error)
     UnbanIPWithContext(ctx context.Context, ip, jail string) (int, error)
     BannedInWithContext(ctx context.Context, ip string) ([]string, error)
     GetBanRecordsWithContext(ctx context.Context, jails []string) ([]BanRecord, error)
+
+    // Log and filter operations
     GetLogLinesWithContext(ctx context.Context, jail, ip string) ([]string, error)
+    GetLogLinesWithLimitContext(ctx context.Context, jail, ip string, maxLines int) ([]string, error)
     ListFiltersWithContext(ctx context.Context) ([]string, error)
     TestFilterWithContext(ctx context.Context, filter string) (string, error)
 }
@@ -192,7 +184,7 @@ func NewCommand(
 ) *cobra.Command
 
 // Validation helpers
-func ValidateIPArgumentWithContext(ctx context.Context, args []string) (string, error)
+func ValidateIPArgument(args []string) (string, error)
 func ValidateServiceAction(action string) error
 
 // Jail operations
@@ -240,11 +232,8 @@ systemErr := fail2ban.NewSystemError(
 
 ```go
 const (
-    ErrorCategoryValidation  ErrorCategory = "validation"
-    ErrorCategoryNetwork     ErrorCategory = "network"
-    ErrorCategoryPermission  ErrorCategory = "permission"
-    ErrorCategorySystem      ErrorCategory = "system"
-    ErrorCategoryConfig      ErrorCategory = "config"
+    ErrorCategoryValidation ErrorCategory = "validation" // Input validation errors
+    ErrorCategorySystem     ErrorCategory = "system"     // System-level errors
 )
 ```
 
@@ -291,16 +280,18 @@ The logging system supports structured logging with context propagation:
 logger := cmd.NewContextualLogger()
 
 // Add context to logging
-ctx := cmd.WithOperation(context.Background(), "ban_ip")
-ctx = cmd.WithIP(ctx, "192.168.1.100")
-ctx = cmd.WithJail(ctx, "sshd")
+ctx := fail2ban.WithOperation(context.Background(), "ban_ip")
+ctx = fail2ban.WithIP(ctx, "192.168.1.100")
+ctx = fail2ban.WithJail(ctx, "sshd")
 
 // Log with context
 logger.WithContext(ctx).Info("Starting ban operation")
 
-// Log operations with timing
-err := logger.LogOperation(ctx, "ban_operation", func() error {
-    return client.BanIP("192.168.1.100", "sshd")
+// Log operations with timing. fn receives the enriched context, so log lines
+// emitted inside it carry the same request_id as the start/finish lines.
+err := logger.LogOperation(ctx, "ban_operation", func(ctx context.Context) error {
+    _, err := client.BanIPWithContext(ctx, "192.168.1.100", "sshd")
+    return err
 })
 ```
 
@@ -407,21 +398,20 @@ func MyCmd(client fail2ban.Client, config *Config) *cobra.Command {
             }
 
             // Add context for logging
-            ctx = WithOperation(ctx, "my_operation")
+            ctx = fail2ban.WithOperation(ctx, "my_operation")
             ctx = WithCommand(ctx, "mycmd")
 
-            // Log operation with timing
+            // Log operation with timing; fn receives the enriched context
             logger := GetContextualLogger()
-            return logger.LogOperation(ctx, "my_command", func() error {
+            return logger.LogOperation(ctx, "my_command", func(ctx context.Context) error {
                 // Perform operation with client
                 result, err := client.SomeOperation(args[0])
                 if err != nil {
                     return HandleClientError(err)
                 }
 
-                // Output results
-                OutputResults(cmd, result, config)
-                return nil
+                // Output results; a write failure becomes the command's error
+                return PrintOutputTo(GetCmdOutput(cmd), result, config.Format)
             })
         })
 }
@@ -445,24 +435,18 @@ type CustomClient struct {
     customLogic string
 }
 
-func (c *CustomClient) BanIP(ip, jail string) (int, error) {
+func (c *CustomClient) BanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
+    if err := ctx.Err(); err != nil {
+        return 0, err
+    }
+
     // Custom pre-processing
     if err := c.preprocessBan(ip, jail); err != nil {
         return 0, err
     }
 
     // Delegate to base client
-    return c.baseClient.BanIP(ip, jail)
-}
-
-func (c *CustomClient) BanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
-    // Context-aware implementation
-    select {
-    case <-ctx.Done():
-        return 0, ctx.Err()
-    default:
-        return c.BanIP(ip, jail)
-    }
+    return c.baseClient.BanIPWithContext(ctx, ip, jail)
 }
 
 // Implement other Client interface methods...
