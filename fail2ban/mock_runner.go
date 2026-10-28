@@ -1,6 +1,7 @@
-// Package fail2ban test-support: MockRunner is a mock implementation of the
-// Runner interface used only by unit tests. It was extracted verbatim from
-// fail2ban.go to keep test doubles out of the production Runner machinery.
+// Test support: MockRunner is a mock implementation of the Runner interface
+// used only by unit tests (see test_helpers.go for why it is not a _test.go
+// file).
+
 package fail2ban
 
 import (

@@ -1,7 +1,7 @@
-// Package fail2ban provides a log/slog-backed implementation of LoggerInterface.
-// It replaces the former logrus adapter so f2b depends only on the standard
-// library for logging while keeping the fluent WithField/WithError/Warnf API the
-// rest of the codebase already uses.
+// A log/slog-backed implementation of LoggerEntry, so f2b depends only on the
+// standard library for logging while keeping the fluent
+// WithField/WithError/Warnf API the rest of the codebase uses.
+
 package fail2ban
 
 import (

@@ -18,11 +18,8 @@ import (
 	"github.com/ivuorinen/f2b/constants"
 )
 
-/*
-Package fail2ban provides log reading and filtering utilities for Fail2Ban logs.
-This file contains logic for reading, parsing, and filtering Fail2Ban log files,
-including support for rotated and compressed logs.
-*/
+// Log reading and filtering for Fail2Ban logs, including rotated and
+// compressed logs.
 
 // GetLogLines reads Fail2Ban log files (current and rotated) and filters lines by jail and/or IP.
 //

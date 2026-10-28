@@ -1,6 +1,6 @@
-// Package cmd provides command pattern abstractions to reduce code duplication.
-// This module handles common patterns for IP-based operations (ban/unban) that
-// share identical structure but different processing functions.
+// Shared command pattern for IP-based operations (ban/unban), which have the
+// same structure but different per-jail operations.
+
 package cmd
 
 import (

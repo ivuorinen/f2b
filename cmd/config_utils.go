@@ -1,6 +1,5 @@
-// Package cmd provides configuration management and validation utilities.
-// This package handles CLI configuration parsing, validation, and security
-// checks to ensure safe operation of f2b commands.
+// CLI configuration parsing and validation.
+
 package cmd
 
 import (

@@ -1,6 +1,6 @@
-// Package fail2ban provides security utility functions for input validation and threat detection.
-// This module handles path traversal detection, dangerous command pattern identification,
-// and other security-related checks to prevent injection attacks and unauthorized access.
+// Security utility functions for input validation and threat detection: path
+// traversal detection and dangerous command pattern identification.
+
 package fail2ban
 
 import (

@@ -1,6 +1,5 @@
-// Package cmd provides structured logging and contextual logging capabilities.
-// This package implements context-aware logging with request tracing and
-// structured field support for better observability in f2b operations.
+// Structured, context-aware logging with request tracing for f2b operations.
+
 package cmd
 
 import (

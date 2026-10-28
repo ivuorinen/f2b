@@ -6,18 +6,6 @@
 import "github.com/ivuorinen/f2b/cmd"
 ```
 
-Package cmd provides configuration management and validation utilities. This package handles CLI configuration parsing, validation, and security checks to ensure safe operation of f2b commands.
-
-Package cmd provides common helper functions and utilities for CLI commands. This package contains shared functionality used across multiple f2b commands, including argument validation, error handling, and output formatting helpers.
-
-Package cmd provides command pattern abstractions to reduce code duplication. This module handles common patterns for IP\-based operations \(ban/unban\) that share identical structure but different processing functions.
-
-Package cmd provides the shared validate\-then\-execute helper for IP operations \(ban/unban\). The per\-command operation functions are wired directly into IPCommandConfig; no processor abstraction is needed.
-
-Package cmd provides structured logging and contextual logging capabilities. This package implements context\-aware logging with request tracing and structured field support for better observability in f2b operations.
-
-Package cmd provides output formatting and display utilities for the f2b CLI. This package handles structured output in both plain text and JSON formats, supporting consistent CLI output patterns across all commands.
-
 Package cmd implements all CLI commands for the f2b tool, providing secure Fail2Ban management operations including jail monitoring, IP banning/unbanning, log analysis, and service management with comprehensive input validation.
 
 ## Index
@@ -219,7 +207,7 @@ func FormatStatusResult(jail, status string) string
 FormatStatusResult formats status results for output
 
 <a name="GetCmdOutput"></a>
-## func [GetCmdOutput](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L126>)
+## func [GetCmdOutput](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L125>)
 
 ```go
 func GetCmdOutput(cmd *cobra.Command) io.Writer
@@ -300,7 +288,7 @@ func IsEmptyString(s string) bool
 IsEmptyString checks if a string is empty after trimming whitespace
 
 <a name="IsPrinted"></a>
-## func [IsPrinted](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L97>)
+## func [IsPrinted](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L96>)
 
 ```go
 func IsPrinted(err error) bool
@@ -390,7 +378,7 @@ func ParseOptionalArgs(args []string, count int) []string
 ParseOptionalArgs parses optional arguments up to a given count
 
 <a name="PrintError"></a>
-## func [PrintError](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L103>)
+## func [PrintError](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L102>)
 
 ```go
 func PrintError(err error)
@@ -399,7 +387,7 @@ func PrintError(err error)
 PrintError logs and prints an error to stderr with enhanced context if available.
 
 <a name="PrintOutput"></a>
-## func [PrintOutput](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L48>)
+## func [PrintOutput](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L47>)
 
 ```go
 func PrintOutput(data any, format string)
@@ -408,7 +396,7 @@ func PrintOutput(data any, format string)
 PrintOutput prints data to stdout in the specified format \(PlainFormat or JSONFormat\).
 
 <a name="PrintOutputTo"></a>
-## func [PrintOutputTo](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L67>)
+## func [PrintOutputTo](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L66>)
 
 ```go
 func PrintOutputTo(w io.Writer, data any, format string)
@@ -444,7 +432,7 @@ func ServiceCmd(config *Config) *cobra.Command
 ServiceCmd returns the service command with injected config
 
 <a name="SetContextualLogger"></a>
-## func [SetContextualLogger](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L183>)
+## func [SetContextualLogger](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L182>)
 
 ```go
 func SetContextualLogger(logger *ContextualLogger)
@@ -538,7 +526,7 @@ func VersionCmd(config *Config) *cobra.Command
 VersionCmd returns the version command with output consistency
 
 <a name="WithCommand"></a>
-## func [WithCommand](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L96>)
+## func [WithCommand](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L95>)
 
 ```go
 func WithCommand(ctx context.Context, command string) context.Context
@@ -547,7 +535,7 @@ func WithCommand(ctx context.Context, command string) context.Context
 WithCommand adds command context and returns a new context. This is cmd\-specific as fail2ban doesn't need command tracking. Empty commands are not stored in context.
 
 <a name="WithIP"></a>
-## func [WithIP](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L83>)
+## func [WithIP](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L82>)
 
 ```go
 func WithIP(ctx context.Context, ip string) context.Context
@@ -556,7 +544,7 @@ func WithIP(ctx context.Context, ip string) context.Context
 WithIP adds IP context and returns a new context. Delegates to fail2ban.WithIP for consistent IP validation.
 
 <a name="WithJail"></a>
-## func [WithJail](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L89>)
+## func [WithJail](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L88>)
 
 ```go
 func WithJail(ctx context.Context, jail string) context.Context
@@ -565,7 +553,7 @@ func WithJail(ctx context.Context, jail string) context.Context
 WithJail adds jail context and returns a new context. Delegates to fail2ban.WithJail for consistent jail name validation.
 
 <a name="WithOperation"></a>
-## func [WithOperation](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L77>)
+## func [WithOperation](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L76>)
 
 ```go
 func WithOperation(ctx context.Context, operation string) context.Context
@@ -574,7 +562,7 @@ func WithOperation(ctx context.Context, operation string) context.Context
 WithOperation adds operation context and returns a new context. Delegates to fail2ban.WithOperation for consistent validation.
 
 <a name="WithRequestID"></a>
-## func [WithRequestID](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L106>)
+## func [WithRequestID](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L105>)
 
 ```go
 func WithRequestID(ctx context.Context, requestID string) context.Context
@@ -609,7 +597,7 @@ func EnvConfig() Config
 EnvConfig returns the package\-level config built from the environment at init time — the same instance the CLI flags are bound to. main uses it so the environment is read \(and warned about\) once per process.
 
 <a name="NewConfigFromEnv"></a>
-### func [NewConfigFromEnv](<https://github.com/ivuorinen/f2b/blob/main/cmd/config_utils.go#L213>)
+### func [NewConfigFromEnv](<https://github.com/ivuorinen/f2b/blob/main/cmd/config_utils.go#L212>)
 
 ```go
 func NewConfigFromEnv() Config
@@ -618,7 +606,7 @@ func NewConfigFromEnv() Config
 NewConfigFromEnv builds Config from environment variables with defaults and validation.
 
 <a name="Config.ValidateConfig"></a>
-### func \(\*Config\) [ValidateConfig](<https://github.com/ivuorinen/f2b/blob/main/cmd/config_utils.go#L289>)
+### func \(\*Config\) [ValidateConfig](<https://github.com/ivuorinen/f2b/blob/main/cmd/config_utils.go#L288>)
 
 ```go
 func (c *Config) ValidateConfig() error
@@ -627,7 +615,7 @@ func (c *Config) ValidateConfig() error
 ValidateConfig performs comprehensive validation of the Config struct
 
 <a name="ContextualLogger"></a>
-## type [ContextualLogger](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L17-L20>)
+## type [ContextualLogger](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L16-L19>)
 
 ContextualLogger provides structured logging with context propagation
 
@@ -639,7 +627,7 @@ type ContextualLogger struct {
 ```
 
 <a name="GetContextualLogger"></a>
-### func [GetContextualLogger](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L170>)
+### func [GetContextualLogger](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L169>)
 
 ```go
 func GetContextualLogger() *ContextualLogger
@@ -648,7 +636,7 @@ func GetContextualLogger() *ContextualLogger
 GetContextualLogger returns the global contextual logger
 
 <a name="NewContextualLogger"></a>
-### func [NewContextualLogger](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L23>)
+### func [NewContextualLogger](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L22>)
 
 ```go
 func NewContextualLogger() *ContextualLogger
@@ -657,7 +645,7 @@ func NewContextualLogger() *ContextualLogger
 NewContextualLogger creates a new contextual logger using the centralized cmd.Logger
 
 <a name="ContextualLogger.LogBanOperation"></a>
-### func \(\*ContextualLogger\) [LogBanOperation](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L139-L144>)
+### func \(\*ContextualLogger\) [LogBanOperation](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L138-L143>)
 
 ```go
 func (cl *ContextualLogger) LogBanOperation(ctx context.Context, operation, ip, jail string, success bool, duration time.Duration)
@@ -666,7 +654,7 @@ func (cl *ContextualLogger) LogBanOperation(ctx context.Context, operation, ip, 
 LogBanOperation logs ban/unban operations with structured context and metrics
 
 <a name="ContextualLogger.LogOperation"></a>
-### func \(\*ContextualLogger\) [LogOperation](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L111>)
+### func \(\*ContextualLogger\) [LogOperation](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L110>)
 
 ```go
 func (cl *ContextualLogger) LogOperation(ctx context.Context, operation string, fn func() error) error
@@ -675,7 +663,7 @@ func (cl *ContextualLogger) LogOperation(ctx context.Context, operation string, 
 LogOperation logs the start and end of an operation with timing and metrics
 
 <a name="ContextualLogger.WithContext"></a>
-### func \(\*ContextualLogger\) [WithContext](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L62>)
+### func \(\*ContextualLogger\) [WithContext](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L61>)
 
 ```go
 func (cl *ContextualLogger) WithContext(ctx context.Context) fail2ban.LoggerEntry

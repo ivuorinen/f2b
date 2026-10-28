@@ -1,6 +1,5 @@
-// Package fail2ban provides logging and environment detection utilities.
-// This module handles logger configuration, CI detection, and test environment setup
-// for the fail2ban integration system.
+// Logger configuration plus CI and test environment detection.
+
 package fail2ban
 
 import (

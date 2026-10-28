@@ -8,20 +8,6 @@ import "github.com/ivuorinen/f2b/fail2ban"
 
 Package fail2ban provides comprehensive functionality for managing fail2ban jails and filters with secure command execution, input validation, caching, and performance optimization.
 
-Package fail2ban defines core interfaces and contracts for fail2ban operations. This package provides the primary interfaces \(Client, Runner, SudoChecker\) that define the contract for interacting with fail2ban services and system operations.
-
-Package fail2ban provides context utility functions for structured logging and tracing. This module handles context value management, logger creation with context fields, and request ID generation for better traceability in fail2ban operations.
-
-Package fail2ban provides logging and environment detection utilities. This module handles logger configuration, CI detection, and test environment setup for the fail2ban integration system.
-
-Package fail2ban test\-support: MockRunner is a mock implementation of the Runner interface used only by unit tests. It was extracted verbatim from fail2ban.go to keep test doubles out of the production Runner machinery.
-
-Package fail2ban provides security utility functions for input validation and threat detection. This module handles path traversal detection, dangerous command pattern identification, and other security\-related checks to prevent injection attacks and unauthorized access.
-
-Package fail2ban provides a log/slog\-backed implementation of LoggerInterface. It replaces the former logrus adapter so f2b depends only on the standard library for logging while keeping the fluent WithField/WithError/Warnf API the rest of the codebase already uses.
-
-Package fail2ban defines common data structures and types. This package provides core types used throughout the fail2ban integration, including ban records, configuration structures, and logging interfaces.
-
 ## Index
 
 - [Constants](<#constants>)
@@ -372,7 +358,7 @@ func CompareVersions(v1, v2 string) int
 CompareVersions compares two dotted\-numeric version strings, returning \-1, 0, or 1. fail2ban versions are simple \(e.g. 0.11.2, 1.0.1\), so a small SemVer comparator replaces the go\-version dependency: numeric components are compared left to right \(missing trailing parts count as 0\), a prerelease sorts before its release, and build metadata is ignored. Unparseable input falls back to lexical comparison.
 
 <a name="ConfigureCITestLogging"></a>
-## func [ConfigureCITestLogging](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_env.go#L63>)
+## func [ConfigureCITestLogging](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_env.go#L62>)
 
 ```go
 func ConfigureCITestLogging()
@@ -471,7 +457,7 @@ func GetLogDir() string
 GetLogDir returns the current log directory path.
 
 <a name="GetLogLines"></a>
-## func [GetLogLines](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L35>)
+## func [GetLogLines](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L32>)
 
 ```go
 func GetLogLines(ctx context.Context, jailFilter string, ipFilter string) ([]string, error)
@@ -484,7 +470,7 @@ jailFilter: jail name to filter by \(empty or "all" for all jails\) ipFilter: IP
 Returns a slice of matching log lines, or an error. This function uses streaming to limit memory usage. Context parameter supports timeout and cancellation of file I/O operations.
 
 <a name="GetLogLinesUltraOptimized"></a>
-## func [GetLogLinesUltraOptimized](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L584>)
+## func [GetLogLinesUltraOptimized](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L581>)
 
 ```go
 func GetLogLinesUltraOptimized(jailFilter, ipFilter string, maxLines int) ([]string, error)
@@ -493,7 +479,7 @@ func GetLogLinesUltraOptimized(jailFilter, ipFilter string, maxLines int) ([]str
 GetLogLinesUltraOptimized retains the legacy API that benchmarks expect while now sharing the simplified implementation.
 
 <a name="GetLogLinesWithLimit"></a>
-## func [GetLogLinesWithLimit](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L41>)
+## func [GetLogLinesWithLimit](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L38>)
 
 ```go
 func GetLogLinesWithLimit(ctx context.Context, jailFilter string, ipFilter string, maxLines int) ([]string, error)
@@ -502,7 +488,7 @@ func GetLogLinesWithLimit(ctx context.Context, jailFilter string, ipFilter strin
 GetLogLinesWithLimit returns log lines with configurable limits for memory management. Context parameter supports timeout and cancellation of file I/O operations.
 
 <a name="IsCI"></a>
-## func [IsCI](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_env.go#L47>)
+## func [IsCI](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_env.go#L46>)
 
 ```go
 func IsCI() bool
@@ -511,7 +497,7 @@ func IsCI() bool
 IsCI detects if we're running in a CI environment
 
 <a name="IsGoTestBinary"></a>
-## func [IsGoTestBinary](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_env.go#L119>)
+## func [IsGoTestBinary](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_env.go#L118>)
 
 ```go
 func IsGoTestBinary() bool
@@ -531,7 +517,7 @@ func IsGzipFile(path string) (bool, error)
 IsGzipFile checks if a file is gzip compressed using the default detector. SECURITY: The caller must validate and sanitize the path argument to prevent path traversal attacks and ensure the file is within allowed directories.
 
 <a name="IsTestEnvironment"></a>
-## func [IsTestEnvironment](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_env.go#L86>)
+## func [IsTestEnvironment](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_env.go#L85>)
 
 ```go
 func IsTestEnvironment() bool
@@ -695,7 +681,7 @@ func SetLogDir(dir string)
 SetLogDir sets the directory path for log files. Log\-reading functions read this global via GetLogDir, so tests use it to point log reads at a temp dir.
 
 <a name="SetLogger"></a>
-## func [SetLogger](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_env.go#L29>)
+## func [SetLogger](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_env.go#L28>)
 
 ```go
 func SetLogger(l LoggerInterface)
@@ -875,7 +861,7 @@ func WithTestRunner(t TestingInterface, runner Runner) func()
 WithTestRunner sets a test runner and returns a cleanup function. Usage: defer fail2ban.WithTestRunner\(t, mockRunner\)\(\)
 
 <a name="BanRecord"></a>
-## type [BanRecord](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/types.go#L11-L16>)
+## type [BanRecord](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/types.go#L10-L15>)
 
 BanRecord represents a single ban entry with jail, IP, ban time, and remaining duration.
 
@@ -1217,7 +1203,7 @@ func (ftc *FastTimeCache) ParseTimeOptimized(timeStr string) (time.Time, error)
 ParseTimeOptimized parses time with minimal allocations
 
 <a name="Fields"></a>
-## type [Fields](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/types.go#L19>)
+## type [Fields](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/types.go#L18>)
 
 Fields represents a map of structured log fields \(decoupled from logrus\)
 
@@ -1280,7 +1266,7 @@ func (gd *GzipDetector) OpenGzipAwareReader(path string) (io.ReadCloser, error)
 OpenGzipAwareReader opens a file and returns appropriate reader \(gzip or regular\)
 
 <a name="LogCollectionConfig"></a>
-## type [LogCollectionConfig](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/types.go#L43-L48>)
+## type [LogCollectionConfig](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/types.go#L42-L47>)
 
 LogCollectionConfig configures log line collection behavior
 
@@ -1294,7 +1280,7 @@ type LogCollectionConfig struct {
 ```
 
 <a name="LogReadConfig"></a>
-## type [LogReadConfig](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L266-L277>)
+## type [LogReadConfig](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L263-L274>)
 
 LogReadConfig holds configuration for streaming log reading
 
@@ -1314,7 +1300,7 @@ type LogReadConfig struct {
 ```
 
 <a name="LoggerEntry"></a>
-## type [LoggerEntry](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/types.go#L22-L34>)
+## type [LoggerEntry](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/types.go#L21-L33>)
 
 LoggerEntry represents a structured logging entry that can be chained
 
@@ -1344,7 +1330,7 @@ func LoggerFromContext(ctx context.Context) LoggerEntry
 LoggerFromContext creates a logger entry with fields from context
 
 <a name="LoggerInterface"></a>
-## type [LoggerInterface](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/types.go#L38-L40>)
+## type [LoggerInterface](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/types.go#L37-L39>)
 
 LoggerInterface defines the top\-level logging interface \(decoupled from logrus\). It embeds LoggerEntry since both interfaces share the same method signatures.
 
@@ -1674,7 +1660,7 @@ func (m *MockClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (i
 UnbanIPWithContext unbans the specified IP from the given jail using the provided context.
 
 <a name="MockRunner"></a>
-## type [MockRunner](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L16-L21>)
+## type [MockRunner](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L17-L22>)
 
 MockRunner is a simple mock for Runner, used in unit tests.
 
@@ -1697,7 +1683,7 @@ func MustMockRunner(tb testing.TB) *MockRunner
 MustMockRunner returns the current global runner as a \*MockRunner, failing the test when the global runner is anything else \(e.g. a prior test leaked a different runner\).
 
 <a name="NewMockRunner"></a>
-### func [NewMockRunner](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L24>)
+### func [NewMockRunner](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L25>)
 
 ```go
 func NewMockRunner() *MockRunner
@@ -1706,7 +1692,7 @@ func NewMockRunner() *MockRunner
 NewMockRunner creates a new mock runner instance for testing.
 
 <a name="MockRunner.CombinedOutput"></a>
-### func \(\*MockRunner\) [CombinedOutput](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L33>)
+### func \(\*MockRunner\) [CombinedOutput](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L34>)
 
 ```go
 func (m *MockRunner) CombinedOutput(name string, args ...string) ([]byte, error)
@@ -1715,7 +1701,7 @@ func (m *MockRunner) CombinedOutput(name string, args ...string) ([]byte, error)
 CombinedOutput returns a mocked response or error for a command.
 
 <a name="MockRunner.CombinedOutputWithContext"></a>
-### func \(\*MockRunner\) [CombinedOutputWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L188>)
+### func \(\*MockRunner\) [CombinedOutputWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L189>)
 
 ```go
 func (m *MockRunner) CombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error)
@@ -1724,7 +1710,7 @@ func (m *MockRunner) CombinedOutputWithContext(ctx context.Context, name string,
 CombinedOutputWithContext returns a mocked response or error for a command with context support.
 
 <a name="MockRunner.CombinedOutputWithSudo"></a>
-### func \(\*MockRunner\) [CombinedOutputWithSudo](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L82>)
+### func \(\*MockRunner\) [CombinedOutputWithSudo](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L83>)
 
 ```go
 func (m *MockRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte, error)
@@ -1733,7 +1719,7 @@ func (m *MockRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte
 CombinedOutputWithSudo returns a mocked response for sudo commands.
 
 <a name="MockRunner.CombinedOutputWithSudoContext"></a>
-### func \(\*MockRunner\) [CombinedOutputWithSudoContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L195>)
+### func \(\*MockRunner\) [CombinedOutputWithSudoContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L196>)
 
 ```go
 func (m *MockRunner) CombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error)
@@ -1742,7 +1728,7 @@ func (m *MockRunner) CombinedOutputWithSudoContext(ctx context.Context, name str
 CombinedOutputWithSudoContext returns a mocked response for sudo commands with context support.
 
 <a name="MockRunner.GetCalls"></a>
-### func \(\*MockRunner\) [GetCalls](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L143>)
+### func \(\*MockRunner\) [GetCalls](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L144>)
 
 ```go
 func (m *MockRunner) GetCalls() []string
@@ -1751,7 +1737,7 @@ func (m *MockRunner) GetCalls() []string
 GetCalls returns the log of commands called.
 
 <a name="MockRunner.SetError"></a>
-### func \(\*MockRunner\) [SetError](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L136>)
+### func \(\*MockRunner\) [SetError](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L137>)
 
 ```go
 func (m *MockRunner) SetError(cmd string, err error)
@@ -1760,7 +1746,7 @@ func (m *MockRunner) SetError(cmd string, err error)
 SetError sets an error for a command.
 
 <a name="MockRunner.SetResponse"></a>
-### func \(\*MockRunner\) [SetResponse](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L129>)
+### func \(\*MockRunner\) [SetResponse](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L130>)
 
 ```go
 func (m *MockRunner) SetResponse(cmd string, response []byte)
@@ -1769,7 +1755,7 @@ func (m *MockRunner) SetResponse(cmd string, response []byte)
 SetResponse sets a response for a command.
 
 <a name="MockRunner.SetupJailResponses"></a>
-### func \(\*MockRunner\) [SetupJailResponses](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L160>)
+### func \(\*MockRunner\) [SetupJailResponses](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L161>)
 
 ```go
 func (m *MockRunner) SetupJailResponses(jail string)
@@ -1778,7 +1764,7 @@ func (m *MockRunner) SetupJailResponses(jail string)
 SetupJailResponses configures responses for a specific jail. This is useful for tests that focus on a single jail's behavior.
 
 <a name="MockRunner.SetupStandardResponses"></a>
-### func \(\*MockRunner\) [SetupStandardResponses](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L154>)
+### func \(\*MockRunner\) [SetupStandardResponses](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L155>)
 
 ```go
 func (m *MockRunner) SetupStandardResponses()
@@ -1892,7 +1878,7 @@ func (r *OSRunner) CombinedOutputWithSudoContext(ctx context.Context, name strin
 CombinedOutputWithSudoContext executes a command with sudo if needed, with context support.
 
 <a name="OptimizedLogProcessor"></a>
-## type [OptimizedLogProcessor](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L546>)
+## type [OptimizedLogProcessor](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L543>)
 
 OptimizedLogProcessor is a thin wrapper maintained for backwards compatibility with existing benchmarks and tests. Internally it delegates to the shared log collection helpers so we have a single codepath to maintain.
 
@@ -1901,7 +1887,7 @@ type OptimizedLogProcessor struct{}
 ```
 
 <a name="NewOptimizedLogProcessor"></a>
-### func [NewOptimizedLogProcessor](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L549>)
+### func [NewOptimizedLogProcessor](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L546>)
 
 ```go
 func NewOptimizedLogProcessor() *OptimizedLogProcessor
@@ -1910,7 +1896,7 @@ func NewOptimizedLogProcessor() *OptimizedLogProcessor
 NewOptimizedLogProcessor creates a new optimized processor wrapper.
 
 <a name="OptimizedLogProcessor.GetLogLinesOptimized"></a>
-### func \(\*OptimizedLogProcessor\) [GetLogLinesOptimized](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L555>)
+### func \(\*OptimizedLogProcessor\) [GetLogLinesOptimized](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L552>)
 
 ```go
 func (olp *OptimizedLogProcessor) GetLogLinesOptimized(jailFilter, ipFilter string, maxLines int) ([]string, error)
