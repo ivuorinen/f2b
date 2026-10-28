@@ -47,15 +47,15 @@ func TestGetLogLinesMethod(t *testing.T) {
 	}
 }
 
-func TestParseUltraOptimized(t *testing.T) {
-	// Test ultra-optimized parsing functions (both singular and plural variants)
+func TestParseBanRecordsDefaultParser(t *testing.T) {
+	// The package entry point and the shared parser's single-line method.
 	line := "192.168.1.1 2025-07-20 12:30:45 2025-07-20 13:30:45"
 	jail := "sshd"
 
 	// Plural: a single well-formed line yields exactly one record for that IP/jail.
-	records, err := ParseBanRecordsUltraOptimized(line, jail)
+	records, err := ParseBanRecords(line, jail)
 	if err != nil {
-		t.Fatalf("ParseBanRecordsUltraOptimized returned error: %v", err)
+		t.Fatalf("ParseBanRecords returned error: %v", err)
 	}
 	if len(records) != 1 {
 		t.Fatalf("expected 1 record, got %d", len(records))
@@ -68,16 +68,16 @@ func TestParseUltraOptimized(t *testing.T) {
 	}
 
 	// Empty input yields no records and no error.
-	empty, err := ParseBanRecordsUltraOptimized("", jail)
+	empty, err := ParseBanRecords("", jail)
 	if err != nil {
-		t.Fatalf("ParseBanRecordsUltraOptimized(\"\") returned error: %v", err)
+		t.Fatalf("ParseBanRecords(\"\") returned error: %v", err)
 	}
 	if len(empty) != 0 {
 		t.Errorf("expected 0 records for empty input, got %d", len(empty))
 	}
 
 	// Singular: a line whose first field is not an IP must be rejected.
-	if _, err := ParseBanRecordLineUltraOptimized("invalid line", jail); err == nil {
-		t.Error("ParseBanRecordLineUltraOptimized accepted a line with a non-IP first field")
+	if _, err := defaultBanRecordParser.ParseBanRecordLine("invalid line", jail); err == nil {
+		t.Error("ParseBanRecordLine accepted a line with a non-IP first field")
 	}
 }

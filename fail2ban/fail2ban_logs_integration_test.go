@@ -182,10 +182,7 @@ func TestIntegrationConcurrentLogReading(t *testing.T) {
 
 func TestIntegrationBanRecordParsing(t *testing.T) {
 	// Test parsing ban records with real patterns
-	parser, err := NewBanRecordParser()
-	if err != nil {
-		t.Fatal(err)
-	}
+	parser := NewBanRecordParser()
 
 	// Use dynamic dates relative to current time
 	now := time.Now()
@@ -418,10 +415,7 @@ func BenchmarkLogParsing(b *testing.B) {
 }
 
 func BenchmarkBanRecordParsing(b *testing.B) {
-	parser, err := NewBanRecordParser()
-	if err != nil {
-		b.Fatal(err)
-	}
+	parser := NewBanRecordParser()
 
 	// Use dynamic dates for benchmark
 	now := time.Now()

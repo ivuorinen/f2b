@@ -4,10 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/ivuorinen/f2b/constants"
@@ -15,18 +13,9 @@ import (
 
 // Sentinel errors for parser
 var (
-	ErrEmptyLine          = errors.New("empty line")
-	ErrInsufficientFields = errors.New("insufficient fields")
-	ErrInvalidBanTime     = errors.New("invalid ban time")
+	ErrEmptyLine      = errors.New("empty line")
+	ErrInvalidBanTime = errors.New("invalid ban time")
 )
-
-// Buffer pool for duration formatting to reduce allocations
-var durationBufPool = sync.Pool{
-	New: func() any {
-		b := make([]byte, 0, 11)
-		return &b
-	},
-}
 
 // BoundedTimeCache provides a concurrent-safe bounded cache for parsed times
 type BoundedTimeCache struct {
@@ -96,11 +85,13 @@ func (btc *BoundedTimeCache) Size() int {
 }
 
 // ParseWithLayout parses a time string using the specified layout with caching.
-// This method consolidates the cache-lookup-parse-store pattern used across
-// different time parsing caches in the codebase.
+//
+// The cache key includes the layout: the parsed time depends on it, and a key
+// of timeStr alone returned the first layout's result for every later layout
+// (e.g. "01/02/2026" as Jan 2 under both month-first and day-first layouts).
 func (btc *BoundedTimeCache) ParseWithLayout(timeStr, layout string) (time.Time, error) {
-	// Fast path: check cache
-	if cached, ok := btc.Load(timeStr); ok {
+	key := layout + "\x00" + timeStr
+	if cached, ok := btc.Load(key); ok {
 		return cached, nil
 	}
 
@@ -110,144 +101,55 @@ func (btc *BoundedTimeCache) ParseWithLayout(timeStr, layout string) (time.Time,
 	// (and clamping fresh bans to 0 east of UTC). Parse in the local zone.
 	t, err := time.ParseInLocation(layout, timeStr, time.Local)
 	if err == nil {
-		btc.Store(timeStr, t)
+		btc.Store(key, t)
 	}
 	return t, err
 }
 
-// BanRecordParser provides high-performance parsing of ban records
+// BanRecordParser parses `fail2ban-client get <jail> banip --with-time`
+// output. It is safe for concurrent use: its only state is the
+// mutex-guarded time cache.
 type BanRecordParser struct {
-	// Pools for zero-allocation parsing (goroutine-safe)
-	stringPool sync.Pool
-	recordPool sync.Pool
-	timeCache  *FastTimeCache
-
-	// Statistics for monitoring
-	parseCount atomic.Int64
-	errorCount atomic.Int64
+	timeCache *FastTimeCache
 }
 
-// FastTimeCache provides ultra-fast time parsing with minimal allocations
+// FastTimeCache parses timestamps of one fixed layout through a bounded cache.
 type FastTimeCache struct {
 	layout     string
-	parseCache *BoundedTimeCache // Bounded cache with max 10k entries
-	stringPool sync.Pool
+	parseCache *BoundedTimeCache
 }
 
-// NewBanRecordParser creates a new high-performance ban record parser
-func NewBanRecordParser() (*BanRecordParser, error) {
-	timeCache, err := NewFastTimeCache(constants.TimeFormat)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create parser: %w", err)
-	}
-
-	parser := &BanRecordParser{
-		timeCache: timeCache,
-	}
-
-	// String pool for reusing field slices
-	parser.stringPool = sync.Pool{
-		New: func() any {
-			s := make([]string, 0, 16)
-			return &s
-		},
-	}
-
-	// Record pool for reusing BanRecord objects
-	parser.recordPool = sync.Pool{
-		New: func() any {
-			return &BanRecord{}
-		},
-	}
-
-	return parser, nil
+// NewBanRecordParser creates a ban record parser. It cannot fail, so it
+// returns no error for callers to handle.
+func NewBanRecordParser() *BanRecordParser {
+	return &BanRecordParser{timeCache: NewFastTimeCache(constants.TimeFormat)}
 }
 
-// NewFastTimeCache creates an optimized time cache
-func NewFastTimeCache(layout string) (*FastTimeCache, error) {
-	parseCache, err := NewBoundedTimeCache(constants.CacheMaxSize)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create time cache: %w", err)
-	}
-
-	cache := &FastTimeCache{
-		layout:     layout,
-		parseCache: parseCache,
-	}
-
-	cache.stringPool = sync.Pool{
-		New: func() any {
-			b := make([]byte, 0, 32)
-			return &b
+// NewFastTimeCache creates a time cache for layout, bounded to
+// constants.CacheMaxSize entries. The size is a positive constant, so unlike
+// NewBoundedTimeCache it has no failure to report.
+func NewFastTimeCache(layout string) *FastTimeCache {
+	return &FastTimeCache{
+		layout: layout,
+		parseCache: &BoundedTimeCache{
+			cache:   make(map[string]time.Time),
+			maxSize: constants.CacheMaxSize,
 		},
 	}
-
-	return cache, nil
 }
 
-// ParseTimeOptimized parses time with minimal allocations
+// ParseTimeOptimized parses timeStr with the cache's layout, reusing cached results.
 func (ftc *FastTimeCache) ParseTimeOptimized(timeStr string) (time.Time, error) {
 	return ftc.parseCache.ParseWithLayout(timeStr, ftc.layout)
 }
 
-// BuildTimeStringOptimized builds time string with zero allocations using byte buffer
-func (ftc *FastTimeCache) BuildTimeStringOptimized(dateStr, timeStr string) string {
-	bufPtr, ok := ftc.stringPool.Get().(*[]byte)
-	if !ok {
-		bufPtr = new([]byte) // unreachable with our pool New; satisfies errcheck honestly
-	}
-	buf := *bufPtr
-	defer func() {
-		buf = buf[:0] // Reset buffer
-		*bufPtr = buf
-		ftc.stringPool.Put(bufPtr)
-	}()
-
-	// Calculate required capacity
-	totalLen := len(dateStr) + 1 + len(timeStr)
-	if cap(buf) < totalLen {
-		buf = make([]byte, 0, totalLen)
-		*bufPtr = buf
-	}
-
-	// Build string using byte operations
-	buf = append(buf, dateStr...)
-	buf = append(buf, ' ')
-	buf = append(buf, timeStr...)
-
-	// Convert to string - Go compiler will optimize this
-	return string(buf)
-}
-
-// ParseBanRecordLine parses a single line with maximum performance
+// ParseBanRecordLine parses a single ban record line.
 func (brp *BanRecordParser) ParseBanRecordLine(line, jail string) (*BanRecord, error) {
-	// Fast path: check for empty line
-	if len(line) == 0 {
+	line = strings.TrimSpace(line)
+	if line == "" {
 		return nil, ErrEmptyLine
 	}
-
-	// Trim whitespace in-place if needed
-	line = fastTrimSpace(line)
-	if len(line) == 0 {
-		return nil, ErrEmptyLine
-	}
-
-	// Get pooled field slice
-	fieldsPtr, ok := brp.stringPool.Get().(*[]string)
-	if !ok {
-		fieldsPtr = new([]string) // unreachable with our pool New
-	}
-	fields := (*fieldsPtr)[:0] // Reset slice but keep capacity
-	defer func() {
-		*fieldsPtr = fields[:0]
-		brp.stringPool.Put(fieldsPtr)
-	}()
-
-	// Fast field parsing - avoid strings.Fields allocation
-	fields = fastSplitFields(line, fields)
-	if len(fields) < 1 {
-		return nil, ErrInsufficientFields
-	}
+	fields := strings.Fields(line)
 
 	// Validate jail name for path traversal
 	if jail == "" || strings.ContainsAny(jail, "/\\") || strings.Contains(jail, "..") {
@@ -255,33 +157,25 @@ func (brp *BanRecordParser) ParseBanRecordLine(line, jail string) (*BanRecord, e
 	}
 
 	// Validate IP address format
-	if fields[0] != "" && net.ParseIP(fields[0]) == nil {
+	if net.ParseIP(fields[0]) == nil {
 		return nil, fmt.Errorf(constants.ErrInvalidIPAddress, fields[0])
 	}
 
-	// Get pooled record
-	record, ok := brp.recordPool.Get().(*BanRecord)
-	if !ok {
-		record = &BanRecord{} // unreachable with our pool New
-	}
-	defer brp.recordPool.Put(record)
-
-	// Reset record fields
-	*record = BanRecord{
-		Jail: jail,
-		IP:   fields[0],
-	}
+	record := &BanRecord{Jail: jail, IP: fields[0]}
 
 	// Full format carries ban and unban timestamps (>= 6 fields).
 	// The 8-field upstream variant "IP date time + SECS = date time" and the
 	// 7-field "IP date time + date time remaining" both have ban time at
 	// fields[1..2]; parseFullFormat locates the unban time for each.
 	if len(fields) >= 6 {
-		result, err := brp.parseFullFormat(fields, record)
-		if err == nil || len(fields) >= 8 {
+		err := brp.parseFullFormat(fields, record)
+		if err == nil {
+			return record, nil
+		}
+		if len(fields) >= 8 {
 			// 8+ fields is the well-known upstream layout: unparseable
 			// timestamps there mean a genuinely malformed record.
-			return result, err
+			return nil, err
 		}
 		// A 6/7-field line whose fields aren't timestamps is an exotic
 		// variant, not garbage: fall through to the simple-format record
@@ -291,33 +185,20 @@ func (brp *BanRecordParser) ParseBanRecordLine(line, jail string) (*BanRecord, e
 	// Fallback for simple format
 	record.BannedAt = time.Now()
 	record.Remaining = constants.UnknownValue
-
-	// Return a copy since we're pooling the original
-	result := &BanRecord{
-		Jail:      record.Jail,
-		IP:        record.IP,
-		BannedAt:  record.BannedAt,
-		Remaining: record.Remaining,
-	}
-
-	return result, nil
+	return record, nil
 }
 
-// parseFullFormat handles the full ban-record format (ban + unban timestamps).
-// Ban date/time is always fields[1]/fields[2]. The unban timestamp position
-// depends on the layout emitted by fail2ban-client:
+// parseFullFormat handles the full ban-record format (ban + unban timestamps),
+// filling record's BannedAt and Remaining. Ban date/time is always
+// fields[1]/fields[2]. The unban timestamp position depends on the layout
+// emitted by fail2ban-client:
 //   - 8-field "IP date time + SECS = date time": "=" at index 5, unban at 6/7
 //   - 6/7-field "IP date time + date time [remaining]": unban at 4/5
-func (brp *BanRecordParser) parseFullFormat(fields []string, record *BanRecord) (*BanRecord, error) {
-	// Build time strings efficiently
-	bannedStr := brp.timeCache.BuildTimeStringOptimized(fields[1], fields[2])
-
-	var unbanStr string
-	switch {
-	case len(fields) >= 8 && fields[5] == "=":
-		unbanStr = brp.timeCache.BuildTimeStringOptimized(fields[6], fields[7])
-	default:
-		unbanStr = brp.timeCache.BuildTimeStringOptimized(fields[4], fields[5])
+func (brp *BanRecordParser) parseFullFormat(fields []string, record *BanRecord) error {
+	bannedStr := fields[1] + " " + fields[2]
+	unbanStr := fields[4] + " " + fields[5]
+	if len(fields) >= 8 && fields[5] == "=" {
+		unbanStr = fields[6] + " " + fields[7]
 	}
 
 	// Parse ban time
@@ -328,7 +209,7 @@ func (brp *BanRecordParser) parseFullFormat(fields []string, record *BanRecord) 
 			"ip":        record.IP,
 			"bannedStr": bannedStr,
 		}).Warnf("Failed to parse ban time: %v", err)
-		return nil, ErrInvalidBanTime
+		return ErrInvalidBanTime
 	}
 
 	// Parse unban time with fallback
@@ -342,205 +223,52 @@ func (brp *BanRecordParser) parseFullFormat(fields []string, record *BanRecord) 
 		tUnban = time.Now().Add(constants.DefaultBanDuration) // 24h fallback
 	}
 
-	// Calculate remaining time efficiently
-	now := time.Now()
-	rem := max(tUnban.Unix()-now.Unix(), 0)
-
-	// Set parsed values
 	record.BannedAt = tBan
-	record.Remaining = formatDurationOptimized(rem)
-
-	// Return a copy since we're pooling the original
-	result := &BanRecord{
-		Jail:      record.Jail,
-		IP:        record.IP,
-		BannedAt:  record.BannedAt,
-		Remaining: record.Remaining,
-	}
-
-	return result, nil
+	record.Remaining = formatDuration(max(tUnban.Unix()-time.Now().Unix(), 0))
+	return nil
 }
 
-// ParseBanRecords parses multiple records with maximum efficiency
+// ParseBanRecords parses multiple records. Lines that fail to parse are
+// skipped, and the count of skipped lines is logged as a warning: dropping
+// them silently made a jail whose bans fail2ban reports in an unexpected
+// shape (e.g. ticket IDs instead of IPs) look like a jail with no bans.
 func (brp *BanRecordParser) ParseBanRecords(output string, jail string) ([]BanRecord, error) {
-	if len(output) == 0 {
-		return []BanRecord{}, nil
-	}
-
-	// Fast line splitting without allocation where possible
-	lines := fastSplitLines(strings.TrimSpace(output))
+	lines := strings.Split(strings.TrimSpace(output), "\n")
 	records := make([]BanRecord, 0, len(lines))
+	skipped := 0
 
 	for _, line := range lines {
-		if len(line) == 0 {
+		if strings.TrimSpace(line) == "" {
 			continue
 		}
-
 		record, err := brp.ParseBanRecordLine(line, jail)
 		if err != nil {
-			brp.errorCount.Add(1)
-			continue // Skip invalid lines
+			skipped++
+			continue
 		}
-
-		if record != nil {
-			records = append(records, *record)
-			brp.parseCount.Add(1)
-		}
+		records = append(records, *record)
 	}
 
+	if skipped > 0 {
+		getLogger().WithField("jail", jail).WithField("skipped", skipped).
+			Warn("Skipped unparseable ban record lines")
+	}
 	return records, nil
 }
 
-// GetStats returns parsing statistics
-func (brp *BanRecordParser) GetStats() (parseCount, errorCount int64) {
-	return brp.parseCount.Load(), brp.errorCount.Load()
-}
-
-// fastTrimSpace trims whitespace efficiently
-func fastTrimSpace(s string) string {
-	start := 0
-	end := len(s)
-
-	// Trim leading whitespace
-	for start < end && (s[start] == ' ' || s[start] == '\t' || s[start] == '\n' || s[start] == '\r') {
-		start++
-	}
-
-	// Trim trailing whitespace
-	for end > start && (s[end-1] == ' ' || s[end-1] == '\t' || s[end-1] == '\n' || s[end-1] == '\r') {
-		end--
-	}
-
-	return s[start:end]
-}
-
-// fastSplitFields splits on whitespace efficiently, reusing provided slice
-func fastSplitFields(s string, fields []string) []string {
-	fields = fields[:0] // Reset but keep capacity
-
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == ' ' || s[i] == '\t' {
-			if i > start {
-				fields = append(fields, s[start:i])
-			}
-			// Skip consecutive whitespace
-			for i < len(s) && (s[i] == ' ' || s[i] == '\t') {
-				i++
-			}
-			start = i
-			i-- // Compensate for loop increment
-		}
-	}
-
-	// Add final field if any
-	if start < len(s) {
-		fields = append(fields, s[start:])
-	}
-
-	return fields
-}
-
-// fastSplitLines splits on newlines efficiently
-func fastSplitLines(s string) []string {
-	if len(s) == 0 {
-		return nil
-	}
-
-	lines := make([]string, 0, strings.Count(s, "\n")+1)
-	start := 0
-
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\n' {
-			lines = append(lines, s[start:i])
-			start = i + 1
-		}
-	}
-
-	// Add final line if any
-	if start < len(s) {
-		lines = append(lines, s[start:])
-	}
-
-	return lines
-}
-
-// formatDurationOptimized formats duration efficiently in DD:HH:MM:SS format to match original
-func formatDurationOptimized(sec int64) string {
+// formatDuration formats seconds as DD:HH:MM:SS, the shape fail2ban users expect.
+func formatDuration(sec int64) string {
 	days := sec / constants.SecondsPerDay
 	h := (sec % constants.SecondsPerDay) / constants.SecondsPerHour
 	m := (sec % constants.SecondsPerHour) / constants.SecondsPerMinute
 	s := sec % constants.SecondsPerMinute
-
-	// Get buffer from pool to reduce allocations
-	bufPtr, ok := durationBufPool.Get().(*[]byte)
-	if !ok {
-		bufPtr = new([]byte) // unreachable with our pool New
-	}
-	buf := (*bufPtr)[:0]
-	defer func() {
-		*bufPtr = buf[:0]
-		durationBufPool.Put(bufPtr)
-	}()
-
-	// Format days (2 digits)
-	if days < 10 {
-		buf = append(buf, '0')
-	}
-	buf = strconv.AppendInt(buf, days, 10)
-	buf = append(buf, ':')
-
-	// Format hours (2 digits)
-	if h < 10 {
-		buf = append(buf, '0')
-	}
-	buf = strconv.AppendInt(buf, h, 10)
-	buf = append(buf, ':')
-
-	// Format minutes (2 digits)
-	if m < 10 {
-		buf = append(buf, '0')
-	}
-	buf = strconv.AppendInt(buf, m, 10)
-	buf = append(buf, ':')
-
-	// Format seconds (2 digits)
-	if s < 10 {
-		buf = append(buf, '0')
-	}
-	buf = strconv.AppendInt(buf, s, 10)
-
-	return string(buf)
+	return fmt.Sprintf("%02d:%02d:%02d:%02d", days, h, m, s)
 }
 
-// Global parser instance for reuse
-var defaultBanRecordParser = mustCreateParser()
+// defaultBanRecordParser is shared so every caller reuses one time cache.
+var defaultBanRecordParser = NewBanRecordParser()
 
-// mustCreateParser creates a parser or panics (used for global init only)
-func mustCreateParser() *BanRecordParser {
-	parser, err := NewBanRecordParser()
-	if err != nil {
-		panic(fmt.Sprintf("failed to create default ban record parser: %v", err))
-	}
-	return parser
-}
-
-// ParseBanRecordLineOptimized parses a ban record line using the default parser.
-func ParseBanRecordLineOptimized(line, jail string) (*BanRecord, error) {
-	return defaultBanRecordParser.ParseBanRecordLine(line, jail)
-}
-
-// ParseBanRecordsOptimized parses multiple ban records using the default parser.
-func ParseBanRecordsOptimized(output, jail string) ([]BanRecord, error) {
+// ParseBanRecords parses multiple ban records using the shared default parser.
+func ParseBanRecords(output, jail string) ([]BanRecord, error) {
 	return defaultBanRecordParser.ParseBanRecords(output, jail)
-}
-
-// ParseBanRecordsUltraOptimized is an alias for backward compatibility
-func ParseBanRecordsUltraOptimized(output, jail string) ([]BanRecord, error) {
-	return ParseBanRecordsOptimized(output, jail)
-}
-
-// ParseBanRecordLineUltraOptimized is an alias for backward compatibility
-func ParseBanRecordLineUltraOptimized(line, jail string) (*BanRecord, error) {
-	return ParseBanRecordLineOptimized(line, jail)
 }

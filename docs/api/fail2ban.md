@@ -73,14 +73,10 @@ Package fail2ban provides comprehensive functionality for managing fail2ban jail
 - [func WithRequestID\(ctx context.Context, requestID string\) context.Context](<#WithRequestID>)
 - [func WithTestRunner\(t TestingInterface, runner Runner\) func\(\)](<#WithTestRunner>)
 - [type BanRecord](<#BanRecord>)
-  - [func ParseBanRecordLineOptimized\(line, jail string\) \(\*BanRecord, error\)](<#ParseBanRecordLineOptimized>)
-  - [func ParseBanRecordLineUltraOptimized\(line, jail string\) \(\*BanRecord, error\)](<#ParseBanRecordLineUltraOptimized>)
-  - [func ParseBanRecordsOptimized\(output, jail string\) \(\[\]BanRecord, error\)](<#ParseBanRecordsOptimized>)
-  - [func ParseBanRecordsUltraOptimized\(output, jail string\) \(\[\]BanRecord, error\)](<#ParseBanRecordsUltraOptimized>)
+  - [func ParseBanRecords\(output, jail string\) \(\[\]BanRecord, error\)](<#ParseBanRecords>)
   - [func ProcessJailsParallel\(ctx context.Context, jails \[\]string, workFunc func\(ctx context.Context, jail string\) \(\[\]BanRecord, error\)\) \(\[\]BanRecord, error\)](<#ProcessJailsParallel>)
 - [type BanRecordParser](<#BanRecordParser>)
-  - [func NewBanRecordParser\(\) \(\*BanRecordParser, error\)](<#NewBanRecordParser>)
-  - [func \(brp \*BanRecordParser\) GetStats\(\) \(parseCount, errorCount int64\)](<#BanRecordParser.GetStats>)
+  - [func NewBanRecordParser\(\) \*BanRecordParser](<#NewBanRecordParser>)
   - [func \(brp \*BanRecordParser\) ParseBanRecordLine\(line, jail string\) \(\*BanRecord, error\)](<#BanRecordParser.ParseBanRecordLine>)
   - [func \(brp \*BanRecordParser\) ParseBanRecords\(output string, jail string\) \(\[\]BanRecord, error\)](<#BanRecordParser.ParseBanRecords>)
 - [type BoundedTimeCache](<#BoundedTimeCache>)
@@ -100,8 +96,7 @@ Package fail2ban provides comprehensive functionality for managing fail2ban jail
   - [func \(e \*ContextualError\) Unwrap\(\) error](<#ContextualError.Unwrap>)
 - [type ErrorCategory](<#ErrorCategory>)
 - [type FastTimeCache](<#FastTimeCache>)
-  - [func NewFastTimeCache\(layout string\) \(\*FastTimeCache, error\)](<#NewFastTimeCache>)
-  - [func \(ftc \*FastTimeCache\) BuildTimeStringOptimized\(dateStr, timeStr string\) string](<#FastTimeCache.BuildTimeStringOptimized>)
+  - [func NewFastTimeCache\(layout string\) \*FastTimeCache](<#NewFastTimeCache>)
   - [func \(ftc \*FastTimeCache\) ParseTimeOptimized\(timeStr string\) \(time.Time, error\)](<#FastTimeCache.ParseTimeOptimized>)
 - [type Fields](<#Fields>)
 - [type GzipDetector](<#GzipDetector>)
@@ -274,9 +269,8 @@ const (
 
 ```go
 var (
-    ErrEmptyLine          = errors.New("empty line")
-    ErrInsufficientFields = errors.New("insufficient fields")
-    ErrInvalidBanTime     = errors.New("invalid ban time")
+    ErrEmptyLine      = errors.New("empty line")
+    ErrInvalidBanTime = errors.New("invalid ban time")
 )
 ```
 
@@ -874,41 +868,14 @@ type BanRecord struct {
 }
 ```
 
-<a name="ParseBanRecordLineOptimized"></a>
-### func [ParseBanRecordLineOptimized](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L529>)
+<a name="ParseBanRecords"></a>
+### func [ParseBanRecords](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L272>)
 
 ```go
-func ParseBanRecordLineOptimized(line, jail string) (*BanRecord, error)
+func ParseBanRecords(output, jail string) ([]BanRecord, error)
 ```
 
-ParseBanRecordLineOptimized parses a ban record line using the default parser.
-
-<a name="ParseBanRecordLineUltraOptimized"></a>
-### func [ParseBanRecordLineUltraOptimized](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L544>)
-
-```go
-func ParseBanRecordLineUltraOptimized(line, jail string) (*BanRecord, error)
-```
-
-ParseBanRecordLineUltraOptimized is an alias for backward compatibility
-
-<a name="ParseBanRecordsOptimized"></a>
-### func [ParseBanRecordsOptimized](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L534>)
-
-```go
-func ParseBanRecordsOptimized(output, jail string) ([]BanRecord, error)
-```
-
-ParseBanRecordsOptimized parses multiple ban records using the default parser.
-
-<a name="ParseBanRecordsUltraOptimized"></a>
-### func [ParseBanRecordsUltraOptimized](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L539>)
-
-```go
-func ParseBanRecordsUltraOptimized(output, jail string) ([]BanRecord, error)
-```
-
-ParseBanRecordsUltraOptimized is an alias for backward compatibility
+ParseBanRecords parses multiple ban records using the shared default parser.
 
 <a name="ProcessJailsParallel"></a>
 ### func [ProcessJailsParallel](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/parallel_processing.go#L20-L24>)
@@ -922,9 +889,9 @@ ProcessJailsParallel retrieves ban records for multiple jails concurrently, boun
 Error handling: a canceled run surfaces the context error rather than a silently truncated result set. If every jail fails, the joined per\-jail error is returned instead of an empty slice with nil error \(which is indistinguishable from "no bans"\). A mix of successes and failures is a valid partial result: the records are returned and the failures are logged so they are not silently dropped.
 
 <a name="BanRecordParser"></a>
-## type [BanRecordParser](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L119-L128>)
+## type [BanRecordParser](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L112-L114>)
 
-BanRecordParser provides high\-performance parsing of ban records
+BanRecordParser parses \`fail2ban\-client get \<jail\> banip \-\-with\-time\` output. It is safe for concurrent use: its only state is the mutex\-guarded time cache.
 
 ```go
 type BanRecordParser struct {
@@ -933,43 +900,34 @@ type BanRecordParser struct {
 ```
 
 <a name="NewBanRecordParser"></a>
-### func [NewBanRecordParser](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L138>)
+### func [NewBanRecordParser](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L124>)
 
 ```go
-func NewBanRecordParser() (*BanRecordParser, error)
+func NewBanRecordParser() *BanRecordParser
 ```
 
-NewBanRecordParser creates a new high\-performance ban record parser
-
-<a name="BanRecordParser.GetStats"></a>
-### func \(\*BanRecordParser\) [GetStats](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L395>)
-
-```go
-func (brp *BanRecordParser) GetStats() (parseCount, errorCount int64)
-```
-
-GetStats returns parsing statistics
+NewBanRecordParser creates a ban record parser. It cannot fail, so it returns no error for callers to handle.
 
 <a name="BanRecordParser.ParseBanRecordLine"></a>
-### func \(\*BanRecordParser\) [ParseBanRecordLine](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L223>)
+### func \(\*BanRecordParser\) [ParseBanRecordLine](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L147>)
 
 ```go
 func (brp *BanRecordParser) ParseBanRecordLine(line, jail string) (*BanRecord, error)
 ```
 
-ParseBanRecordLine parses a single line with maximum performance
+ParseBanRecordLine parses a single ban record line.
 
 <a name="BanRecordParser.ParseBanRecords"></a>
-### func \(\*BanRecordParser\) [ParseBanRecords](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L365>)
+### func \(\*BanRecordParser\) [ParseBanRecords](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L235>)
 
 ```go
 func (brp *BanRecordParser) ParseBanRecords(output string, jail string) ([]BanRecord, error)
 ```
 
-ParseBanRecords parses multiple records with maximum efficiency
+ParseBanRecords parses multiple records. Lines that fail to parse are skipped, and the count of skipped lines is logged as a warning: dropping them silently made a jail whose bans fail2ban reports in an unexpected shape \(e.g. ticket IDs instead of IPs\) look like a jail with no bans.
 
 <a name="BoundedTimeCache"></a>
-## type [BoundedTimeCache](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L32-L36>)
+## type [BoundedTimeCache](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L21-L25>)
 
 BoundedTimeCache provides a concurrent\-safe bounded cache for parsed times
 
@@ -980,7 +938,7 @@ type BoundedTimeCache struct {
 ```
 
 <a name="NewBoundedTimeCache"></a>
-### func [NewBoundedTimeCache](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L39>)
+### func [NewBoundedTimeCache](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L28>)
 
 ```go
 func NewBoundedTimeCache(maxSize int) (*BoundedTimeCache, error)
@@ -989,7 +947,7 @@ func NewBoundedTimeCache(maxSize int) (*BoundedTimeCache, error)
 NewBoundedTimeCache creates a new bounded time cache
 
 <a name="BoundedTimeCache.Load"></a>
-### func \(\*BoundedTimeCache\) [Load](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L50>)
+### func \(\*BoundedTimeCache\) [Load](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L39>)
 
 ```go
 func (btc *BoundedTimeCache) Load(key string) (time.Time, bool)
@@ -998,16 +956,18 @@ func (btc *BoundedTimeCache) Load(key string) (time.Time, bool)
 Load retrieves a cached time value
 
 <a name="BoundedTimeCache.ParseWithLayout"></a>
-### func \(\*BoundedTimeCache\) [ParseWithLayout](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L101>)
+### func \(\*BoundedTimeCache\) [ParseWithLayout](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L92>)
 
 ```go
 func (btc *BoundedTimeCache) ParseWithLayout(timeStr, layout string) (time.Time, error)
 ```
 
-ParseWithLayout parses a time string using the specified layout with caching. This method consolidates the cache\-lookup\-parse\-store pattern used across different time parsing caches in the codebase.
+ParseWithLayout parses a time string using the specified layout with caching.
+
+The cache key includes the layout: the parsed time depends on it, and a key of timeStr alone returned the first layout's result for every later layout \(e.g. "01/02/2026" as Jan 2 under both month\-first and day\-first layouts\).
 
 <a name="BoundedTimeCache.Size"></a>
-### func \(\*BoundedTimeCache\) [Size](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L92>)
+### func \(\*BoundedTimeCache\) [Size](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L81>)
 
 ```go
 func (btc *BoundedTimeCache) Size() int
@@ -1016,7 +976,7 @@ func (btc *BoundedTimeCache) Size() int
 Size returns the current number of entries in the cache
 
 <a name="BoundedTimeCache.Store"></a>
-### func \(\*BoundedTimeCache\) [Store](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L58>)
+### func \(\*BoundedTimeCache\) [Store](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L47>)
 
 ```go
 func (btc *BoundedTimeCache) Store(key string, value time.Time)
@@ -1165,9 +1125,9 @@ const (
 ```
 
 <a name="FastTimeCache"></a>
-## type [FastTimeCache](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L131-L135>)
+## type [FastTimeCache](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L117-L120>)
 
-FastTimeCache provides ultra\-fast time parsing with minimal allocations
+FastTimeCache parses timestamps of one fixed layout through a bounded cache.
 
 ```go
 type FastTimeCache struct {
@@ -1176,31 +1136,22 @@ type FastTimeCache struct {
 ```
 
 <a name="NewFastTimeCache"></a>
-### func [NewFastTimeCache](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L167>)
+### func [NewFastTimeCache](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L131>)
 
 ```go
-func NewFastTimeCache(layout string) (*FastTimeCache, error)
+func NewFastTimeCache(layout string) *FastTimeCache
 ```
 
-NewFastTimeCache creates an optimized time cache
-
-<a name="FastTimeCache.BuildTimeStringOptimized"></a>
-### func \(\*FastTimeCache\) [BuildTimeStringOptimized](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L194>)
-
-```go
-func (ftc *FastTimeCache) BuildTimeStringOptimized(dateStr, timeStr string) string
-```
-
-BuildTimeStringOptimized builds time string with zero allocations using byte buffer
+NewFastTimeCache creates a time cache for layout, bounded to constants.CacheMaxSize entries. The size is a positive constant, so unlike NewBoundedTimeCache it has no failure to report.
 
 <a name="FastTimeCache.ParseTimeOptimized"></a>
-### func \(\*FastTimeCache\) [ParseTimeOptimized](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L189>)
+### func \(\*FastTimeCache\) [ParseTimeOptimized](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L142>)
 
 ```go
 func (ftc *FastTimeCache) ParseTimeOptimized(timeStr string) (time.Time, error)
 ```
 
-ParseTimeOptimized parses time with minimal allocations
+ParseTimeOptimized parses timeStr with the cache's layout, reusing cached results.
 
 <a name="Fields"></a>
 ## type [Fields](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/types.go#L18>)
@@ -1987,7 +1938,7 @@ func (c *RealClient) BanIP(ip, jail string) (int, error)
 BanIP bans an IP address in the specified jail and returns the ban status code.
 
 <a name="RealClient.BanIPWithContext"></a>
-### func \(\*RealClient\) [BanIPWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L402>)
+### func \(\*RealClient\) [BanIPWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L401>)
 
 ```go
 func (c *RealClient) BanIPWithContext(ctx context.Context, ip, jail string) (int, error)
@@ -2005,7 +1956,7 @@ func (c *RealClient) BannedIn(ip string) ([]string, error)
 BannedIn returns a list of jails where the specified IP address is currently banned.
 
 <a name="RealClient.BannedInWithContext"></a>
-### func \(\*RealClient\) [BannedInWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L412>)
+### func \(\*RealClient\) [BannedInWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L411>)
 
 ```go
 func (c *RealClient) BannedInWithContext(ctx context.Context, ip string) ([]string, error)
@@ -2023,7 +1974,7 @@ func (c *RealClient) GetBanRecords(jails []string) ([]BanRecord, error)
 GetBanRecords retrieves ban records for the specified jails.
 
 <a name="RealClient.GetBanRecordsWithContext"></a>
-### func \(\*RealClient\) [GetBanRecordsWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L427>)
+### func \(\*RealClient\) [GetBanRecordsWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L426>)
 
 ```go
 func (c *RealClient) GetBanRecordsWithContext(ctx context.Context, jails []string) ([]BanRecord, error)
@@ -2032,7 +1983,7 @@ func (c *RealClient) GetBanRecordsWithContext(ctx context.Context, jails []strin
 GetBanRecordsWithContext retrieves ban records for the specified jails with context support.
 
 <a name="RealClient.GetLogLines"></a>
-### func \(\*RealClient\) [GetLogLines](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L294>)
+### func \(\*RealClient\) [GetLogLines](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L293>)
 
 ```go
 func (c *RealClient) GetLogLines(jail, ip string) ([]string, error)
@@ -2041,7 +1992,7 @@ func (c *RealClient) GetLogLines(jail, ip string) ([]string, error)
 GetLogLines retrieves log lines related to an IP address from the specified jail.
 
 <a name="RealClient.GetLogLinesWithContext"></a>
-### func \(\*RealClient\) [GetLogLinesWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L432>)
+### func \(\*RealClient\) [GetLogLinesWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L431>)
 
 ```go
 func (c *RealClient) GetLogLinesWithContext(ctx context.Context, jail, ip string) ([]string, error)
@@ -2050,7 +2001,7 @@ func (c *RealClient) GetLogLinesWithContext(ctx context.Context, jail, ip string
 GetLogLinesWithContext retrieves log lines related to an IP address from the specified jail with context support.
 
 <a name="RealClient.GetLogLinesWithLimit"></a>
-### func \(\*RealClient\) [GetLogLinesWithLimit](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L299>)
+### func \(\*RealClient\) [GetLogLinesWithLimit](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L298>)
 
 ```go
 func (c *RealClient) GetLogLinesWithLimit(jail, ip string, maxLines int) ([]string, error)
@@ -2059,7 +2010,7 @@ func (c *RealClient) GetLogLinesWithLimit(jail, ip string, maxLines int) ([]stri
 GetLogLinesWithLimit returns log lines with configurable limits for memory management.
 
 <a name="RealClient.GetLogLinesWithLimitAndContext"></a>
-### func \(\*RealClient\) [GetLogLinesWithLimitAndContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L438-L442>)
+### func \(\*RealClient\) [GetLogLinesWithLimitAndContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L437-L441>)
 
 ```go
 func (c *RealClient) GetLogLinesWithLimitAndContext(ctx context.Context, jail, ip string, maxLines int) ([]string, error)
@@ -2068,7 +2019,7 @@ func (c *RealClient) GetLogLinesWithLimitAndContext(ctx context.Context, jail, i
 GetLogLinesWithLimitAndContext returns log lines with configurable limits and context support for memory management and timeouts.
 
 <a name="RealClient.GetLogLinesWithLimitContext"></a>
-### func \(\*RealClient\) [GetLogLinesWithLimitContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L304>)
+### func \(\*RealClient\) [GetLogLinesWithLimitContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L303>)
 
 ```go
 func (c *RealClient) GetLogLinesWithLimitContext(ctx context.Context, jail, ip string, maxLines int) ([]string, error)
@@ -2077,7 +2028,7 @@ func (c *RealClient) GetLogLinesWithLimitContext(ctx context.Context, jail, ip s
 GetLogLinesWithLimitContext returns log lines with configurable limits and context support.
 
 <a name="RealClient.ListFilters"></a>
-### func \(\*RealClient\) [ListFilters](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L331>)
+### func \(\*RealClient\) [ListFilters](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L330>)
 
 ```go
 func (c *RealClient) ListFilters() ([]string, error)
@@ -2086,7 +2037,7 @@ func (c *RealClient) ListFilters() ([]string, error)
 ListFilters returns a list of available fail2ban filter files.
 
 <a name="RealClient.ListFiltersWithContext"></a>
-### func \(\*RealClient\) [ListFiltersWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L479>)
+### func \(\*RealClient\) [ListFiltersWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L478>)
 
 ```go
 func (c *RealClient) ListFiltersWithContext(ctx context.Context) ([]string, error)
@@ -2104,7 +2055,7 @@ func (c *RealClient) ListJails() ([]string, error)
 ListJails returns the list of available jails for this client.
 
 <a name="RealClient.ListJailsWithContext"></a>
-### func \(\*RealClient\) [ListJailsWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L349>)
+### func \(\*RealClient\) [ListJailsWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L348>)
 
 ```go
 func (c *RealClient) ListJailsWithContext(ctx context.Context) ([]string, error)
@@ -2122,7 +2073,7 @@ func (c *RealClient) StatusAll() (string, error)
 StatusAll returns the status of all fail2ban jails.
 
 <a name="RealClient.StatusAllWithContext"></a>
-### func \(\*RealClient\) [StatusAllWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L354>)
+### func \(\*RealClient\) [StatusAllWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L353>)
 
 ```go
 func (c *RealClient) StatusAllWithContext(ctx context.Context) (string, error)
@@ -2140,7 +2091,7 @@ func (c *RealClient) StatusJail(j string) (string, error)
 StatusJail returns the status of a specific fail2ban jail.
 
 <a name="RealClient.StatusJailWithContext"></a>
-### func \(\*RealClient\) [StatusJailWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L362>)
+### func \(\*RealClient\) [StatusJailWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L361>)
 
 ```go
 func (c *RealClient) StatusJailWithContext(ctx context.Context, jail string) (string, error)
@@ -2149,7 +2100,7 @@ func (c *RealClient) StatusJailWithContext(ctx context.Context, jail string) (st
 StatusJailWithContext returns the status of a specific fail2ban jail with context support.
 
 <a name="RealClient.TestFilter"></a>
-### func \(\*RealClient\) [TestFilter](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L578>)
+### func \(\*RealClient\) [TestFilter](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L577>)
 
 ```go
 func (c *RealClient) TestFilter(filter string) (string, error)
@@ -2158,7 +2109,7 @@ func (c *RealClient) TestFilter(filter string) (string, error)
 TestFilter tests a fail2ban filter against its configured log files and returns the test output.
 
 <a name="RealClient.TestFilterWithContext"></a>
-### func \(\*RealClient\) [TestFilterWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L555>)
+### func \(\*RealClient\) [TestFilterWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L554>)
 
 ```go
 func (c *RealClient) TestFilterWithContext(ctx context.Context, filter string) (string, error)
@@ -2176,7 +2127,7 @@ func (c *RealClient) UnbanIP(ip, jail string) (int, error)
 UnbanIP unbans an IP address from the specified jail and returns the unban status code.
 
 <a name="RealClient.UnbanIPWithContext"></a>
-### func \(\*RealClient\) [UnbanIPWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L407>)
+### func \(\*RealClient\) [UnbanIPWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L406>)
 
 ```go
 func (c *RealClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (int, error)

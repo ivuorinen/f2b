@@ -5,7 +5,7 @@
 f2b is designed as a modern, secure Go CLI tool for managing Fail2Ban with a focus on testability, security, and
 extensibility. The architecture follows clean code principles with dependency injection, interface-based design,
 comprehensive testing, and performance-conscious design. Built with context-aware operations, timeout handling,
-object pooling, and parallel processing capabilities for enterprise-grade reliability.
+and bounded parallel processing across jails.
 
 ## Core Components
 
@@ -51,7 +51,7 @@ object pooling, and parallel processing capabilities for enterprise-grade reliab
 - **Advanced Features**:
 
   - Context-aware operations with timeout and cancellation support
-  - Optimized ban record parsing with object pooling
+  - Ban record parsing with the standard library string functions
   - Bounded caching of parsed ban-record timestamps
   - Parallel processing support for multi-jail operations
 
@@ -96,7 +96,6 @@ object pooling, and parallel processing capabilities for enterprise-grade reliab
 
 ### Performance-Optimized Design
 
-- Object pooling for memory-intensive operations
 - Bounded caching of parsed ban-record timestamps
 - Optimized parsing algorithms with minimal allocations
 - Parallel processing capabilities for multi-jail scenarios
@@ -158,15 +157,13 @@ fail2ban/client.go
 - **cobra**: Command-line interface framework
 - **logrus**: Structured logging with context propagation
 - **Standard library**: Extensive use of Go stdlib for reliability
-- **sync/atomic**: Thread-safe counters (parse statistics) and interrupt handling
+- **sync/atomic**: The signal exit code and the swappable package logger
 - **context**: Timeout and cancellation support throughout
 
 ### Performance Technologies
 
-- **Object Pooling**: Memory-efficient parsing with sync.Pool
 - **Bounded Time Cache**: Thread-safe caching of parsed ban-record timestamps
-- **Parallel Processing**: Worker pools for multi-jail operations
-- **Atomic Operations**: Lock-free counters (parse statistics, interrupt handling)
+- **Parallel Processing**: Multi-jail operations run concurrently, bounded to `runtime.NumCPU()` goroutines
 - **Context-Aware Operations**: Timeout handling and graceful cancellation
 
 ## Extension Points
@@ -267,11 +264,8 @@ fail2ban/client.go
 
 ### Performance Features
 
-- **Object Pooling**: Memory-efficient parsing with sync.Pool for ban record processing
 - **Bounded Time Cache**: Thread-safe caching of parsed ban-record timestamps
-- **Parallel Processing**: Worker pools for multi-jail operations with optimal CPU utilization
-- **Optimized Parsing**: Ultra-fast ban record parsing with minimal allocations
-- **Atomic Counters**: Lock-free parse statistics using atomic operations
+- **Parallel Processing**: Multi-jail operations bounded to `runtime.NumCPU()` concurrent goroutines
 
 ### Monitoring and Observability
 
@@ -281,18 +275,6 @@ fail2ban/client.go
 ### Scalability Design
 
 - **Context-Aware Operations**: All operations support timeout and cancellation
-- **Parallel Processing**: Automatic scaling for multi-jail operations
-- **Memory Optimization**: Object pooling and efficient memory management
+- **Parallel Processing**: Multi-jail operations scale up to `runtime.NumCPU()` goroutines
 - **Time-Parse Caching**: Bounded cache reduces repeated ban-record timestamp parsing
 - **Resource Management**: Proper cleanup and resource lifecycle management
-
-### Advanced Performance Features
-
-- **Ultra-Optimized Parsing**: Custom parsing algorithms with zero-allocation techniques
-- **Time Cache**: Bounded time-parsing cache reducing string-to-time conversions
-- **Fast String Operations**: Custom string operations avoiding standard library overhead
-- **Worker Pool Management**: Dynamic worker scaling based on operation load
-
-This architecture provides enterprise-grade performance, comprehensive monitoring, and scalable design while maintaining
-security, testability, and maintainability. The system is optimized for both single-operation efficiency and
-high-throughput parallel processing scenarios.

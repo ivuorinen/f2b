@@ -568,8 +568,7 @@ func (h *HTTPHandler) writeError(w http.ResponseWriter, code int, err error) {
 
 ### Performance
 
-1. Use object pooling for frequently allocated objects
-1. Profile and optimize hot paths
+1. Profile before optimizing, and optimize only the hot paths a profile shows
 
 This documentation provides a comprehensive overview of the f2b internal APIs and patterns.
 For specific implementation details, refer to the source code and inline documentation.

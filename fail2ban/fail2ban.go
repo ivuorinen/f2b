@@ -268,8 +268,7 @@ func (c *RealClient) getBanRecordsInternal(ctx context.Context, jails []string) 
 				return nil, fmt.Errorf("jail %s: %w", jail, err)
 			}
 
-			// Use ultra-optimized parser for this jail's records
-			jailRecords, parseErr := ParseBanRecordsUltraOptimized(string(out), jail)
+			jailRecords, parseErr := ParseBanRecords(string(out), jail)
 			if parseErr != nil {
 				getLogger().WithError(parseErr).WithField("jail", jail).
 					Warn("Failed to parse ban records for jail")

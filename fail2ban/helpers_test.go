@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestFormatDurationOptimized(t *testing.T) {
+func TestFormatDuration(t *testing.T) {
 	tests := []struct {
 		name     string
 		seconds  int64
@@ -40,13 +40,18 @@ func TestFormatDurationOptimized(t *testing.T) {
 			seconds:  90061, // 1 day, 1 hour, 1 minute, 1 second
 			expected: "01:01:01:01",
 		},
+		{
+			name:     "three-digit days keep every digit",
+			seconds:  100*86400 + 59,
+			expected: "100:00:00:59",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := formatDurationOptimized(tt.seconds)
+			result := formatDuration(tt.seconds)
 			if result != tt.expected {
-				t.Errorf("formatDurationOptimized(%d) = %q, expected %q", tt.seconds, result, tt.expected)
+				t.Errorf("formatDuration(%d) = %q, expected %q", tt.seconds, result, tt.expected)
 			}
 		})
 	}
@@ -167,11 +172,5 @@ func TestErrorConstructors(t *testing.T) {
 	}
 	if validationErr.Unwrap() != nil {
 		t.Error("Expected Unwrap to return nil")
-	}
-
-	// Test permission error
-	permErr := NewPermissionError("permission denied", "check permissions")
-	if permErr == nil {
-		t.Error("NewPermissionError returned nil")
 	}
 }

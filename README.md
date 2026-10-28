@@ -291,7 +291,7 @@ f2b is built as an **enterprise-grade** Go application following modern architec
 
 - **Security-First Architecture**: Automatic privilege management with extensive path traversal protections
 - **Context-Aware Operations**: Comprehensive timeout handling and graceful cancellation throughout
-- **Performance-Optimized**: Object pooling, parallel processing, and optimized parsing algorithms
+- **Performance-Conscious**: Bounded parallel processing across jails
 - **Interface-Based Design**: Full dependency injection for testing and extensibility
 - **Thread-Safe Operations**: Proper synchronization and concurrent access protection
 
@@ -308,7 +308,7 @@ f2b is built as an **enterprise-grade** Go application following modern architec
 - **CLI Framework**: Cobra with comprehensive command structure and shell completion
 - **Logging**: Structured logging with Logrus and contextual information
 - **Testing**: Advanced mock patterns with thread-safe implementations
-- **Performance**: Object pooling and parallel processing
+- **Performance**: Bounded parallel processing across jails
 
 ### 🎪 **Advanced Features**
 

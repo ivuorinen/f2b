@@ -307,10 +307,7 @@ func assertGetLogLinesCase(t *testing.T, jail, ip string, wantMinimum int, check
 
 func TestParseBanRecordsFromRealLogs(t *testing.T) {
 	// Test with real ban/unban patterns from production
-	parser, err := NewBanRecordParser()
-	if err != nil {
-		t.Fatal(err)
-	}
+	parser := NewBanRecordParser()
 
 	tests := []struct {
 		name      string

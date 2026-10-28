@@ -528,7 +528,7 @@ func BenchmarkBanCommand(b *testing.B) {
 - **Input validation**: Complete coverage for validation functions including extensive path traversal cases
 - **Context operations**: Comprehensive coverage for timeout and cancellation behavior
 - **Concurrent operations**: Extensive coverage for thread-safe functions
-- **Performance features**: Coverage for object pooling and parallel processing
+- **Performance features**: Coverage for the time cache and parallel processing
 
 ### Coverage Verification
 
