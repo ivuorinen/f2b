@@ -4,7 +4,7 @@ Use this guide to contribute effectively to f2b, the Go-based CLI for managing F
 
 ## Project Structure & Module Organization
 
-- `main.go` wires logging, sudo detection, and client startup.
+- `main.go` wires logging and the lazy client (sudo checks run on the first client operation).
 - `cmd/` contains Cobra commands and fluent command tests.
   Mirror changes under `cmd/*_test.go` when adding scenarios.
 - `fail2ban/` hosts the client interfaces, runners, and mocks used across commands.
@@ -35,7 +35,12 @@ Use this guide to contribute effectively to f2b, the Go-based CLI for managing F
 - Use the fluent helpers such as `NewCommandTest` and `NewMockClientBuilder` for CLI coverage.
 - Co-locate unit tests with their packages and create `*_integration_test.go` only for integration scenarios.
 - Mock sudo interactions with the provided `MockRunner` and `MockSudoChecker`; never issue real sudo.
+  `F2B_TEST_SUDO` only skips the sudo probe; it does not mock sudo.
 - Ensure security cases include path traversal, privilege errors, and context timeouts.
+- Every test and subtest uses its `t` and asserts an outcome; never write `func(_ *testing.T)`
+  or discard a result with `_ = err` (a prek hook rejects the former).
+- Name test files after the behavior under test; do not add `*_coverage_test.go` or
+  `*_additional_test.go` files written to raise coverage.
 
 ## Commit & Pull Request Guidelines
 
@@ -52,12 +57,12 @@ Use this guide to contribute effectively to f2b, the Go-based CLI for managing F
   output, anything with unpredictable size) and `ctx_execute_file` for analyzing file
   contents — so raw bytes stay in the sandbox and only derived answers enter context.
 - Plain Bash is reserved for state mutations (git writes, `mkdir`/`rm`/`mv`/`cp`,
-  installs) and tiny fixed outputs. If raw Bash output is genuinely required, append
-  `# ctx-ok` to the command.
+  installs) and tiny fixed outputs. There is no opt-out marker for raw output.
 - Direct file `Read` is only for files you are about to edit; analysis and extraction
   go through `ctx_execute_file`.
-- Enforcement: the context-mode plugin's PreToolUse hook blocks non-conforming Bash
-  calls. Agents without the plugin follow this section as written.
+- Enforcement: the context-mode plugin only nudges toward these tools; it does not
+  block plain Bash. Agents follow this section as written whether or not a hook
+  enforces it.
 
 ## Security & Configuration Tips
 

@@ -8,8 +8,9 @@ working on this project.
 ## Quick Reference
 
 - **Security**: Never execute real sudo commands in tests, always use MockRunner
-- **Testing**: Use `F2B_TEST_SUDO=true` and mock all system interactions
-- **Format**: Run `go fmt ./...` and `golangci-lint run` before suggesting changes
+- **Testing**: Mock all system interactions with `MockRunner`/`MockSudoChecker`
+  (`F2B_TEST_SUDO` only skips the sudo probe; it does not mock sudo)
+- **Format/Lint**: Run `prek run --all-files` (see AGENTS.md) before suggesting changes
 - **Commits**: Use semantic commit format: `type(scope): message`
 - **Validation**: Validate all input before privilege escalation
 - **Testing**: Include both privileged and unprivileged test scenarios
