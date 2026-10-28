@@ -20,7 +20,7 @@ ______________________________________________________________________
   `git checkout -b my-feature-branch`
 - Install [mise](https://mise.jdx.dev/) and run `mise install` (Go from `go.mod`,
   [prek](https://github.com/j178/prek) and the Go tools from `mise.toml`), then
-  `mise run setup` to install the pre-commit hook.
+  `mise run setup` to install the pre-commit and commit-msg hooks.
 
 ### 3. Make Your Changes
 
@@ -43,7 +43,8 @@ mise run test-race   # go test -race ./...
 
 ### 5. Commit and Push
 
-- Write clear, descriptive commit messages.
+- Use semantic commit subjects: `type(scope): message` (e.g. `fix(cmd): ...`);
+  the commit-msg hook rejects other subjects.
 - Keep commits focused and atomic.
 - Push your branch to your fork.
 

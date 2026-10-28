@@ -79,6 +79,8 @@ golangci-lint run --timeout=5m
 description = "Run every prek hook over the whole tree"
 run = "prek run --all-files --show-diff-on-failure"
 
+# Hook types come from default_install_hook_types in .pre-commit-config.yaml,
+# so the commit-msg hooks are installed too.
 [tasks.setup]
 description = "Install the prek git hooks"
 run = "prek install"

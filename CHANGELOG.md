@@ -41,6 +41,7 @@ ______________________________________________________________________
   bundled third-party module.
 - Release checksums are signed with cosign keyless signing (a `.bundle` next to
   the checksums file).
+- Commit-message hooks rejecting non-semantic subjects and Claude session links.
 
 ### Changed
 

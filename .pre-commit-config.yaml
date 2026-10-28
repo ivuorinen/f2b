@@ -5,6 +5,10 @@
 # other hook runs a tool from mise.toml through `mise exec` or `mise run`, so
 # the git hooks, `mise run hooks` and CI all run the same versions.
 
+# Install the commit-msg shim too (`mise run setup`), so commit-message hooks
+# below run on every commit; `stages:` alone installs nothing.
+default_install_hook_types: [pre-commit, commit-msg]
+
 # Generated API docs (produced by `mise run docs-api`) and the vendored graphify
 # skill (a third-party tool install under .claude/skills/) must not be linted,
 # reformatted, or whitespace-fixed by any hook.
@@ -30,6 +34,37 @@ repos:
         language: system
         types: [go]
         pass_filenames: false
+
+      # Claude Code session links must never be published; two reached main
+      # (5b45d70, 8cac473) because nothing inspected commit messages.
+      - id: no-session-reference
+        name: Reject Claude session references
+        language: pygrep
+        entry: '(?i)(^claude-session:|claude\.ai/code/session_)'
+        stages: [commit-msg]
+
+      # AGENTS.md mandates semantic commits and the goreleaser changelog
+      # filters on the type prefix; git's own Merge/Revert/fixup! subjects pass.
+      # (?x) verbose mode lets the pattern span lines in a literal block, which
+      # yamlfmt does not re-wrap past the line limit; [ ] is a literal space.
+      - id: semantic-commit-subject
+        name: Require a semantic commit subject
+        language: pygrep
+        entry: |-
+          (?x)\A(
+            (feat|fix|chore|docs|test|refactor|ci|build|perf|style|revert)(\([^)]+\))?!?:[ ]
+            | Merge[ ] | Revert[ ]" | fixup![ ] | squash![ ] | amend![ ]
+          )
+        args: [--multiline, --negate]
+        stages: [commit-msg]
+
+      # Tests that discard their *testing.T cannot fail; the shape recurred
+      # after being fixed under several findings.
+      - id: no-discarded-testing-t
+        name: Tests must use their *testing.T
+        language: pygrep
+        entry: '\(\s*_\s+\*testing\.T\s*\)'
+        files: _test\.go$
 
       # The hooks below keep the entry, file types and file patterns of the
       # upstream hook each one replaced.

@@ -29,7 +29,7 @@ golangci-lint and the other Go tools); Go itself comes from `go.mod`.
 
 ```bash
 mise install
-mise run setup   # installs the pre-commit hook
+mise run setup   # installs the pre-commit and commit-msg hooks
 ```
 
 ### Run All Linters
@@ -158,9 +158,10 @@ The project uses `.pre-commit-config.yaml` for unified tooling:
 - **`repo: builtin`**: prek's own implementations of the pre-commit-hooks file checks
   (whitespace, end of file, line endings, YAML/JSON syntax, large files, merge
   conflicts, shebang permissions), versioned with prek
-- **`repo: local`**: `golangci-lint` (runs `mise run lint`), yamlfmt,
-  markdownlint-cli2, mdformat, markdown-link-check, actionlint, shfmt, checkov,
-  check-jsonschema and editorconfig-checker, each run with `mise exec --`
+- **`repo: local`**: `golangci-lint` (runs `mise run lint`), the commit-message and
+  test-shape pygrep checks, and yamlfmt, markdownlint-cli2, mdformat,
+  markdown-link-check, actionlint, shfmt, checkov, check-jsonschema and
+  editorconfig-checker, each run with `mise exec --`
 
 ### Automatic Setup
 
