@@ -442,7 +442,7 @@ func GetLogAllowedPaths() []string
 GetLogAllowedPaths returns allowed paths for log directories
 
 <a name="GetLogDir"></a>
-## func [GetLogDir](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L32>)
+## func [GetLogDir](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L39>)
 
 ```go
 func GetLogDir() string
@@ -632,7 +632,7 @@ RequiresSudo returns true if the given command typically requires sudo privilege
 command may be a bare name or an absolute path: production passes the exec.LookPath result \(/usr/bin/fail2ban\-client\) while tests pass the bare name, and matching only the bare name made every non\-root fail2ban\-client call skip sudo and fail on the root\-only socket. The absolute path was already pinned to a trusted directory by validateCommandExecution, so only its base name decides here.
 
 <a name="RunnerCombinedOutput"></a>
-## func [RunnerCombinedOutput](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L123>)
+## func [RunnerCombinedOutput](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L155>)
 
 ```go
 func RunnerCombinedOutput(name string, args ...string) ([]byte, error)
@@ -641,7 +641,7 @@ func RunnerCombinedOutput(name string, args ...string) ([]byte, error)
 RunnerCombinedOutput executes a command using the global runner and returns combined stdout/stderr output.
 
 <a name="RunnerCombinedOutputWithContext"></a>
-## func [RunnerCombinedOutputWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L163>)
+## func [RunnerCombinedOutputWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L195>)
 
 ```go
 func RunnerCombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error)
@@ -650,7 +650,7 @@ func RunnerCombinedOutputWithContext(ctx context.Context, name string, args ...s
 RunnerCombinedOutputWithContext executes a command with context using the global runner.
 
 <a name="RunnerCombinedOutputWithSudo"></a>
-## func [RunnerCombinedOutputWithSudo](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L135>)
+## func [RunnerCombinedOutputWithSudo](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L167>)
 
 ```go
 func RunnerCombinedOutputWithSudo(name string, args ...string) ([]byte, error)
@@ -659,7 +659,7 @@ func RunnerCombinedOutputWithSudo(name string, args ...string) ([]byte, error)
 RunnerCombinedOutputWithSudo executes a command with sudo privileges using the global runner.
 
 <a name="RunnerCombinedOutputWithSudoContext"></a>
-## func [RunnerCombinedOutputWithSudoContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L171>)
+## func [RunnerCombinedOutputWithSudoContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L203>)
 
 ```go
 func RunnerCombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error)
@@ -668,7 +668,7 @@ func RunnerCombinedOutputWithSudoContext(ctx context.Context, name string, args 
 RunnerCombinedOutputWithSudoContext executes a command with sudo privileges and context using the global runner.
 
 <a name="SetLogDir"></a>
-## func [SetLogDir](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L25>)
+## func [SetLogDir](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L32>)
 
 ```go
 func SetLogDir(dir string)
@@ -686,7 +686,7 @@ func SetLogger(l LoggerInterface)
 SetLogger allows the cmd package to set the logger instance \(thread\-safe\)
 
 <a name="SetRunner"></a>
-## func [SetRunner](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L109>)
+## func [SetRunner](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L141>)
 
 ```go
 func SetRunner(r Runner)
@@ -1786,7 +1786,7 @@ func (m *MockSudoChecker) IsRoot() bool
 IsRoot returns the mocked root status
 
 <a name="OSRunner"></a>
-## type [OSRunner](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L39>)
+## type [OSRunner](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L46>)
 
 OSRunner runs commands locally.
 
@@ -1795,7 +1795,7 @@ type OSRunner struct{}
 ```
 
 <a name="OSRunner.CombinedOutput"></a>
-### func \(\*OSRunner\) [CombinedOutput](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L54>)
+### func \(\*OSRunner\) [CombinedOutput](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L88>)
 
 ```go
 func (r *OSRunner) CombinedOutput(name string, args ...string) ([]byte, error)
@@ -1804,7 +1804,7 @@ func (r *OSRunner) CombinedOutput(name string, args ...string) ([]byte, error)
 CombinedOutput executes a command without sudo.
 
 <a name="OSRunner.CombinedOutputWithContext"></a>
-### func \(\*OSRunner\) [CombinedOutputWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L59>)
+### func \(\*OSRunner\) [CombinedOutputWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L93>)
 
 ```go
 func (r *OSRunner) CombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error)
@@ -1813,7 +1813,7 @@ func (r *OSRunner) CombinedOutputWithContext(ctx context.Context, name string, a
 CombinedOutputWithContext executes a command without sudo with context support.
 
 <a name="OSRunner.CombinedOutputWithSudo"></a>
-### func \(\*OSRunner\) [CombinedOutputWithSudo](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L68>)
+### func \(\*OSRunner\) [CombinedOutputWithSudo](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L101>)
 
 ```go
 func (r *OSRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte, error)
@@ -1822,7 +1822,7 @@ func (r *OSRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte, 
 CombinedOutputWithSudo executes a command with sudo if needed.
 
 <a name="OSRunner.CombinedOutputWithSudoContext"></a>
-### func \(\*OSRunner\) [CombinedOutputWithSudoContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L73>)
+### func \(\*OSRunner\) [CombinedOutputWithSudoContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L106>)
 
 ```go
 func (r *OSRunner) CombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error)
@@ -1931,7 +1931,7 @@ func NewClientWithContext(ctx context.Context, logDir, filterDir string) (*RealC
 NewClientWithContext initializes a RealClient with context support for timeout and cancellation. It checks for fail2ban\-client in PATH, ensures the service is running, checks sudo privileges, and loads available jails. Returns an error if fail2ban is not available, not running, or user lacks sudo privileges.
 
 <a name="RealClient.BanIP"></a>
-### func \(\*RealClient\) [BanIP](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L202>)
+### func \(\*RealClient\) [BanIP](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L234>)
 
 ```go
 func (c *RealClient) BanIP(ip, jail string) (int, error)
@@ -1940,7 +1940,7 @@ func (c *RealClient) BanIP(ip, jail string) (int, error)
 BanIP bans an IP address in the specified jail and returns the ban status code.
 
 <a name="RealClient.BanIPWithContext"></a>
-### func \(\*RealClient\) [BanIPWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L401>)
+### func \(\*RealClient\) [BanIPWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L433>)
 
 ```go
 func (c *RealClient) BanIPWithContext(ctx context.Context, ip, jail string) (int, error)
@@ -1949,7 +1949,7 @@ func (c *RealClient) BanIPWithContext(ctx context.Context, ip, jail string) (int
 BanIPWithContext bans an IP address in the specified jail with context support.
 
 <a name="RealClient.BannedIn"></a>
-### func \(\*RealClient\) [BannedIn](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L212>)
+### func \(\*RealClient\) [BannedIn](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L244>)
 
 ```go
 func (c *RealClient) BannedIn(ip string) ([]string, error)
@@ -1958,7 +1958,7 @@ func (c *RealClient) BannedIn(ip string) ([]string, error)
 BannedIn returns a list of jails where the specified IP address is currently banned.
 
 <a name="RealClient.BannedInWithContext"></a>
-### func \(\*RealClient\) [BannedInWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L411>)
+### func \(\*RealClient\) [BannedInWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L443>)
 
 ```go
 func (c *RealClient) BannedInWithContext(ctx context.Context, ip string) ([]string, error)
@@ -1967,7 +1967,7 @@ func (c *RealClient) BannedInWithContext(ctx context.Context, ip string) ([]stri
 BannedInWithContext returns a list of jails where the specified IP address is currently banned with context support.
 
 <a name="RealClient.GetBanRecords"></a>
-### func \(\*RealClient\) [GetBanRecords](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L217>)
+### func \(\*RealClient\) [GetBanRecords](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L249>)
 
 ```go
 func (c *RealClient) GetBanRecords(jails []string) ([]BanRecord, error)
@@ -1976,7 +1976,7 @@ func (c *RealClient) GetBanRecords(jails []string) ([]BanRecord, error)
 GetBanRecords retrieves ban records for the specified jails.
 
 <a name="RealClient.GetBanRecordsWithContext"></a>
-### func \(\*RealClient\) [GetBanRecordsWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L426>)
+### func \(\*RealClient\) [GetBanRecordsWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L458>)
 
 ```go
 func (c *RealClient) GetBanRecordsWithContext(ctx context.Context, jails []string) ([]BanRecord, error)
@@ -1985,7 +1985,7 @@ func (c *RealClient) GetBanRecordsWithContext(ctx context.Context, jails []strin
 GetBanRecordsWithContext retrieves ban records for the specified jails with context support.
 
 <a name="RealClient.GetLogLines"></a>
-### func \(\*RealClient\) [GetLogLines](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L293>)
+### func \(\*RealClient\) [GetLogLines](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L325>)
 
 ```go
 func (c *RealClient) GetLogLines(jail, ip string) ([]string, error)
@@ -1994,7 +1994,7 @@ func (c *RealClient) GetLogLines(jail, ip string) ([]string, error)
 GetLogLines retrieves log lines related to an IP address from the specified jail.
 
 <a name="RealClient.GetLogLinesWithContext"></a>
-### func \(\*RealClient\) [GetLogLinesWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L431>)
+### func \(\*RealClient\) [GetLogLinesWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L463>)
 
 ```go
 func (c *RealClient) GetLogLinesWithContext(ctx context.Context, jail, ip string) ([]string, error)
@@ -2003,7 +2003,7 @@ func (c *RealClient) GetLogLinesWithContext(ctx context.Context, jail, ip string
 GetLogLinesWithContext retrieves log lines related to an IP address from the specified jail with context support.
 
 <a name="RealClient.GetLogLinesWithLimit"></a>
-### func \(\*RealClient\) [GetLogLinesWithLimit](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L298>)
+### func \(\*RealClient\) [GetLogLinesWithLimit](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L330>)
 
 ```go
 func (c *RealClient) GetLogLinesWithLimit(jail, ip string, maxLines int) ([]string, error)
@@ -2012,7 +2012,7 @@ func (c *RealClient) GetLogLinesWithLimit(jail, ip string, maxLines int) ([]stri
 GetLogLinesWithLimit returns log lines with configurable limits for memory management.
 
 <a name="RealClient.GetLogLinesWithLimitAndContext"></a>
-### func \(\*RealClient\) [GetLogLinesWithLimitAndContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L437-L441>)
+### func \(\*RealClient\) [GetLogLinesWithLimitAndContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L469-L473>)
 
 ```go
 func (c *RealClient) GetLogLinesWithLimitAndContext(ctx context.Context, jail, ip string, maxLines int) ([]string, error)
@@ -2021,7 +2021,7 @@ func (c *RealClient) GetLogLinesWithLimitAndContext(ctx context.Context, jail, i
 GetLogLinesWithLimitAndContext returns log lines with configurable limits and context support for memory management and timeouts.
 
 <a name="RealClient.GetLogLinesWithLimitContext"></a>
-### func \(\*RealClient\) [GetLogLinesWithLimitContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L303>)
+### func \(\*RealClient\) [GetLogLinesWithLimitContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L335>)
 
 ```go
 func (c *RealClient) GetLogLinesWithLimitContext(ctx context.Context, jail, ip string, maxLines int) ([]string, error)
@@ -2030,7 +2030,7 @@ func (c *RealClient) GetLogLinesWithLimitContext(ctx context.Context, jail, ip s
 GetLogLinesWithLimitContext returns log lines with configurable limits and context support.
 
 <a name="RealClient.ListFilters"></a>
-### func \(\*RealClient\) [ListFilters](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L330>)
+### func \(\*RealClient\) [ListFilters](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L362>)
 
 ```go
 func (c *RealClient) ListFilters() ([]string, error)
@@ -2039,7 +2039,7 @@ func (c *RealClient) ListFilters() ([]string, error)
 ListFilters returns a list of available fail2ban filter files.
 
 <a name="RealClient.ListFiltersWithContext"></a>
-### func \(\*RealClient\) [ListFiltersWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L478>)
+### func \(\*RealClient\) [ListFiltersWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L510>)
 
 ```go
 func (c *RealClient) ListFiltersWithContext(ctx context.Context) ([]string, error)
@@ -2057,7 +2057,7 @@ func (c *RealClient) ListJails() ([]string, error)
 ListJails returns the list of available jails for this client.
 
 <a name="RealClient.ListJailsWithContext"></a>
-### func \(\*RealClient\) [ListJailsWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L348>)
+### func \(\*RealClient\) [ListJailsWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L380>)
 
 ```go
 func (c *RealClient) ListJailsWithContext(ctx context.Context) ([]string, error)
@@ -2066,7 +2066,7 @@ func (c *RealClient) ListJailsWithContext(ctx context.Context) ([]string, error)
 ListJailsWithContext returns a list of all fail2ban jails with context support.
 
 <a name="RealClient.StatusAll"></a>
-### func \(\*RealClient\) [StatusAll](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L188>)
+### func \(\*RealClient\) [StatusAll](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L220>)
 
 ```go
 func (c *RealClient) StatusAll() (string, error)
@@ -2075,7 +2075,7 @@ func (c *RealClient) StatusAll() (string, error)
 StatusAll returns the status of all fail2ban jails.
 
 <a name="RealClient.StatusAllWithContext"></a>
-### func \(\*RealClient\) [StatusAllWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L353>)
+### func \(\*RealClient\) [StatusAllWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L385>)
 
 ```go
 func (c *RealClient) StatusAllWithContext(ctx context.Context) (string, error)
@@ -2084,7 +2084,7 @@ func (c *RealClient) StatusAllWithContext(ctx context.Context) (string, error)
 StatusAllWithContext returns the status of all fail2ban jails with context support.
 
 <a name="RealClient.StatusJail"></a>
-### func \(\*RealClient\) [StatusJail](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L195>)
+### func \(\*RealClient\) [StatusJail](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L227>)
 
 ```go
 func (c *RealClient) StatusJail(j string) (string, error)
@@ -2093,7 +2093,7 @@ func (c *RealClient) StatusJail(j string) (string, error)
 StatusJail returns the status of a specific fail2ban jail.
 
 <a name="RealClient.StatusJailWithContext"></a>
-### func \(\*RealClient\) [StatusJailWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L361>)
+### func \(\*RealClient\) [StatusJailWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L393>)
 
 ```go
 func (c *RealClient) StatusJailWithContext(ctx context.Context, jail string) (string, error)
@@ -2102,7 +2102,7 @@ func (c *RealClient) StatusJailWithContext(ctx context.Context, jail string) (st
 StatusJailWithContext returns the status of a specific fail2ban jail with context support.
 
 <a name="RealClient.TestFilter"></a>
-### func \(\*RealClient\) [TestFilter](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L577>)
+### func \(\*RealClient\) [TestFilter](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L609>)
 
 ```go
 func (c *RealClient) TestFilter(filter string) (string, error)
@@ -2111,7 +2111,7 @@ func (c *RealClient) TestFilter(filter string) (string, error)
 TestFilter tests a fail2ban filter against its configured log files and returns the test output.
 
 <a name="RealClient.TestFilterWithContext"></a>
-### func \(\*RealClient\) [TestFilterWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L554>)
+### func \(\*RealClient\) [TestFilterWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L586>)
 
 ```go
 func (c *RealClient) TestFilterWithContext(ctx context.Context, filter string) (string, error)
@@ -2120,7 +2120,7 @@ func (c *RealClient) TestFilterWithContext(ctx context.Context, filter string) (
 TestFilterWithContext tests a fail2ban filter against its configured log files with context support.
 
 <a name="RealClient.UnbanIP"></a>
-### func \(\*RealClient\) [UnbanIP](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L207>)
+### func \(\*RealClient\) [UnbanIP](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L239>)
 
 ```go
 func (c *RealClient) UnbanIP(ip, jail string) (int, error)
@@ -2129,7 +2129,7 @@ func (c *RealClient) UnbanIP(ip, jail string) (int, error)
 UnbanIP unbans an IP address from the specified jail and returns the unban status code.
 
 <a name="RealClient.UnbanIPWithContext"></a>
-### func \(\*RealClient\) [UnbanIPWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L406>)
+### func \(\*RealClient\) [UnbanIPWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L438>)
 
 ```go
 func (c *RealClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (int, error)
@@ -2200,7 +2200,7 @@ type Runner interface {
 ```
 
 <a name="GetRunner"></a>
-### func [GetRunner](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L116>)
+### func [GetRunner](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L148>)
 
 ```go
 func GetRunner() Runner

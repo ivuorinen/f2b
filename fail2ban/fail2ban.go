@@ -13,9 +13,16 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
+	"time"
 
 	"github.com/ivuorinen/f2b/constants"
 )
+
+// commandWaitDelay bounds how long a canceled command may keep its output
+// pipes open before Wait gives up and kills it. A variable only so tests can
+// shorten it.
+var commandWaitDelay = 5 * time.Second
 
 var logDir = constants.DefaultLogDir // base directory for fail2ban logs
 var logDirMu sync.RWMutex            // protects logDir from concurrent access
@@ -50,6 +57,33 @@ func validateCommandExecution(ctx context.Context, name string, args []string) e
 	return nil
 }
 
+// runCombined runs an already-validated command and returns its combined output.
+//
+// exec.CommandContext's default cancellation SIGKILLs only the direct child.
+// When that child is sudo, the command sudo started survives (sudo cannot relay
+// SIGKILL) and keeps the output pipe open, so CombinedOutput blocked until the
+// orphan exited and no context deadline bounded the call. SIGTERM is relayed by
+// sudo to its command, and WaitDelay stops waiting on pipes still held after
+// the context ends.
+//
+// A non-zero exit carries the command's own diagnostic (e.g. fail2ban-client's
+// "Sorry but the jail 'x' does not exist") only in the output bytes, which
+// callers drop on the error path; the bare *exec.ExitError reads "exit status
+// N". The trimmed output is therefore folded into the error, keeping the
+// ExitError reachable through errors.As.
+func runCombined(ctx context.Context, name string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, name, args...) // #nosec G204 -- callers validate via validateCommandExecution
+	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
+	cmd.WaitDelay = commandWaitDelay
+	out, err := cmd.CombinedOutput()
+	if _, ok := errors.AsType[*exec.ExitError](err); ok {
+		if msg := strings.TrimSpace(string(out)); msg != "" {
+			err = fmt.Errorf("%w: %s", err, msg)
+		}
+	}
+	return out, err
+}
+
 // CombinedOutput executes a command without sudo.
 func (r *OSRunner) CombinedOutput(name string, args ...string) ([]byte, error) {
 	return r.CombinedOutputWithContext(context.Background(), name, args...)
@@ -60,8 +94,7 @@ func (r *OSRunner) CombinedOutputWithContext(ctx context.Context, name string, a
 	if err := validateCommandExecution(ctx, name, args); err != nil {
 		return nil, err
 	}
-	// #nosec G204 -- command validated by validateCommandExecution
-	return exec.CommandContext(ctx, name, args...).CombinedOutput()
+	return runCombined(ctx, name, args...)
 }
 
 // CombinedOutputWithSudo executes a command with sudo if needed.
@@ -79,19 +112,18 @@ func (r *OSRunner) CombinedOutputWithSudoContext(ctx context.Context, name strin
 
 	// If already root, no need for sudo
 	if checker.IsRoot() {
-		return exec.CommandContext(ctx, name, args...).CombinedOutput() // #nosec G204 -- command validated above
+		return runCombined(ctx, name, args...)
 	}
 
-	// If command requires sudo and user has privileges, use sudo
+	// If command requires sudo and user has privileges, use sudo. The command
+	// name and arguments were validated above by validateCommandExecution.
 	if RequiresSudo(name, args...) && checker.HasSudoPrivileges() {
 		sudoArgs := append([]string{name}, args...)
-		// #nosec G204 - This is a legitimate use case for executing fail2ban-client with sudo
-		// The command name and arguments are validated by ValidateCommand() and RequiresSudo()
-		return exec.CommandContext(ctx, constants.SudoCommand, sudoArgs...).CombinedOutput()
+		return runCombined(ctx, constants.SudoCommand, sudoArgs...)
 	}
 
 	// Otherwise run without sudo
-	return exec.CommandContext(ctx, name, args...).CombinedOutput() // #nosec G204 -- command validated above
+	return runCombined(ctx, name, args...)
 }
 
 // runnerManager provides thread-safe access to the global Runner.

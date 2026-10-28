@@ -103,5 +103,6 @@ ______________________________________________________________________
   privilege check compared the resolved absolute path against a bare command
   name and never matched.
 - A sudoers grant scoped to `fail2ban-client` is accepted (`sudo -n -l fail2ban-client`), not only unrestricted sudo.
+- A canceled command no longer blocks on an orphaned child of sudo.
 
 ______________________________________________________________________
