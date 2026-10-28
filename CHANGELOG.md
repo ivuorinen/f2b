@@ -3,7 +3,7 @@
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+and releases use [CalVer](https://calver.org/) tags (`YYYY.MM.MICRO`).
 
 ______________________________________________________________________
 
@@ -37,6 +37,10 @@ ______________________________________________________________________
 - Comprehensive documentation updates across all markdown files.
 - Granular timeout env vars `F2B_COMMAND_TIMEOUT`, `F2B_FILE_TIMEOUT`, and
   `F2B_PARALLEL_TIMEOUT`, replacing the single `F2B_TIMEOUT`.
+- Releases attach `THIRD_PARTY_LICENSES.txt`, the license texts of every
+  bundled third-party module.
+- Release checksums are signed with cosign keyless signing (a `.bundle` next to
+  the checksums file).
 
 ### Changed
 
@@ -62,14 +66,24 @@ ______________________________________________________________________
 - Bumped Go to 1.26.
 - Toolchain go1.27.3 (language floor stays `go 1.26`); golangci-lint v2.15.0,
   goreleaser v2.19.0, gosec v2.30.0, prek v0.5.7, and current action pins.
+- goreleaser no longer pushes a Homebrew formula (`brews` removed):
+  ivuorinen/homebrew-tap generates it from the release's binaries.
+- Releases publish raw binaries (`f2b_<os>-<arch>`) instead of archives, for
+  Linux amd64/arm64/armv6/armv7, macOS amd64/arm64 and Windows amd64.
+- Release notes exclude scoped `chore(...)`, `docs(...)` and `test(...)` commits.
 - Development tasks and tool pins moved from the Makefile to `mise.toml`, and
   `codex.sh` is removed. The prek hooks and CI workflows run every tool through
   mise, so `mise.toml` is the only version pin.
+- Releases use CalVer tags: `mise run release` pushes the next one (from
+  gh-calver), and CI builds and signs the release.
 
 ### Removed
 
 - Removed the `metrics` command and its performance-metrics subsystem.
 - Dropped the `google/uuid` and `hashicorp/go-version` dependencies.
+- Release builds for the BSDs, Linux 386/mips64/mips64le/ppc64le/s390x and
+  Windows 386/arm64, the `ghcr.io/ivuorinen/f2b` container image, and the
+  deb/rpm/apk packages.
 
 ### Security
 

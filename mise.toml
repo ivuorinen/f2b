@@ -20,7 +20,10 @@ idiomatic_version_file_enable_tools = ["go"]
 "go:golang.org/x/vuln/cmd/govulncheck" = "1.9.0"
 actionlint = "1.7.12"
 checkov = "3.3.30"
+cosign = "3.1.4"
 editorconfig-checker = "4.0.2"
+gh = "2.103.3"
+goreleaser = "2.19.0"
 markdownlint-cli2 = "0.24.0"
 # node runs the npm: tools; uv installs the pypi: tools.
 node = "24.22.1"
@@ -102,9 +105,15 @@ for pkg in cmd constants fail2ban; do
 done
 '''
 
+# Releases are built and signed in CI from a pushed tag; this only checks that
+# the goreleaser config builds. cosign keyless signing needs CI's OIDC token.
+[tasks.snapshot]
+description = "Build an unsigned snapshot release into dist/"
+run = "goreleaser release --snapshot --clean --skip=sign"
+
 [tasks.clean]
 description = "Remove build artifacts"
-run = "rm -rf f2b coverage.out dist/"
+run = "rm -rf f2b coverage.out dist/ third_party/"
 
 # --local keeps `mise upgrade` to this file; without it, it also rewrites the
 # global mise config. Go itself is not bumped here: its version is the go.mod
@@ -112,6 +121,39 @@ run = "rm -rf f2b coverage.out dist/"
 [tasks.update]
 description = "Update Go modules and mise tools to their latest versions"
 run = ["go get -u -t ./...", "go mod tidy", "mise upgrade --bump --local"]
+
+[tasks.release]
+description = "Tag and push a CalVer release (requires a clean main branch)"
+run = '''
+if ! gh extension list | grep -q calver; then
+  gh extension install ivuorinen/gh-calver
+fi
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "Error: working tree is not clean"
+  exit 1
+fi
+if [ "$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then
+  echo "Error: not on main branch"
+  exit 1
+fi
+tag=$(gh calver next)
+echo "Releasing $tag..."
+git tag -a "$tag" -m "Release $tag"
+git push origin "$tag"
+echo "Tag $tag pushed. GitHub Actions will build and sign the release."
+'''
+
+# Run by the release workflow for the pushed tag. cosign keyless signing needs
+# the workflow's OIDC token, so this refuses to run anywhere else.
+[tasks.publish]
+description = "Build, sign and publish the release for the pushed tag (CI only)"
+run = '''
+if [ "${GITHUB_ACTIONS:-}" != "true" ]; then
+  echo "Error: releases are published by CI; run 'mise run release' to push a tag"
+  exit 1
+fi
+goreleaser release --clean
+'''
 
 [tasks.all]
 description = "Lint, race-enabled tests, vulnerability scan and build: the CI gates"

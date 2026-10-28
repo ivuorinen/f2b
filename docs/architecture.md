@@ -152,7 +152,6 @@ fail2ban/client.go
 - **CLI Framework**: [Cobra](https://github.com/spf13/cobra)
 - **Logging**: [Logrus](https://github.com/sirupsen/logrus) with structured output and contextual logging
 - **Testing**: Go's built-in testing with comprehensive mocks and fluent testing framework
-- **Containerization**: Multi-architecture Docker support (amd64, arm64, armv7)
 
 ### Key Libraries
 

@@ -14,11 +14,12 @@ Use this guide to contribute effectively to f2b, the Go-based CLI for managing F
 ## Build, Test, and Development Commands
 
 - Build the CLI with:
-  `go build -ldflags "-X github.com/ivuorinen/f2b/cmd.Version=1.2.3" -o f2b .`
+  `go build -ldflags "-X github.com/ivuorinen/f2b/cmd.Version=2026.10.0" -o f2b .`
   This embeds the release version string in the binary.
 - Run tests with coverage: `mise run test-cov` (race-enabled, writes `coverage.out`).
 - `prek run --all-files` applies formatting, linting, and link checks; run before every push.
 - `mise run update` refreshes Go dependencies and the `mise.toml` tool pins when coordinating upgrades.
+- Releases are cut with `mise run release` (pushes the next CalVer tag); CI builds and signs them.
 - Tool versions live only in `mise.toml`; the prek hooks and CI workflows run them through mise.
 
 ## Coding Style & Naming Conventions

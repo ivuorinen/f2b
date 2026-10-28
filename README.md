@@ -19,10 +19,9 @@ ______________________________________________________________________
 
 ### Installation
 
-> No tagged release has been published yet, so pre-built binaries, Docker
-> images, a Homebrew tap, and pinned `@vX.Y.Z` installs are not available.
-> Use `go install ...@latest` or build from source below. The other install
-> methods will be documented once a `v1.x` release is cut.
+> No release has been published yet, so pre-built binaries and a Homebrew tap
+> are not available. Use `go install ...@latest` or build from source below.
+> The other install methods will be documented once the first release is cut.
 
 #### Using Go
 
@@ -309,7 +308,6 @@ f2b is built as an **enterprise-grade** Go application following modern architec
 - **CLI Framework**: Cobra with comprehensive command structure and shell completion
 - **Logging**: Structured logging with Logrus and contextual information
 - **Testing**: Advanced mock patterns with thread-safe implementations
-- **Deployment**: Multi-architecture Docker support (amd64, arm64, armv7) with manifests
 - **Performance**: Object pooling and parallel processing
 
 ### 🎪 **Advanced Features**
@@ -395,47 +393,57 @@ ______________________________________________________________________
 
 ### Creating a New Release
 
-Releases are automated using [GoReleaser](https://goreleaser.com/). To create a new release:
+Releases use [CalVer](https://calver.org/) tags (`YYYY.MM.MICRO`, e.g. `2026.10.0`) from
+[gh-calver](https://github.com/ivuorinen/gh-calver) and are built by GitHub Actions with
+[GoReleaser](https://goreleaser.com/). CalVer tags are not Go module versions, so
+`go install ...@latest` builds the latest `main` commit rather than the latest release.
 
-1. **Tag the release:**
+1. **Tag the release** from a clean `main` branch:
 
 ```bash
-git tag -a v1.2.3 -m "Release v1.2.3"
-git push origin v1.2.3
+mise run release   # tags the next CalVer version and pushes it
 ```
 
 2. **GitHub Actions will automatically:**
 
-- Build binaries for multiple platforms (Linux, macOS, Windows, BSD)
+- Build binaries for Linux, macOS and Windows
 - Create a GitHub release with changelog
+- Sign the checksums file with cosign keyless signing
 - Upload release artifacts
-- Build and push Docker images
-- Update Homebrew tap (if configured)
-- Generate .deb, .rpm, and .apk packages
 
-### Manual Release (Development)
+The Homebrew formula is not published from this repository:
+[ivuorinen/homebrew-tap](https://github.com/ivuorinen/homebrew-tap) generates it
+from the release's binaries in its scheduled sync.
+
+### Local Snapshot
+
+Releases are built and signed only in CI. To check that the GoReleaser configuration builds:
 
 ```bash
-# Check GoReleaser configuration
-make release-check
-
-# Create a snapshot release (no tag required)
-make release-snapshot
-
-# Create a full release (requires git tag)
-make release
+mise run snapshot   # unsigned build into dist/
 ```
 
 ### Release Artifacts
 
 Each release includes:
 
-- Pre-built binaries for multiple platforms and architectures (Linux, macOS, Windows, BSD)
-- Multi-architecture Docker images (amd64, arm64, armv7) with manifests
-- SHA256 checksums file
+- Binaries named `f2b_<os>-<arch>` for Linux (amd64, arm64, armv6, armv7),
+  macOS (amd64, arm64) and Windows (amd64)
+- A SHA256 checksums file and its cosign signature bundle (`.bundle`)
+- `LICENSE.md` and `THIRD_PARTY_LICENSES.txt` (licenses of the bundled modules)
 - Source code archives
-- Docker images at `ghcr.io/ivuorinen/f2b` with architecture-specific tags
-- Linux packages (.deb, .rpm, .apk) for multiple architectures
+
+Verify a download against the signed checksums:
+
+```bash
+v=2026.10.0
+cosign verify-blob \
+  --bundle "f2b_${v}_checksums.txt.bundle" \
+  --certificate-identity "https://github.com/ivuorinen/f2b/.github/workflows/release.yml@refs/tags/${v}" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  "f2b_${v}_checksums.txt"
+sha256sum --ignore-missing -c "f2b_${v}_checksums.txt"
+```
 
 ______________________________________________________________________
 
