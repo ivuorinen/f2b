@@ -13,7 +13,7 @@ and bounded parallel processing across jails.
 
 - **Purpose**: Entry point and application bootstrap
 - **Responsibilities**:
-  - Initial sudo privilege checking
+  - Lazy client construction (sudo checks run on the first client operation)
   - Root command setup and execution
   - Global configuration initialization
   - Error handling and exit codes
@@ -80,7 +80,7 @@ and bounded parallel processing across jails.
 
 ### Security-First Approach
 
-- Input validation before privilege escalation with caching
+- Input validation before privilege escalation
 - Secure command execution using argument arrays
 - No shell string concatenation
 - Comprehensive privilege checking
@@ -149,13 +149,13 @@ fail2ban/client.go
 
 - **Language**: Go 1.26+
 - **CLI Framework**: [Cobra](https://github.com/spf13/cobra)
-- **Logging**: [Logrus](https://github.com/sirupsen/logrus) with structured output and contextual logging
+- **Logging**: `log/slog` via `fail2ban.SlogLogger`, with structured contextual logging
 - **Testing**: Go's built-in testing with comprehensive mocks and fluent testing framework
 
 ### Key Libraries
 
 - **cobra**: Command-line interface framework
-- **logrus**: Structured logging with context propagation
+- **log/slog**: Structured logging (standard library) with context propagation
 - **Standard library**: Extensive use of Go stdlib for reliability
 - **sync/atomic**: The signal exit code and the swappable package logger
 - **context**: Timeout and cancellation support throughout
@@ -248,8 +248,13 @@ fail2ban/client.go
 - `F2B_COMMAND_TIMEOUT`: Timeout for individual fail2ban commands (default `30s`)
 - `F2B_FILE_TIMEOUT`: Timeout for file operations (default `10s`)
 - `F2B_PARALLEL_TIMEOUT`: Timeout for parallel operations (default `60s`)
-- `F2B_TEST_SUDO`: Marks a test environment, so `CanUseSudo()` returns false and
-  no real sudo runs (presence-checked: any non-empty value enables, unset disables)
+- `F2B_TEST_SUDO`: Marks a test environment, so `CanUseSudo()` skips the `sudo -n true`
+  probe (presence-checked: any non-empty value enables, unset disables). It does NOT
+  prevent sudo: root and members of the `sudo`/`wheel`/`admin` groups still run
+  privileged commands through sudo. Tests must inject `MockSudoChecker` and `MockRunner`.
+- `F2B_TRUSTED_BIN_DIR`: One extra absolute, clean directory trusted to hold the
+  sudo-executed fail2ban binaries, for non-FHS installs; unset trusts only the FHS
+  directories
 - `F2B_VERBOSE_TESTS`: Force verbose logging in CI/tests (presence-checked)
 - `ALLOW_DEV_PATHS`: Allow /tmp paths, development only (presence-checked)
 

@@ -300,14 +300,14 @@ err := logger.LogOperation(ctx, "ban_operation", func(ctx context.Context) error
 Use `TimedOperation` to log the duration and outcome of an operation:
 
 ```go
-func performBanOperation(ip, jail string) error {
+func performBanOperation(ctx context.Context, ip, jail string) error {
     timer := fail2ban.NewTimedOperation("ban", "ban_ip", ip, jail)
 
     // Perform the operation
-    err := client.BanIP(ip, jail)
+    _, err := client.BanIPWithContext(ctx, ip, jail)
 
     // Log timing and success/failure (pass the error; nil means success)
-    timer.Finish(err)
+    timer.FinishWithContext(ctx, err)
 
     return err
 }
@@ -376,7 +376,6 @@ package cmd
 
 import (
     "context"
-    "fmt"
 
     "github.com/spf13/cobra"
     "github.com/ivuorinen/f2b/fail2ban"
@@ -386,8 +385,8 @@ import (
 func MyCmd(client fail2ban.Client, config *Config) *cobra.Command {
     return NewCommand("mycmd <arg>", "My command description", []string{"mc"},
         func(cmd *cobra.Command, args []string) error {
-            // Create timeout context
-            ctx, cancel := context.WithTimeout(context.Background(), config.CommandTimeout)
+            // Derive the timeout from the command context so Ctrl-C cancels it
+            ctx, cancel := context.WithTimeout(cmd.Context(), config.CommandTimeout)
             defer cancel()
 
             // Validate arguments
@@ -405,7 +404,7 @@ func MyCmd(client fail2ban.Client, config *Config) *cobra.Command {
             logger := GetContextualLogger()
             return logger.LogOperation(ctx, "my_command", func(ctx context.Context) error {
                 // Perform operation with client
-                result, err := client.SomeOperation(args[0])
+                result, err := client.StatusJailWithContext(ctx, args[0])
                 if err != nil {
                     return HandleClientError(err)
                 }

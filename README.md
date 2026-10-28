@@ -158,6 +158,7 @@ F2B_LOG_DIR=/var/log                    # Fail2Ban log directory
 F2B_FILTER_DIR=/etc/fail2ban/filter.d   # Filter directory
 F2B_LOG_LEVEL=info                      # Log level (debug,info,warn,error)
 F2B_LOG_FILE=/path/to/f2b.log          # f2b's own log file
+F2B_TRUSTED_BIN_DIR=/opt/f2b/bin        # Optional: one extra trusted dir for the fail2ban binaries (non-FHS installs)
 
 # Performance & Timeout Configuration
 F2B_COMMAND_TIMEOUT=30s                 # Individual command timeout
@@ -166,7 +167,7 @@ F2B_PARALLEL_TIMEOUT=60s                # Parallel operation timeout
 
 # Testing & Development (presence-checked: set to any non-empty value to
 # enable; leave unset to disable — "false" still counts as set)
-F2B_TEST_SUDO=1                         # Mark a test environment; CanUseSudo() returns false
+F2B_TEST_SUDO=1                         # Mark a test environment; skips the sudo probe (does NOT mock sudo)
 F2B_TEST=1                              # Mark a test environment; disables real sudo probing
 GO_TEST=1                               # Same as F2B_TEST (checked by IsTestEnvironment())
 F2B_VERBOSE_TESTS=1                     # Force verbose logging in CI/tests
@@ -263,14 +264,33 @@ f2b service stop                       # Stop Fail2Ban service gracefully
 f2b service restart                    # Restart service (Ctrl-C/SIGTERM cancels the wait)
 
 # Filter Testing & Validation
-f2b test-filter <jail>                 # Test and validate jail filter configuration
-f2b test-filter sshd                   # Validate sshd filter with comprehensive checks
+f2b test-filter                        # List available filters
+f2b test-filter <filter>               # Run fail2ban-regex for a filter against its logpath
+f2b test-filter sshd                   # Test the sshd filter
 
 # Utility & Completion Commands
-f2b version                            # Show version, build info, and system details
+f2b version                            # Show the f2b version
 f2b completion <shell>                 # Generate completion for bash/zsh/fish/powershell
 f2b help [command]                     # Context-sensitive help with examples
 ```
+
+### Exit Codes
+
+| Code  | Meaning                                                 |
+| ----- | ------------------------------------------------------- |
+| `0`   | Success                                                 |
+| `1`   | Error (validation, privileges, fail2ban-client failure) |
+| `130` | Interrupted by SIGINT (Ctrl-C)                          |
+| `143` | Terminated by SIGTERM                                   |
+
+### JSON Output (`--format json`)
+
+| Command                     | JSON shape                                                  |
+| --------------------------- | ----------------------------------------------------------- |
+| `list-jails`, `logs`        | array of strings                                            |
+| `banned`                    | array of `{"jail", "ip", "banned_at", "remaining"}` objects |
+| `ban`, `unban`              | array of `{"ip", "jail", "status"}` objects                 |
+| `status`, `test`, `version` | string (the command's text output)                          |
 
 ### Command Aliases
 
@@ -306,7 +326,7 @@ f2b is built as an **enterprise-grade** Go application following modern architec
 
 - **Language**: Go 1.26+ with modern idioms and patterns
 - **CLI Framework**: Cobra with comprehensive command structure and shell completion
-- **Logging**: Structured logging with Logrus and contextual information
+- **Logging**: Structured logging with `log/slog` and contextual information
 - **Testing**: Advanced mock patterns with thread-safe implementations
 - **Performance**: Bounded parallel processing across jails
 
@@ -341,7 +361,8 @@ F2B_TEST_SUDO=true go test ./fail2ban -run TestSudo
 go test ./cmd -run TestCommand
 
 # Run parallel processing tests
-go test ./fail2ban -run TestParallel
+go test ./cmd -run TestParallel
+go test ./fail2ban -run TestProcessJailsParallel
 ```
 
 For comprehensive testing guidelines, mock patterns, and security testing practices, see

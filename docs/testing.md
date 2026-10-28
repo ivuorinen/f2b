@@ -332,17 +332,14 @@ func TestBanCommand_RequiresPrivileges(t *testing.T) {
 
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
-            // Set up privilege scenario using modern helper with context support
-            _, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, tt.hasPrivileges)
+            // Mock runner + mock sudo checker for this privilege scenario
+            client, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, tt.hasPrivileges)
             defer cleanup()
 
-            // Create context with timeout for the test
             ctx, cancel := context.WithTimeout(context.Background(), tt.timeout)
             defer cancel()
 
-            // Test command execution with context support
-            client := fail2ban.GetClient()
-            err := client.BanIPWithContext(ctx, "192.168.1.100", "sshd")
+            _, err := client.BanIPWithContext(ctx, "192.168.1.100", "sshd")
 
             if (err != nil) != tt.expectError {
                 t.Errorf("BanIPWithContext() error = %v, expectError %v", err, tt.expectError)
@@ -439,20 +436,16 @@ func TestValidateIP_ConcurrentSafety(t *testing.T) {
 ### Testing Output Formats
 
 ```go
-func TestCommandOutput_JSONFormat(t *testing.T) {
-    mock := fail2ban.NewMockClient()
-    config := &cmd.Config{Format: "json"}
-
-    output, err := executeCommandWithConfig(mock, config, "banned", "all")
-    if err != nil {
-        t.Fatalf("Command failed: %v", err)
-    }
-
-    // Validate JSON output
-    var result []interface{}
-    if err := json.Unmarshal([]byte(output), &result); err != nil {
-        t.Errorf("Invalid JSON output: %v", err)
-    }
+// In package cmd, using the fluent CommandTestBuilder
+func TestListJailsJSONOutput(t *testing.T) {
+    NewCommandTest(t, "list-jails").
+        WithSetup(func(mock *fail2ban.MockClient) {
+            setMockJails(mock, []string{"sshd", "apache"})
+        }).
+        WithJSONFormat().
+        ExpectSuccess().
+        ExpectExactOutput("[\n  \"apache\",\n  \"sshd\"\n]\n").
+        Run()
 }
 ```
 
@@ -461,37 +454,16 @@ func TestCommandOutput_JSONFormat(t *testing.T) {
 ### End-to-End Command Testing
 
 ```go
+// In package cmd: one MockClient shared across the steps keeps ban state
 func TestIntegration_BanUnbanFlow(t *testing.T) {
-    // Modern setup with automatic cleanup
-    _, cleanup := fail2ban.SetupMockEnvironment(t)
-    defer cleanup()
+    mock := fail2ban.NewMockClient()
 
-    // Get the configured mock client
-    mock := fail2ban.GetClient().(*fail2ban.MockClient)
-
-    // Test complete workflow
-    steps := []struct {
-        command     []string
-        expectError bool
-        validate    func(string) error
-    }{
-        {[]string{"ban", "192.168.1.100", "sshd"}, false, validateBanOutput},
-        {[]string{"test", "192.168.1.100"}, false, validateTestOutput},
-        {[]string{"unban", "192.168.1.100", "sshd"}, false, validateUnbanOutput},
-    }
-
-    for _, step := range steps {
-        output, err := executeCommand(mock, step.command...)
-        if (err != nil) != step.expectError {
-            t.Errorf("Command %v: error = %v, expectError = %v",
-                step.command, err, step.expectError)
-        }
-        if step.validate != nil {
-            if err := step.validate(output); err != nil {
-                t.Errorf("Validation failed for %v: %v", step.command, err)
-            }
-        }
-    }
+    NewCommandTest(t, "ban").WithMockClient(mock).
+        WithArgs("192.168.1.100", "sshd").ExpectSuccess().Run()
+    NewCommandTest(t, "test").WithMockClient(mock).
+        WithArgs("192.168.1.100").ExpectSuccess().ExpectOutput("sshd").Run()
+    NewCommandTest(t, "unban").WithMockClient(mock).
+        WithArgs("192.168.1.100", "sshd").ExpectSuccess().Run()
 }
 ```
 
@@ -500,18 +472,14 @@ func TestIntegration_BanUnbanFlow(t *testing.T) {
 ### Benchmarking Critical Paths
 
 ```go
-func BenchmarkBanCommand(b *testing.B) {
-    // Modern setup for benchmarks
-    _, cleanup := fail2ban.SetupMockEnvironment(b)
+func BenchmarkBanIP(b *testing.B) {
+    client, cleanup := fail2ban.SetupMockEnvironment(b)
     defer cleanup()
+    ctx := context.Background()
 
-    mock := fail2ban.GetClient().(*fail2ban.MockClient)
-
-    b.ResetTimer()
-    for i := 0; i < b.N; i++ {
-        _, err := executeCommand(mock, "ban", "192.168.1.100", "sshd")
-        if err != nil {
-            b.Fatalf("Ban command failed: %v", err)
+    for b.Loop() {
+        if _, err := client.BanIPWithContext(ctx, "192.168.1.100", "sshd"); err != nil {
+            b.Fatalf("ban failed: %v", err)
         }
     }
 }
@@ -574,15 +542,12 @@ go tool cover -func=coverage.out | grep total
 The framework provides standardized helpers that reduce duplication:
 
 ```go
-// Standardized error checking (replaces 6 lines with 1)
-fail2ban.AssertError(t, err, expectError, testName)
+// Standardized error checking in cmd tests (cmd/test_helpers_test.go)
+AssertError(t, err, expectError, testName)
 
-// Command output validation
-fail2ban.AssertCommandSuccess(t, err, output, expectedOutput, testName)
-fail2ban.AssertCommandError(t, err, output, expectedError, testName)
-
-// Environment setup with automatic cleanup
-_, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, hasPrivileges)
+// Environment setup with automatic cleanup: installs MockRunner and
+// MockSudoChecker globally and returns the matching MockClient
+client, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, hasPrivileges)
 defer cleanup()
 ```
 
@@ -630,24 +595,18 @@ defer cleanup()
 ```go
 // SetupMockEnvironmentWithSudo configures standard test environment with privileges
 func TestExample(t *testing.T) {
-    _, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, true)
+    client, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, true)
     defer cleanup()
 
-    // Test implementation here
+    jails, err := client.ListJailsWithContext(context.Background())
+    require.NoError(t, err)
+    assert.NotEmpty(t, jails)
 }
 
-// executeCommand runs a command with mock client
-func executeCommand(client fail2ban.Client, args ...string) (string, error) {
-    config := &cmd.Config{Format: "plain"}
-    root := cmd.NewRootCmd(client, config)
-
-    var output bytes.Buffer
-    root.SetOutput(&output)
-    root.SetArgs(args)
-
-    err := root.Execute()
-    return output.String(), err
-}
+// Commands are executed through the fluent builder, which wires the mock
+// client into the real cobra command tree and captures its output:
+//
+//   NewCommandTest(t, "status").WithArgs("sshd").ExpectSuccess().Run()
 ```
 
 ## Running Tests
@@ -671,7 +630,8 @@ go test -race ./...
 ### Enhanced Security-Focused Testing
 
 ```bash
-# Run tests with sudo checking enabled
+# Mark a test environment: skips the sudo probe, does NOT mock sudo
+# (tests still inject MockSudoChecker and MockRunner)
 F2B_TEST_SUDO=true go test ./...
 
 # Run comprehensive security tests including path traversal

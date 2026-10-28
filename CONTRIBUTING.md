@@ -9,6 +9,8 @@ ______________________________________________________________________
 
 ### 1. Open an Issue
 
+- **Security vulnerabilities:** do **not** open a public issue; follow the private
+  reporting process in [docs/security.md](docs/security.md#security-issue-reporting).
 - **Bugs:** Please include steps to reproduce, expected vs. actual behavior, and your environment.
 - **Feature Requests:** Describe the problem you want to solve and your proposed solution.
 - **Questions:** If you’re unsure about something, open an issue for discussion.
@@ -30,6 +32,8 @@ ______________________________________________________________________
 - Handle sudo privileges appropriately - use mocks for testing.
 - Add or update tests for your changes, including privilege scenarios.
 - Update documentation and usage examples as needed.
+- New commands follow the pattern in [docs/architecture.md](docs/architecture.md)
+  ("Adding New Commands"): a `<Feature>Cmd` constructor registered in `cmd/root.go`.
 
 ### 4. Lint and Test
 
@@ -52,6 +56,9 @@ mise run test-race   # go test -race ./...
 
 - Go to the main repo and open a PR from your branch.
 - Describe your changes, reference related issues, and explain any design decisions.
+- CI runs the `PR Lint` job (golangci-lint, race tests with coverage, PR checks)
+  and the `prek` job (all hooks); both must pass.
+- The code owner (`.github/CODEOWNERS`) reviews every PR.
 - Be ready to discuss and revise your code based on feedback.
 
 ______________________________________________________________________
@@ -60,7 +67,8 @@ ______________________________________________________________________
 
 - Follow idiomatic Go style as described in the [Effective Go][effective_go] guidelines.
 - Prefer tabs for Go code (see `.editorconfig`).
-- Employ structured logging (`logrus`) together with the project's output helpers.
+- Employ structured logging (`log/slog` via `cmd.Logger` / `ContextualLogger`) together
+  with the project's output helpers.
 - Validate all user input, especially IP addresses and jail names.
 - Prefer explicit error handling and error wrapping (`fmt.Errorf("...: %w", err)`).
 - Add GoDoc comments to all exported functions, types, and interfaces.

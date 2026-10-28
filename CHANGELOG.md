@@ -27,7 +27,7 @@ ______________________________________________________________________
 - Command aliases for common commands (`list-jails`, `ban`, `unban`, `status`).
 - Log level configuration via `--log-level` flag and `F2B_LOG_LEVEL` env var.
 - Log file output support via `--log-file` flag and `F2B_LOG_FILE` env var.
-- Consistent output and error handling using logrus and helpers.
+- Consistent output and error handling using log/slog and helpers.
 - Pagination/tailing for logs with `--limit` flag.
 - JSON output for all commands via `--format=json`.
 - Extensive input validation for all user-supplied data.
@@ -37,6 +37,8 @@ ______________________________________________________________________
 - Comprehensive documentation updates across all markdown files.
 - Granular timeout env vars `F2B_COMMAND_TIMEOUT`, `F2B_FILE_TIMEOUT`, and
   `F2B_PARALLEL_TIMEOUT`, replacing the single `F2B_TIMEOUT`.
+- `F2B_TRUSTED_BIN_DIR` to trust one extra directory for the sudo-executed
+  fail2ban binaries (non-FHS installs).
 - Releases attach `THIRD_PARTY_LICENSES.txt`, the license texts of every
   bundled third-party module.
 - Release checksums are signed with cosign keyless signing (a `.bundle` next to
@@ -65,6 +67,7 @@ ______________________________________________________________________
 - Jail names are now treated as case-sensitive and passed through verbatim,
   matching fail2ban semantics.
 - Bumped Go to 1.26.
+- Logging migrated from logrus to the standard library's `log/slog`.
 - Toolchain go1.27.3 (language floor stays `go 1.26`); golangci-lint v2.15.0,
   goreleaser v2.19.0, gosec v2.30.0, prek v0.5.7, and current action pins.
 - **Security**: log directories are restricted to `/var/log` and filter
@@ -75,6 +78,8 @@ ______________________________________________________________________
   ivuorinen/homebrew-tap generates it from the release's binaries.
 - Releases publish raw binaries (`f2b_<os>-<arch>`) instead of archives, for
   Linux amd64/arm64/armv6/armv7, macOS amd64/arm64 and Windows amd64.
+- **BREAKING**: the `metrics` command removal (refactor in cb292a3) was not
+  marked breaking in its commit.
 - **BREAKING**: `banned --format json` uses lowercase keys (`jail`, `ip`,
   `banned_at`, `remaining`) like the `ban`/`unban` JSON output.
 - **BREAKING (for external importers)**: every `fail2ban.Client` method takes a
