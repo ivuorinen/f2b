@@ -334,7 +334,7 @@ func AssertErrorContains(t TestingInterface, err error, expectedSubstring string
 AssertErrorContains checks that error contains expected substring
 
 <a name="CheckSudoRequirements"></a>
-## func [CheckSudoRequirements](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L157>)
+## func [CheckSudoRequirements](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L194>)
 
 ```go
 func CheckSudoRequirements() error
@@ -621,13 +621,15 @@ func ParseJailList(output string) ([]string, error)
 ParseJailList parses the jail list output from fail2ban\-client status
 
 <a name="RequiresSudo"></a>
-## func [RequiresSudo](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L117>)
+## func [RequiresSudo](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L152>)
 
 ```go
 func RequiresSudo(command string, args ...string) bool
 ```
 
-RequiresSudo returns true if the given command typically requires sudo privileges
+RequiresSudo returns true if the given command typically requires sudo privileges.
+
+command may be a bare name or an absolute path: production passes the exec.LookPath result \(/usr/bin/fail2ban\-client\) while tests pass the bare name, and matching only the bare name made every non\-root fail2ban\-client call skip sudo and fail on the root\-only socket. The absolute path was already pinned to a trusted directory by validateCommandExecution, so only its base name decides here.
 
 <a name="RunnerCombinedOutput"></a>
 ## func [RunnerCombinedOutput](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L123>)
@@ -693,7 +695,7 @@ func SetRunner(r Runner)
 SetRunner injects a custom runner \(for tests or alternate backends\).
 
 <a name="SetSudoChecker"></a>
-## func [SetSudoChecker](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L34>)
+## func [SetSudoChecker](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L39>)
 
 ```go
 func SetSudoChecker(checker SudoChecker)
@@ -2136,7 +2138,7 @@ func (c *RealClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (i
 UnbanIPWithContext unbans an IP address from the specified jail with context support.
 
 <a name="RealSudoChecker"></a>
-## type [RealSudoChecker](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L21-L26>)
+## type [RealSudoChecker](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L22-L31>)
 
 RealSudoChecker implements SudoChecker using actual system calls
 
@@ -2147,7 +2149,7 @@ type RealSudoChecker struct {
 ```
 
 <a name="RealSudoChecker.CanUseSudo"></a>
-### func \(\*RealSudoChecker\) [CanUseSudo](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L92>)
+### func \(\*RealSudoChecker\) [CanUseSudo](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L120>)
 
 ```go
 func (r *RealSudoChecker) CanUseSudo() bool
@@ -2156,7 +2158,7 @@ func (r *RealSudoChecker) CanUseSudo() bool
 CanUseSudo returns true if the current user can use sudo
 
 <a name="RealSudoChecker.HasSudoPrivileges"></a>
-### func \(\*RealSudoChecker\) [HasSudoPrivileges](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L110>)
+### func \(\*RealSudoChecker\) [HasSudoPrivileges](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L138>)
 
 ```go
 func (r *RealSudoChecker) HasSudoPrivileges() bool
@@ -2165,16 +2167,16 @@ func (r *RealSudoChecker) HasSudoPrivileges() bool
 HasSudoPrivileges returns true if user has any form of sudo access
 
 <a name="RealSudoChecker.InSudoGroup"></a>
-### func \(\*RealSudoChecker\) [InSudoGroup](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L53>)
+### func \(\*RealSudoChecker\) [InSudoGroup](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L60>)
 
 ```go
 func (r *RealSudoChecker) InSudoGroup() bool
 ```
 
-InSudoGroup returns true if the current user is in the sudo group
+InSudoGroup returns true if the current user belongs to a group that conventionally grants sudo \(sudo, wheel or admin\). Group names, not GIDs, are matched because GIDs vary between distributions.
 
 <a name="RealSudoChecker.IsRoot"></a>
-### func \(\*RealSudoChecker\) [IsRoot](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L48>)
+### func \(\*RealSudoChecker\) [IsRoot](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L53>)
 
 ```go
 func (r *RealSudoChecker) IsRoot() bool
@@ -2401,7 +2403,7 @@ type SudoChecker interface {
 ```
 
 <a name="GetSudoChecker"></a>
-### func [GetSudoChecker](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L41>)
+### func [GetSudoChecker](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L46>)
 
 ```go
 func GetSudoChecker() SudoChecker

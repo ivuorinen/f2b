@@ -99,5 +99,9 @@ ______________________________________________________________________
 - **Test safety**: Eliminated potential for real sudo execution during testing
 - Ban/unban status parsing now follows fail2ban >= 0.11 semantics, correctly
   distinguishing "banned/unbanned" from "already banned/not banned".
+- Non-root users with sudo rights now run `fail2ban-client` through sudo; the
+  privilege check compared the resolved absolute path against a bare command
+  name and never matched.
+- A sudoers grant scoped to `fail2ban-client` is accepted (`sudo -n -l fail2ban-client`), not only unrestricted sudo.
 
 ______________________________________________________________________

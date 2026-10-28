@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -23,6 +24,10 @@ type RealSudoChecker struct {
 	// here so the probe branch is exercisable without ever executing real
 	// sudo; nil means the real `sudo -n true` probe.
 	runSudoProbe func(ctx context.Context) error
+	// groupNames returns the current user's group names. Tests inject it so
+	// the sudo/wheel/admin match is checkable without the host group
+	// database; nil means currentGroupNames.
+	groupNames func() ([]string, error)
 }
 
 var (
@@ -49,43 +54,66 @@ func (r *RealSudoChecker) IsRoot() bool {
 	return os.Geteuid() == 0
 }
 
-// InSudoGroup returns true if the current user is in the sudo group
+// InSudoGroup returns true if the current user belongs to a group that
+// conventionally grants sudo (sudo, wheel or admin). Group names, not GIDs,
+// are matched because GIDs vary between distributions.
 func (r *RealSudoChecker) InSudoGroup() bool {
-	currentUser, err := user.Current()
+	lookup := r.groupNames
+	if lookup == nil {
+		lookup = currentGroupNames
+	}
+	names, err := lookup()
 	if err != nil {
 		return false
 	}
-
-	// Get user groups
-	groups, err := currentUser.GroupIds()
-	if err != nil {
-		return false
-	}
-
-	// Check for sudo group (GID varies by system, common ones are 27 and 1001)
-	// Also check by group name
-	for _, gid := range groups {
-		group, err := user.LookupGroupId(gid)
-		if err != nil {
-			continue
-		}
-
-		// Check common sudo group names (portable across systems)
-		if group.Name == constants.SudoCommand || group.Name == "wheel" || group.Name == "admin" {
+	for _, name := range names {
+		if name == constants.SudoCommand || name == "wheel" || name == "admin" {
 			return true
 		}
-
-		// Removed hard-coded GID checks for better portability
-		// Group name lookup above handles all standard sudo groups
 	}
-
 	return false
 }
 
-// defaultSudoProbe tries to run 'sudo -n true' (non-interactive) to test sudo access.
+// currentGroupNames resolves the current user's group IDs to names, skipping
+// IDs that no longer resolve to a group.
+func currentGroupNames() ([]string, error) {
+	currentUser, err := user.Current()
+	if err != nil {
+		return nil, err
+	}
+	gids, err := currentUser.GroupIds()
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(gids))
+	for _, gid := range gids {
+		if group, err := user.LookupGroupId(gid); err == nil {
+			names = append(names, group.Name)
+		}
+	}
+	return names, nil
+}
+
+// defaultSudoProbe runs the non-interactive sudo probes against the real sudo binary.
 func defaultSudoProbe(ctx context.Context) error {
-	// #nosec G204 -- constants.SudoCommand is a hardcoded constant "sudo", not user input
-	return exec.CommandContext(ctx, constants.SudoCommand, "-n", "true").Run()
+	return probeSudo(ctx, func(ctx context.Context, args ...string) error {
+		// #nosec G204 -- constants.SudoCommand is a hardcoded constant "sudo"; args are fixed literals
+		return exec.CommandContext(ctx, constants.SudoCommand, args...).Run()
+	})
+}
+
+// probeSudo reports whether sudo works non-interactively for fail2ban: either
+// for any command (`sudo -n true`) or for fail2ban-client alone (`sudo -n -l
+// fail2ban-client`, which succeeds only when that command is permitted without
+// a password prompt). A least-privilege sudoers grant scoped to
+// fail2ban-client fails the first probe but still covers every operation f2b
+// needs, so the second probe accepts it. run executes sudo with the given
+// arguments.
+func probeSudo(ctx context.Context, run func(ctx context.Context, args ...string) error) error {
+	if err := run(ctx, "-n", "true"); err == nil {
+		return nil
+	}
+	return run(ctx, "-n", "-l", constants.Fail2BanClientCommand)
 }
 
 // CanUseSudo returns true if the current user can use sudo
@@ -113,8 +141,17 @@ func (r *RealSudoChecker) HasSudoPrivileges() bool {
 
 // Mock implementations
 
-// RequiresSudo returns true if the given command typically requires sudo privileges
+// RequiresSudo returns true if the given command typically requires sudo privileges.
+//
+// command may be a bare name or an absolute path: production passes the
+// exec.LookPath result (/usr/bin/fail2ban-client) while tests pass the bare
+// name, and matching only the bare name made every non-root fail2ban-client
+// call skip sudo and fail on the root-only socket. The absolute path was
+// already pinned to a trusted directory by validateCommandExecution, so only
+// its base name decides here.
 func RequiresSudo(command string, args ...string) bool {
+	command = filepath.Base(command)
+
 	// Every fail2ban-client subcommand talks to the server socket
 	// (/var/run/fail2ban/fail2ban.sock), which is root-only, so all of them
 	// need sudo for a non-root user. The sole exception is `-V`, which only
