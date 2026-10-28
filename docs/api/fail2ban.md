@@ -16,8 +16,6 @@ Package fail2ban provides logging and environment detection utilities. This modu
 
 Package fail2ban test\-support: MockRunner is a mock implementation of the Runner interface used only by unit tests. It was extracted verbatim from fail2ban.go to keep test doubles out of the production Runner machinery.
 
-MockSudoChecker is a test double for the SudoChecker interface. It was extracted from sudo.go to keep test\-only code out of the production sudo implementation; it lives in package fail2ban so it can reach package internals when needed.
-
 Package fail2ban provides security utility functions for input validation and threat detection. This module handles path traversal detection, dangerous command pattern identification, and other security\-related checks to prevent injection attacks and unauthorized access.
 
 Package fail2ban provides a log/slog\-backed implementation of LoggerInterface. It replaces the former logrus adapter so f2b depends only on the standard library for logging while keeping the fluent WithField/WithError/Warnf API the rest of the codebase already uses.
@@ -48,6 +46,7 @@ Package fail2ban defines common data structures and types. This package provides
 - [func GetLogLinesUltraOptimized\(jailFilter, ipFilter string, maxLines int\) \(\[\]string, error\)](<#GetLogLinesUltraOptimized>)
 - [func GetLogLinesWithLimit\(ctx context.Context, jailFilter string, ipFilter string, maxLines int\) \(\[\]string, error\)](<#GetLogLinesWithLimit>)
 - [func IsCI\(\) bool](<#IsCI>)
+- [func IsGoTestBinary\(\) bool](<#IsGoTestBinary>)
 - [func IsGzipFile\(path string\) \(bool, error\)](<#IsGzipFile>)
 - [func IsTestEnvironment\(\) bool](<#IsTestEnvironment>)
 - [func NewCommandNotAllowedError\(command string\) error](<#NewCommandNotAllowedError>)
@@ -485,7 +484,7 @@ jailFilter: jail name to filter by \(empty or "all" for all jails\) ipFilter: IP
 Returns a slice of matching log lines, or an error. This function uses streaming to limit memory usage. Context parameter supports timeout and cancellation of file I/O operations.
 
 <a name="GetLogLinesUltraOptimized"></a>
-## func [GetLogLinesUltraOptimized](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L573>)
+## func [GetLogLinesUltraOptimized](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L584>)
 
 ```go
 func GetLogLinesUltraOptimized(jailFilter, ipFilter string, maxLines int) ([]string, error)
@@ -510,6 +509,17 @@ func IsCI() bool
 ```
 
 IsCI detects if we're running in a CI environment
+
+<a name="IsGoTestBinary"></a>
+## func [IsGoTestBinary](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_env.go#L119>)
+
+```go
+func IsGoTestBinary() bool
+```
+
+IsGoTestBinary reports whether this process is a \`go test\` binary, using only the \-test.v flag the testing package registers.
+
+Deliberately narrower than IsTestEnvironment, which also honors the GO\_TEST/F2B\_TEST/F2B\_TEST\_SUDO opt\-in. Those variables are settable in any shell, so they must never gate anything that weakens command resolution: leaving fail2ban\-client as a bare name defers the lookup to exec's own PATH search, which skips the trusted\-directory pinning resolveCommandName applies to absolute paths — the pinning that stops a hostile PATH from steering a sudo\-executed binary. Skipping sudo probing tolerates the env\-var opt\-in; path resolution does not.
 
 <a name="IsGzipFile"></a>
 ## func [IsGzipFile](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/gzip_detection.go#L202>)
@@ -721,7 +731,7 @@ func StandardMockSetup(mockRunner *MockRunner)
 StandardMockSetup configures comprehensive standard responses for MockRunner This eliminates the need for repetitive SetResponse calls in individual tests
 
 <a name="ValidateArguments"></a>
-## func [ValidateArguments](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/validation.go#L210>)
+## func [ValidateArguments](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/validation.go#L217>)
 
 ```go
 func ValidateArguments(args []string) error
@@ -730,7 +740,7 @@ func ValidateArguments(args []string) error
 ValidateArguments validates command arguments for security
 
 <a name="ValidateArgumentsWithContext"></a>
-## func [ValidateArgumentsWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/validation.go#L215>)
+## func [ValidateArgumentsWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/validation.go#L222>)
 
 ```go
 func ValidateArgumentsWithContext(ctx context.Context, args []string) error
@@ -775,7 +785,7 @@ func ValidateFilter(filter string) error
 ValidateFilter validates a filter name and returns an error if invalid
 
 <a name="ValidateFilterName"></a>
-## func [ValidateFilterName](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/validation.go#L330>)
+## func [ValidateFilterName](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/validation.go#L337>)
 
 ```go
 func ValidateFilterName(filter string) error
@@ -1284,7 +1294,7 @@ type LogCollectionConfig struct {
 ```
 
 <a name="LogReadConfig"></a>
-## type [LogReadConfig](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L255-L266>)
+## type [LogReadConfig](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L266-L277>)
 
 LogReadConfig holds configuration for streaming log reading
 
@@ -1777,9 +1787,9 @@ func (m *MockRunner) SetupStandardResponses()
 SetupStandardResponses configures comprehensive standard responses for testing. This eliminates the need for repetitive SetResponse calls in individual tests.
 
 <a name="MockSudoChecker"></a>
-## type [MockSudoChecker](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_sudo.go#L8-L14>)
+## type [MockSudoChecker](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_sudo.go#L7-L13>)
 
-MockSudoChecker implements SudoChecker for testing
+MockSudoChecker is a test double for the SudoChecker interface. It was extracted from sudo.go to keep test\-only code out of the production sudo implementation; it lives in package fail2ban so it can reach package internals when needed.
 
 ```go
 type MockSudoChecker struct {
@@ -1801,7 +1811,7 @@ func MustMockSudoChecker(tb testing.TB) *MockSudoChecker
 MustMockSudoChecker returns the current sudo checker as a \*MockSudoChecker, failing the test when it is anything else.
 
 <a name="MockSudoChecker.CanUseSudo"></a>
-### func \(\*MockSudoChecker\) [CanUseSudo](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_sudo.go#L27>)
+### func \(\*MockSudoChecker\) [CanUseSudo](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_sudo.go#L26>)
 
 ```go
 func (m *MockSudoChecker) CanUseSudo() bool
@@ -1810,7 +1820,7 @@ func (m *MockSudoChecker) CanUseSudo() bool
 CanUseSudo returns the mocked sudo capability status
 
 <a name="MockSudoChecker.HasSudoPrivileges"></a>
-### func \(\*MockSudoChecker\) [HasSudoPrivileges](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_sudo.go#L32>)
+### func \(\*MockSudoChecker\) [HasSudoPrivileges](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_sudo.go#L31>)
 
 ```go
 func (m *MockSudoChecker) HasSudoPrivileges() bool
@@ -1819,7 +1829,7 @@ func (m *MockSudoChecker) HasSudoPrivileges() bool
 HasSudoPrivileges returns the mocked sudo privileges status
 
 <a name="MockSudoChecker.InSudoGroup"></a>
-### func \(\*MockSudoChecker\) [InSudoGroup](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_sudo.go#L22>)
+### func \(\*MockSudoChecker\) [InSudoGroup](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_sudo.go#L21>)
 
 ```go
 func (m *MockSudoChecker) InSudoGroup() bool
@@ -1828,7 +1838,7 @@ func (m *MockSudoChecker) InSudoGroup() bool
 InSudoGroup returns the mocked sudo group status
 
 <a name="MockSudoChecker.IsRoot"></a>
-### func \(\*MockSudoChecker\) [IsRoot](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_sudo.go#L17>)
+### func \(\*MockSudoChecker\) [IsRoot](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_sudo.go#L16>)
 
 ```go
 func (m *MockSudoChecker) IsRoot() bool
@@ -1882,7 +1892,7 @@ func (r *OSRunner) CombinedOutputWithSudoContext(ctx context.Context, name strin
 CombinedOutputWithSudoContext executes a command with sudo if needed, with context support.
 
 <a name="OptimizedLogProcessor"></a>
-## type [OptimizedLogProcessor](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L535>)
+## type [OptimizedLogProcessor](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L546>)
 
 OptimizedLogProcessor is a thin wrapper maintained for backwards compatibility with existing benchmarks and tests. Internally it delegates to the shared log collection helpers so we have a single codepath to maintain.
 
@@ -1891,7 +1901,7 @@ type OptimizedLogProcessor struct{}
 ```
 
 <a name="NewOptimizedLogProcessor"></a>
-### func [NewOptimizedLogProcessor](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L538>)
+### func [NewOptimizedLogProcessor](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L549>)
 
 ```go
 func NewOptimizedLogProcessor() *OptimizedLogProcessor
@@ -1900,7 +1910,7 @@ func NewOptimizedLogProcessor() *OptimizedLogProcessor
 NewOptimizedLogProcessor creates a new optimized processor wrapper.
 
 <a name="OptimizedLogProcessor.GetLogLinesOptimized"></a>
-### func \(\*OptimizedLogProcessor\) [GetLogLinesOptimized](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L544>)
+### func \(\*OptimizedLogProcessor\) [GetLogLinesOptimized](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L555>)
 
 ```go
 func (olp *OptimizedLogProcessor) GetLogLinesOptimized(jailFilter, ipFilter string, maxLines int) ([]string, error)
@@ -2099,7 +2109,7 @@ func (c *RealClient) ListFiltersWithContext(ctx context.Context) ([]string, erro
 ListFiltersWithContext returns a list of available fail2ban filter files with context support.
 
 <a name="RealClient.ListJails"></a>
-### func \(\*RealClient\) [ListJails](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/client.go#L114>)
+### func \(\*RealClient\) [ListJails](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/client.go#L123>)
 
 ```go
 func (c *RealClient) ListJails() ([]string, error)

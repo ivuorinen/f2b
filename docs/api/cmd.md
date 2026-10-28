@@ -65,7 +65,7 @@ Package cmd implements all CLI commands for the f2b tool, providing secure Fail2
 \}, config \*Config\) \*cobra.Command](<#TestIPCmd>)
 - [func TrimmedOutput\(output \[\]byte\) string](<#TrimmedOutput>)
 - [func UnbanCmd\(client fail2ban.Client, config \*Config\) \*cobra.Command](<#UnbanCmd>)
-- [func ValidateIPArgumentWithContext\(ctx context.Context, args \[\]string\) \(string, error\)](<#ValidateIPArgumentWithContext>)
+- [func ValidateIPArgumentWithContext\(\_ context.Context, args \[\]string\) \(string, error\)](<#ValidateIPArgumentWithContext>)
 - [func ValidateServiceAction\(action string\) error](<#ValidateServiceAction>)
 - [func VersionCmd\(config \*Config\) \*cobra.Command](<#VersionCmd>)
 - [func WithCommand\(ctx context.Context, command string\) context.Context](<#WithCommand>)
@@ -354,7 +354,7 @@ func NewCommand(use, short string, aliases []string, runE func(*cobra.Command, [
 NewCommand creates a new cobra command with standard setup. SilenceErrors/SilenceUsage are set so a runtime failure \(e.g. fail2ban down\) is reported once by our own error handler instead of being reprinted by cobra and followed by a full usage dump as if it were a syntax error.
 
 <a name="NewIPCommand"></a>
-## func [NewIPCommand](<https://github.com/ivuorinen/f2b/blob/main/cmd/ip_command_pattern.go#L151>)
+## func [NewIPCommand](<https://github.com/ivuorinen/f2b/blob/main/cmd/ip_command_pattern.go#L155>)
 
 ```go
 func NewIPCommand(client fail2ban.Client, config *Config, cmdConfig IPCommandConfig) *cobra.Command
@@ -464,7 +464,7 @@ func SignalExitCode() int
 SignalExitCode returns the conventional exit code for a signal\-interrupted run \(130 for SIGINT, 143 for SIGTERM\), or 0 when no signal was received.
 
 <a name="StatusCmd"></a>
-## func [StatusCmd](<https://github.com/ivuorinen/f2b/blob/main/cmd/status.go#L14>)
+## func [StatusCmd](<https://github.com/ivuorinen/f2b/blob/main/cmd/status.go#L15>)
 
 ```go
 func StatusCmd(client fail2ban.Client, config *Config) *cobra.Command
@@ -514,7 +514,7 @@ UnbanCmd returns the unban command with injected client and config
 ## func [ValidateIPArgumentWithContext](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L70>)
 
 ```go
-func ValidateIPArgumentWithContext(ctx context.Context, args []string) (string, error)
+func ValidateIPArgumentWithContext(_ context.Context, args []string) (string, error)
 ```
 
 ValidateIPArgumentWithContext validates that an IP address is provided in args with context support
