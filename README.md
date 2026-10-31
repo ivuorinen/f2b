@@ -19,10 +19,9 @@ ______________________________________________________________________
 
 ### Installation
 
-> No tagged release has been published yet, so pre-built binaries, Docker
-> images, a Homebrew tap, and pinned `@vX.Y.Z` installs are not available.
-> Use `go install ...@latest` or build from source below. The other install
-> methods will be documented once a `v1.x` release is cut.
+> No release has been published yet, so pre-built binaries and a Homebrew tap
+> are not available. Use `go install ...@latest` or build from source below.
+> The other install methods will be documented once the first release is cut.
 
 #### Using Go
 
@@ -36,7 +35,7 @@ go install github.com/ivuorinen/f2b@latest
 # Clone and build
 git clone https://github.com/ivuorinen/f2b.git
 cd f2b
-make build
+mise run build
 
 # Or with custom version
 go build -ldflags "-X github.com/ivuorinen/f2b/cmd.Version=1.2.3" -o f2b .
@@ -159,6 +158,7 @@ F2B_LOG_DIR=/var/log                    # Fail2Ban log directory
 F2B_FILTER_DIR=/etc/fail2ban/filter.d   # Filter directory
 F2B_LOG_LEVEL=info                      # Log level (debug,info,warn,error)
 F2B_LOG_FILE=/path/to/f2b.log          # f2b's own log file
+F2B_TRUSTED_BIN_DIR=/opt/f2b/bin        # Optional: one extra trusted dir for the fail2ban binaries (non-FHS installs)
 
 # Performance & Timeout Configuration
 F2B_COMMAND_TIMEOUT=30s                 # Individual command timeout
@@ -167,7 +167,7 @@ F2B_PARALLEL_TIMEOUT=60s                # Parallel operation timeout
 
 # Testing & Development (presence-checked: set to any non-empty value to
 # enable; leave unset to disable — "false" still counts as set)
-F2B_TEST_SUDO=1                         # Mark a test environment; CanUseSudo() returns false
+F2B_TEST_SUDO=1                         # Mark a test environment; skips the sudo probe (does NOT mock sudo)
 F2B_TEST=1                              # Mark a test environment; disables real sudo probing
 GO_TEST=1                               # Same as F2B_TEST (checked by IsTestEnvironment())
 F2B_VERBOSE_TESTS=1                     # Force verbose logging in CI/tests
@@ -261,17 +261,36 @@ f2b logs-watch all 192.168.1.100       # Monitor all jails for specific IP
 f2b service status                     # Show detailed Fail2Ban service status
 f2b service start                      # Start Fail2Ban service with auto-sudo
 f2b service stop                       # Stop Fail2Ban service gracefully
-f2b service restart                    # Restart service with context-aware timeout
+f2b service restart                    # Restart service (Ctrl-C/SIGTERM cancels the wait)
 
 # Filter Testing & Validation
-f2b test-filter <jail>                 # Test and validate jail filter configuration
-f2b test-filter sshd                   # Validate sshd filter with comprehensive checks
+f2b test-filter                        # List available filters
+f2b test-filter <filter>               # Run fail2ban-regex for a filter against its logpath
+f2b test-filter sshd                   # Test the sshd filter
 
 # Utility & Completion Commands
-f2b version                            # Show version, build info, and system details
+f2b version                            # Show the f2b version
 f2b completion <shell>                 # Generate completion for bash/zsh/fish/powershell
 f2b help [command]                     # Context-sensitive help with examples
 ```
+
+### Exit Codes
+
+| Code  | Meaning                                                 |
+| ----- | ------------------------------------------------------- |
+| `0`   | Success                                                 |
+| `1`   | Error (validation, privileges, fail2ban-client failure) |
+| `130` | Interrupted by SIGINT (Ctrl-C)                          |
+| `143` | Terminated by SIGTERM                                   |
+
+### JSON Output (`--format json`)
+
+| Command                     | JSON shape                                                  |
+| --------------------------- | ----------------------------------------------------------- |
+| `list-jails`, `logs`        | array of strings                                            |
+| `banned`                    | array of `{"jail", "ip", "banned_at", "remaining"}` objects |
+| `ban`, `unban`              | array of `{"ip", "jail", "status"}` objects                 |
+| `status`, `test`, `version` | string (the command's text output)                          |
 
 ### Command Aliases
 
@@ -292,7 +311,7 @@ f2b is built as an **enterprise-grade** Go application following modern architec
 
 - **Security-First Architecture**: Automatic privilege management with extensive path traversal protections
 - **Context-Aware Operations**: Comprehensive timeout handling and graceful cancellation throughout
-- **Performance-Optimized**: Object pooling, parallel processing, and optimized parsing algorithms
+- **Performance-Conscious**: Bounded parallel processing across jails and newest-first log reads
 - **Interface-Based Design**: Full dependency injection for testing and extensibility
 - **Thread-Safe Operations**: Proper synchronization and concurrent access protection
 
@@ -307,10 +326,9 @@ f2b is built as an **enterprise-grade** Go application following modern architec
 
 - **Language**: Go 1.26+ with modern idioms and patterns
 - **CLI Framework**: Cobra with comprehensive command structure and shell completion
-- **Logging**: Structured logging with Logrus and contextual information
+- **Logging**: Structured logging with `log/slog` and contextual information
 - **Testing**: Advanced mock patterns with thread-safe implementations
-- **Deployment**: Multi-architecture Docker support (amd64, arm64, armv7) with manifests
-- **Performance**: Object pooling and parallel processing
+- **Performance**: Bounded parallel processing across jails
 
 ### 🎪 **Advanced Features**
 
@@ -343,7 +361,8 @@ F2B_TEST_SUDO=true go test ./fail2ban -run TestSudo
 go test ./cmd -run TestCommand
 
 # Run parallel processing tests
-go test ./fail2ban -run TestParallel
+go test ./cmd -run TestParallel
+go test ./fail2ban -run TestProcessJailsParallel
 ```
 
 For comprehensive testing guidelines, mock patterns, and security testing practices, see
@@ -351,18 +370,20 @@ For comprehensive testing guidelines, mock patterns, and security testing practi
 
 ### Code Quality & Linting
 
-This project uses [prek](https://github.com/j178/prek) for unified linting and formatting.
-Install the development dependencies and hooks:
+This project uses [prek](https://github.com/j178/prek) for unified linting and formatting, and
+[mise](https://mise.jdx.dev/) for the pinned tools and tasks (`mise tasks` lists them).
+Install the tools and hooks:
 
 ```bash
-make dev-setup
+mise install
+mise run setup
 ```
 
 Run all linters:
 
 ```bash
-# Preferred method (unified tooling)
-make lint
+# Every prek hook
+mise run hooks
 
 # Run specific hooks
 prek run yamlfmt --all-files
@@ -393,47 +414,57 @@ ______________________________________________________________________
 
 ### Creating a New Release
 
-Releases are automated using [GoReleaser](https://goreleaser.com/). To create a new release:
+Releases use [CalVer](https://calver.org/) tags (`YYYY.MM.MICRO`, e.g. `2026.10.0`) from
+[gh-calver](https://github.com/ivuorinen/gh-calver) and are built by GitHub Actions with
+[GoReleaser](https://goreleaser.com/). CalVer tags are not Go module versions, so
+`go install ...@latest` builds the latest `main` commit rather than the latest release.
 
-1. **Tag the release:**
+1. **Tag the release** from a clean `main` branch:
 
 ```bash
-git tag -a v1.2.3 -m "Release v1.2.3"
-git push origin v1.2.3
+mise run release   # tags the next CalVer version and pushes it
 ```
 
 2. **GitHub Actions will automatically:**
 
-- Build binaries for multiple platforms (Linux, macOS, Windows, BSD)
+- Build binaries for Linux, macOS and Windows
 - Create a GitHub release with changelog
+- Sign the checksums file with cosign keyless signing
 - Upload release artifacts
-- Build and push Docker images
-- Update Homebrew tap (if configured)
-- Generate .deb, .rpm, and .apk packages
 
-### Manual Release (Development)
+The Homebrew formula is not published from this repository:
+[ivuorinen/homebrew-tap](https://github.com/ivuorinen/homebrew-tap) generates it
+from the release's binaries in its scheduled sync.
+
+### Local Snapshot
+
+Releases are built and signed only in CI. To check that the GoReleaser configuration builds:
 
 ```bash
-# Check GoReleaser configuration
-make release-check
-
-# Create a snapshot release (no tag required)
-make release-snapshot
-
-# Create a full release (requires git tag)
-make release
+mise run snapshot   # unsigned build into dist/
 ```
 
 ### Release Artifacts
 
 Each release includes:
 
-- Pre-built binaries for multiple platforms and architectures (Linux, macOS, Windows, BSD)
-- Multi-architecture Docker images (amd64, arm64, armv7) with manifests
-- SHA256 checksums file
+- Binaries named `f2b_<os>-<arch>` for Linux (amd64, arm64, armv6, armv7),
+  macOS (amd64, arm64) and Windows (amd64)
+- A SHA256 checksums file and its cosign signature bundle (`.bundle`)
+- `LICENSE.md` and `THIRD_PARTY_LICENSES.txt` (licenses of the bundled modules)
 - Source code archives
-- Docker images at `ghcr.io/ivuorinen/f2b` with architecture-specific tags
-- Linux packages (.deb, .rpm, .apk) for multiple architectures
+
+Verify a download against the signed checksums:
+
+```bash
+v=2026.10.0
+cosign verify-blob \
+  --bundle "f2b_${v}_checksums.txt.bundle" \
+  --certificate-identity "https://github.com/ivuorinen/f2b/.github/workflows/release.yml@refs/tags/${v}" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  "f2b_${v}_checksums.txt"
+sha256sum --ignore-missing -c "f2b_${v}_checksums.txt"
+```
 
 ______________________________________________________________________
 
@@ -458,7 +489,7 @@ Please see:
 - [docs/architecture.md](docs/architecture.md) - System architecture and design
 - [docs/security.md](docs/security.md) - Security practices and guidelines
 - [docs/testing.md](docs/testing.md) - Testing strategies and patterns
-- [docs/api/](docs/api/index.md) - Public API reference (generated by `make docs-api`)
+- [docs/api/](docs/api/index.md) - Public API reference (generated by `mise run docs-api`)
 
 ______________________________________________________________________
 

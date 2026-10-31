@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"errors"
 	"testing"
 )
@@ -12,7 +13,7 @@ func TestParallelOperations_IndexValidation(t *testing.T) {
 	jails := []string{"sshd", "apache"} // Use default jails from mock
 
 	// This should not panic even if there were negative indices
-	results, err := ProcessBanOperationParallel(mockClient, "192.168.1.100", jails)
+	results, err := ProcessBanOperationParallelWithContext(context.Background(), mockClient, "192.168.1.100", jails)
 
 	if err != nil {
 		t.Fatalf("ProcessBanOperationParallel failed: %v", err)
@@ -44,7 +45,7 @@ func TestParallelOperations_UnbanIndexValidation(t *testing.T) {
 	jails := []string{"sshd", "apache"}
 
 	// This should not panic even if there were negative indices
-	results, err := ProcessUnbanOperationParallel(mockClient, "192.168.1.100", jails)
+	results, err := ProcessUnbanOperationParallelWithContext(context.Background(), mockClient, "192.168.1.100", jails)
 
 	if err != nil {
 		t.Fatalf("ProcessUnbanOperationParallel failed: %v", err)
@@ -69,7 +70,12 @@ func TestParallelOperations_EmptyJailsList(t *testing.T) {
 	// Test edge case with empty jails list
 	mockClient := NewMockClient()
 
-	results, err := ProcessBanOperationParallel(mockClient, "192.168.1.100", []string{})
+	results, err := ProcessBanOperationParallelWithContext(
+		context.Background(),
+		mockClient,
+		"192.168.1.100",
+		[]string{},
+	)
 
 	if err != nil {
 		t.Fatalf("ProcessBanOperationParallel with empty jails failed: %v", err)
@@ -87,7 +93,7 @@ func TestParallelOperations_ErrorHandling(t *testing.T) {
 	// Use non-existent jail to trigger error
 	jails := []string{"nonexistent1", "nonexistent2"}
 
-	results, err := ProcessBanOperationParallel(mockClient, "192.168.1.100", jails)
+	results, err := ProcessBanOperationParallelWithContext(context.Background(), mockClient, "192.168.1.100", jails)
 
 	// Errors should now be returned (aggregated)
 	if err == nil {
@@ -123,7 +129,7 @@ func TestParallelOperations_ConcurrentSafety(t *testing.T) {
 
 	for _, ip := range ips {
 		go func(testIP string) {
-			results, err := ProcessBanOperationParallel(mockClient, testIP, jails)
+			results, err := ProcessBanOperationParallelWithContext(context.Background(), mockClient, testIP, jails)
 			if err != nil {
 				errChan <- err
 				return

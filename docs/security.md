@@ -57,6 +57,32 @@ Note: read operations such as `status`, `list-jails`, `banned`, and `logs`
 DO require sudo/root, because fail2ban's control socket
 (`/var/run/fail2ban/fail2ban.sock`) is root-only.
 
+### Allowed Paths
+
+`test-filter` runs `sudo fail2ban-regex <logpath> <filter>`, and fail2ban-regex
+prints the lines it reads, so every allowed directory is one root can be made to
+read. The allowlists are therefore limited to fail2ban's own locations:
+
+- Log directories (`--log-dir`, `F2B_LOG_DIR`, filter `logpath`, `--log-file`):
+  under `/var/log`
+- Filter directories (`--filter-dir`, `F2B_FILTER_DIR`): under `/etc/fail2ban`,
+  `/usr/local/etc/fail2ban` or `/opt/fail2ban`
+- `ALLOW_DEV_PATHS` (development only) additionally allows `/tmp` and macOS
+  temporary directories
+
+`/home`, `/opt` and `/usr/local` as whole trees are not allowed: under
+`sudo f2b` they let a filter file name another user's private files as its
+logpath.
+
+### Trusted Binary Directories
+
+The sudo-executed binaries (`fail2ban-client`, `fail2ban-regex`,
+`fail2ban-server`) must resolve to an FHS directory (`/usr/bin`, `/usr/sbin`,
+`/usr/local/bin`, ...), which stops a hostile `PATH` from choosing what sudo
+runs. `F2B_TRUSTED_BIN_DIR` may name ONE additional absolute, clean directory
+for non-FHS installs. Leave it unset unless fail2ban lives elsewhere: it widens
+which binaries f2b will run as root.
+
 ### Privilege Escalation Process
 
 1. **Pre-flight Check**: Determine user capabilities before command execution
@@ -71,13 +97,11 @@ DO require sudo/root, because fail2ban's control socket
 
 ### Error Handling
 
-When privileges are insufficient:
+When privileges are insufficient, f2b prints one line (wrapped here):
 
 ```text
 Error: fail2ban operations require sudo privileges. Current user: username (UID: 1000).
 Please run with sudo or ensure user is in sudo group
-Hint: Try running with 'sudo' or ensure your user is in the sudo group
-Example: sudo f2b ban 192.168.1.100
 ```
 
 ## Input Validation
@@ -138,51 +162,38 @@ func ValidateJail(jail string) error {
 }
 ```
 
-### Advanced Path Traversal Protection
+### Path Traversal Protection
 
-Comprehensive protection against sophisticated path traversal attacks. The
-snippet below is a simplified illustration; the authoritative implementation is
-`ValidateFilter` in `fail2ban/validation.go`, which delegates to the exported
-`ContainsPathTraversal` helper (`fail2ban/security_utils.go`) alongside
-command-injection and per-character filter checks:
+Names and paths are checked by different validators.
+
+**Names** (filter and command names) must be local names. `ValidateFilter`
+(`fail2ban/validation.go`) and `ValidateCommand` call
+`ContainsPathTraversal` (`fail2ban/security_utils.go`), which rejects
+URL-encoded separators and traversals (`%2e%2e`, `%2f`, `%5c`), null bytes, and
+any name that `filepath.IsLocal` rejects: absolute paths, `..` escapes and the
+empty string. `ValidateFilter` then adds length, command-injection and
+per-character checks.
 
 ```go
-func ValidateFilter(filter string) error {
-    if filter == "" {
-        return fmt.Errorf("filter name cannot be empty")
-    }
-
-    // Path traversal protection checking for:
-    // - Basic directory traversal (..)
-    // - URL encoding (%2e%2e, %2f, %5c)
-    // - Null byte injection (\x00)
-    // - Unicode normalization attacks (\u002e\u002e, \u002f, \u005c)
-
-    if containsPathTraversal(filter) {
-        return fmt.Errorf("invalid filter name contains path traversal: %s", filter)
-    }
-
-    return nil
-}
-
-func containsPathTraversal(path string) bool {
-    // Comprehensive path traversal detection
-    dangerous := []string{
-        "..", "\x00",
-        "%2e%2e", "%2f", "%5c",
-        "\u002e\u002e", "\u002f", "\u005c",
-    }
-
-    normalized := strings.ToLower(path)
-    for _, pattern := range dangerous {
-        if strings.Contains(normalized, pattern) {
+func ContainsPathTraversal(input string) bool {
+    inputLower := strings.ToLower(input)
+    for _, pattern := range []string{"%2e%2e", "%2f", "%5c", "\x00"} {
+        if strings.Contains(inputLower, pattern) {
             return true
         }
     }
-
-    return false
+    if !filepath.IsLocal(input) {
+        return true
+    }
+    cleaned := filepath.Clean(input)
+    return strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) || cleaned == ".."
 }
 ```
+
+**Paths** (log and filter directories, `--log-file`) go through
+`ValidatePathWithSecurity` (`fail2ban/pathsecurity.go`), which canonicalizes the
+path, resolves symlinks and requires the result to stay inside one of the
+allowed base directories listed under [Allowed Paths](#allowed-paths).
 
 ## Safe Command Execution
 
@@ -213,33 +224,20 @@ type Runner interface {
 
 ### Context-Aware Implementation
 
-```go
-func (r *RealRunner) CombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error) {
-    // Validate inputs
-    if name == "" {
-        return nil, fmt.Errorf("command name cannot be empty")
-    }
+`OSRunner.CombinedOutputWithSudoContext` (fail2ban/fail2ban.go) decides per call:
 
-    // Build command with argument array
-    cmdArgs := append([]string{name}, args...)
-    cmd := exec.CommandContext(ctx, "sudo", cmdArgs...)
+1. Validate the command against the allowlist and its arguments
+   (`validateCommandExecution`); an absolute path must sit in a trusted directory.
+1. Root runs the command directly.
+1. A non-root user with sudo privileges gets `sudo <command> <args...>` only when
+   `RequiresSudo` says the command needs it (every fail2ban-client subcommand
+   except `-V`, fail2ban-regex, and service control).
+1. Otherwise the command runs without sudo.
 
-    // Execute safely with timeout protection
-    output, err := cmd.CombinedOutput()
-    if ctx.Err() != nil {
-        return nil, fmt.Errorf("command timeout: %w", ctx.Err())
-    }
-
-    return output, err
-}
-```
-
-**Security enhancements:**
-
-- Context-based timeout prevention
-- Graceful cancellation of hanging operations
-- Resource cleanup on timeout
-- Enhanced error reporting with context information
+Every call is an argument array (never a shell string) and is bounded by the
+context: on cancellation the child gets SIGTERM, which sudo relays to the
+command it started, and `WaitDelay` stops waiting on pipes an orphaned child
+still holds.
 
 ## Testing Security
 
@@ -250,17 +248,16 @@ func (r *RealRunner) CombinedOutputWithSudoContext(ctx context.Context, name str
 ```go
 // CORRECT - Use modern standardized helpers with context support
 func TestBanCommand_WithPrivileges(t *testing.T) {
-    // Modern standardized setup with automatic cleanup and context support
-    _, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, true)
+    // Mock runner + mock sudo checker; no real command can execute
+    client, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, true)
     defer cleanup()
 
-    // Create context with timeout for the test
-    ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
     defer cancel()
 
-    // Test implementation with context-aware operations
-    err := client.BanIPWithContext(ctx, "192.168.1.100", "sshd")
-    // Test assertions...
+    code, err := client.BanIPWithContext(ctx, "192.168.1.100", "sshd")
+    require.NoError(t, err)
+    assert.Equal(t, 0, code) // 0 = newly banned, 1 = already banned
 }
 ```
 
@@ -268,27 +265,31 @@ func TestBanCommand_WithPrivileges(t *testing.T) {
 
 The system includes comprehensive security testing with extensive sophisticated attack vectors:
 
+Path traversal is tested against the real validator and an allowlist
+(`TestPathTraversalDetection` in `fail2ban/fail2ban_path_security_test.go`):
+
 ```go
-func TestPathTraversalProtection(t *testing.T) {
-    testCases := []struct {
-        name   string
-        input  string
-        expect bool // true if should be blocked
-    }{
-        {"Basic traversal", "../../../etc/passwd", true},
-        {"URL encoded", "%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd", true},
-        {"Null byte injection", "valid\x00/../../../etc/passwd", true},
-        {"Unicode normalization", "/var/log/\u002e\u002e/\u002e\u002e/etc/passwd", true},
-        {"Mixed case", "/var/LOG/../../../etc/passwd", true},
-        {"Multiple slashes", "/var/log////../../etc/passwd", true},
-        {"Windows style", "/var/log\\..\\..\\..\etc\passwd", true},
-        {"Valid path", "/var/log/fail2ban.log", false},
+func TestPathTraversalDetection(t *testing.T) {
+    maliciousPaths := []string{
+        "../../../etc/passwd",
+        "/var/log/../../../etc/shadow",
+        "%2e%2e/%2e%2e/%2e%2e/etc/passwd",               // URL encoded ../../../etc/passwd
+        "/var/log/\uff0e\uff0e/\uff0e\uff0e/etc/passwd", // Full-width Unicode ..
+        "log\x00/../../etc/passwd",                      // Null byte injection
     }
 
-    for _, tc := range testCases {
-        t.Run(tc.name, func(t *testing.T) {
-            blocked := containsPathTraversal(tc.input)
-            assert.Equal(t, tc.expect, blocked)
+    config := PathSecurityConfig{
+        AllowedBasePaths: []string{t.TempDir()},
+        MaxPathLength:    4096,
+        AllowSymlinks:    false,
+        ResolveSymlinks:  true,
+    }
+
+    for _, maliciousPath := range maliciousPaths {
+        t.Run("malicious_path", func(t *testing.T) {
+            if _, err := ValidatePathWithSecurity(maliciousPath, config); err == nil {
+                t.Errorf("expected error for malicious path %q, but validation passed", maliciousPath)
+            }
         })
     }
 }
@@ -316,7 +317,7 @@ func setupSecureTestEnvironment(t *testing.T) {
 
 **Before submitting code:**
 
-- [ ] All user input is validated before use with caching where appropriate
+- [ ] All user input is validated before use
 - [ ] No shell string concatenation used
 - [ ] Privilege escalation only when necessary with timeout protection
 - [ ] Tests use mocks exclusively with context support
@@ -475,16 +476,17 @@ User Input → Context → Validation → Path Traversal → Privilege Check →
 
 ### Logging Security Events
 
-```go
-logger.WithFields(logrus.Fields{
-    "user":      os.Getenv("USER"),
-    "uid":       os.Getuid(),
-    "command":   "ban",
-    "target_ip": ip,
-    "jail":      jail,
-    "sudo_used": true,
-}).Info("Privileged operation executed")
+Each ban/unban emits a structured audit line through `ContextualLogger.LogBanOperation`
+(cmd/logging.go). It goes to stderr as text, or to `--log-file` as one JSON
+object per line (wrapped here for reading):
+
+```json
+{"timestamp":"2026-10-27T22:53:17.640091297+01:00","level":"info","message":"Ban operation completed",
+ "command_path":"f2b ban","service":"f2b","version":"dev","operation":"ban","ip":"192.168.1.100",
+ "jail":"sshd","command":"ban","success":true,"duration_ms":12}
 ```
+
+Failures log `Ban operation failed` at error level with `success: false`.
 
 This comprehensive security model ensures f2b can be used safely in production environments
 while maintaining the flexibility needed for effective Fail2Ban management. The enhanced security

@@ -13,9 +13,16 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
+	"time"
 
 	"github.com/ivuorinen/f2b/constants"
 )
+
+// commandWaitDelay bounds how long a canceled command may keep its output
+// pipes open before Wait gives up and kills it. A variable only so tests can
+// shorten it.
+var commandWaitDelay = 5 * time.Second
 
 var logDir = constants.DefaultLogDir // base directory for fail2ban logs
 var logDirMu sync.RWMutex            // protects logDir from concurrent access
@@ -40,14 +47,41 @@ type OSRunner struct{}
 
 // validateCommandExecution validates command name and arguments before execution.
 // This helper consolidates the duplicate validation pattern used in command execution methods.
-func validateCommandExecution(ctx context.Context, name string, args []string) error {
+func validateCommandExecution(name string, args []string) error {
 	if err := ValidateCommand(name); err != nil {
 		return fmt.Errorf(constants.ErrCommandValidationFailed, err)
 	}
-	if err := ValidateArgumentsWithContext(ctx, args); err != nil {
+	if err := ValidateArguments(args); err != nil {
 		return fmt.Errorf(constants.ErrArgumentValidationFailed, err)
 	}
 	return nil
+}
+
+// runCombined runs an already-validated command and returns its combined output.
+//
+// exec.CommandContext's default cancellation SIGKILLs only the direct child.
+// When that child is sudo, the command sudo started survives (sudo cannot relay
+// SIGKILL) and keeps the output pipe open, so CombinedOutput blocked until the
+// orphan exited and no context deadline bounded the call. SIGTERM is relayed by
+// sudo to its command, and WaitDelay stops waiting on pipes still held after
+// the context ends.
+//
+// A non-zero exit carries the command's own diagnostic (e.g. fail2ban-client's
+// "Sorry but the jail 'x' does not exist") only in the output bytes, which
+// callers drop on the error path; the bare *exec.ExitError reads "exit status
+// N". The trimmed output is therefore folded into the error, keeping the
+// ExitError reachable through errors.As.
+func runCombined(ctx context.Context, name string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, name, args...) // #nosec G204 -- callers validate via validateCommandExecution
+	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
+	cmd.WaitDelay = commandWaitDelay
+	out, err := cmd.CombinedOutput()
+	if _, ok := errors.AsType[*exec.ExitError](err); ok {
+		if msg := strings.TrimSpace(string(out)); msg != "" {
+			err = fmt.Errorf("%w: %s", err, msg)
+		}
+	}
+	return out, err
 }
 
 // CombinedOutput executes a command without sudo.
@@ -57,11 +91,10 @@ func (r *OSRunner) CombinedOutput(name string, args ...string) ([]byte, error) {
 
 // CombinedOutputWithContext executes a command without sudo with context support.
 func (r *OSRunner) CombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error) {
-	if err := validateCommandExecution(ctx, name, args); err != nil {
+	if err := validateCommandExecution(name, args); err != nil {
 		return nil, err
 	}
-	// #nosec G204 -- command validated by validateCommandExecution
-	return exec.CommandContext(ctx, name, args...).CombinedOutput()
+	return runCombined(ctx, name, args...)
 }
 
 // CombinedOutputWithSudo executes a command with sudo if needed.
@@ -71,7 +104,7 @@ func (r *OSRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte, 
 
 // CombinedOutputWithSudoContext executes a command with sudo if needed, with context support.
 func (r *OSRunner) CombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error) {
-	if err := validateCommandExecution(ctx, name, args); err != nil {
+	if err := validateCommandExecution(name, args); err != nil {
 		return nil, err
 	}
 
@@ -79,19 +112,18 @@ func (r *OSRunner) CombinedOutputWithSudoContext(ctx context.Context, name strin
 
 	// If already root, no need for sudo
 	if checker.IsRoot() {
-		return exec.CommandContext(ctx, name, args...).CombinedOutput() // #nosec G204 -- command validated above
+		return runCombined(ctx, name, args...)
 	}
 
-	// If command requires sudo and user has privileges, use sudo
+	// If command requires sudo and user has privileges, use sudo. The command
+	// name and arguments were validated above by validateCommandExecution.
 	if RequiresSudo(name, args...) && checker.HasSudoPrivileges() {
 		sudoArgs := append([]string{name}, args...)
-		// #nosec G204 - This is a legitimate use case for executing fail2ban-client with sudo
-		// The command name and arguments are validated by ValidateCommand() and RequiresSudo()
-		return exec.CommandContext(ctx, constants.SudoCommand, sudoArgs...).CombinedOutput()
+		return runCombined(ctx, constants.SudoCommand, sudoArgs...)
 	}
 
 	// Otherwise run without sudo
-	return exec.CommandContext(ctx, name, args...).CombinedOutput() // #nosec G204 -- command validated above
+	return runCombined(ctx, name, args...)
 }
 
 // runnerManager provides thread-safe access to the global Runner.
@@ -119,103 +151,33 @@ func GetRunner() Runner {
 	return globalRunnerManager.runner
 }
 
-// RunnerCombinedOutput executes a command using the global runner and returns combined stdout/stderr output.
-func RunnerCombinedOutput(name string, args ...string) ([]byte, error) {
-	timer := NewTimedOperation("RunnerCombinedOutput", name, args...)
-
-	runner := GetRunner()
-
-	output, err := runner.CombinedOutput(name, args...)
-	timer.Finish(err)
-
-	return output, err
-}
-
-// RunnerCombinedOutputWithSudo executes a command with sudo privileges using the global runner.
-func RunnerCombinedOutputWithSudo(name string, args ...string) ([]byte, error) {
-	timer := NewTimedOperation("RunnerCombinedOutputWithSudo", name, args...)
-
-	runner := GetRunner()
-
-	output, err := runner.CombinedOutputWithSudo(name, args...)
-	timer.Finish(err)
-
-	return output, err
-}
-
-// runWithTimerContext is a helper that consolidates the common pattern of
-// creating a timer, getting the runner, executing a command, and finishing the timer.
-// This reduces code duplication between RunnerCombinedOutputWithContext and RunnerCombinedOutputWithSudoContext.
-func runWithTimerContext(
-	ctx context.Context,
-	opName, name string,
-	args []string,
-	runFn func(Runner, context.Context, string, ...string) ([]byte, error),
-) ([]byte, error) {
-	timer := NewTimedOperation(opName, name, args...)
-	runner := GetRunner()
-	output, err := runFn(runner, ctx, name, args...)
+// RunnerCombinedOutputWithSudoContext executes a command with sudo privileges
+// and context using the global runner, logging its duration. It is the only
+// global-runner entry point: its context-free and non-sudo twins had no
+// production caller, and the context-free one let the service command ignore
+// Ctrl-C.
+func RunnerCombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error) {
+	timer := NewTimedOperation("RunnerCombinedOutputWithSudoContext", name, args...)
+	output, err := GetRunner().CombinedOutputWithSudoContext(ctx, name, args...)
 	timer.FinishWithContext(ctx, err)
 	return output, err
 }
 
-// RunnerCombinedOutputWithContext executes a command with context using the global runner.
-func RunnerCombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error) {
-	return runWithTimerContext(ctx, "RunnerCombinedOutputWithContext", name, args,
-		func(r Runner, c context.Context, n string, a ...string) ([]byte, error) {
-			return r.CombinedOutputWithContext(c, n, a...)
-		})
-}
-
-// RunnerCombinedOutputWithSudoContext executes a command with sudo privileges and context using the global runner.
-func RunnerCombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error) {
-	return runWithTimerContext(ctx, "RunnerCombinedOutputWithSudoContext", name, args,
-		func(r Runner, c context.Context, n string, a ...string) ([]byte, error) {
-			return r.CombinedOutputWithSudoContext(c, n, a...)
-		})
-}
-
 func (c *RealClient) fetchJailsWithContext(ctx context.Context) ([]string, error) {
-	currentRunner := GetRunner()
-	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, c.Path, constants.CommandArgStatus)
+	out, err := c.cmdRunner().CombinedOutputWithSudoContext(ctx, c.Path, constants.CommandArgStatus)
 	if err != nil {
 		return nil, err
 	}
 	return ParseJailList(string(out))
 }
 
-// StatusAll returns the status of all fail2ban jails.
-func (c *RealClient) StatusAll() (string, error) {
-	currentRunner := GetRunner()
-	out, err := currentRunner.CombinedOutputWithSudo(c.Path, constants.CommandArgStatus)
-	return string(out), err
-}
-
-// StatusJail returns the status of a specific fail2ban jail.
-func (c *RealClient) StatusJail(j string) (string, error) {
-	currentRunner := GetRunner()
-	out, err := currentRunner.CombinedOutputWithSudo(c.Path, constants.CommandArgStatus, j)
-	return string(out), err
-}
-
-// BanIP bans an IP address in the specified jail and returns the ban status code.
-func (c *RealClient) BanIP(ip, jail string) (int, error) {
-	return c.BanIPWithContext(context.Background(), ip, jail)
-}
-
-// UnbanIP unbans an IP address from the specified jail and returns the unban status code.
-func (c *RealClient) UnbanIP(ip, jail string) (int, error) {
-	return c.UnbanIPWithContext(context.Background(), ip, jail)
-}
-
-// BannedIn returns a list of jails where the specified IP address is currently banned.
-func (c *RealClient) BannedIn(ip string) ([]string, error) {
-	return c.BannedInWithContext(context.Background(), ip)
-}
-
-// GetBanRecords retrieves ban records for the specified jails.
-func (c *RealClient) GetBanRecords(jails []string) ([]BanRecord, error) {
-	return c.GetBanRecordsWithContext(context.Background(), jails)
+// lastLine returns the last non-empty line of combined command output. The
+// runner captures stdout and stderr together, so a stray stderr line (e.g.
+// sudo's "unable to resolve host") precedes fail2ban-client's actual answer;
+// parsing the whole buffer turned a successful command into an error.
+func lastLine(out []byte) string {
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	return strings.TrimSpace(lines[len(lines)-1])
 }
 
 // requestsAllJails reports whether the requested jail list should expand to
@@ -243,7 +205,7 @@ func (c *RealClient) getBanRecordsInternal(ctx context.Context, jails []string) 
 		toQuery = c.Jails
 	}
 
-	currentRunner := GetRunner()
+	currentRunner := c.cmdRunner()
 
 	// Use parallel processing for multiple jails
 	allRecords, err := ProcessJailsParallel(
@@ -268,8 +230,7 @@ func (c *RealClient) getBanRecordsInternal(ctx context.Context, jails []string) 
 				return nil, fmt.Errorf("jail %s: %w", jail, err)
 			}
 
-			// Use ultra-optimized parser for this jail's records
-			jailRecords, parseErr := ParseBanRecordsUltraOptimized(string(out), jail)
+			jailRecords, parseErr := ParseBanRecords(string(out), jail)
 			if parseErr != nil {
 				getLogger().WithError(parseErr).WithField("jail", jail).
 					Warn("Failed to parse ban records for jail")
@@ -290,18 +251,14 @@ func (c *RealClient) getBanRecordsInternal(ctx context.Context, jails []string) 
 	return allRecords, nil
 }
 
-// GetLogLines retrieves log lines related to an IP address from the specified jail.
-func (c *RealClient) GetLogLines(jail, ip string) ([]string, error) {
-	return c.GetLogLinesWithLimit(jail, ip, constants.DefaultLogLinesLimit)
-}
-
-// GetLogLinesWithLimit returns log lines with configurable limits for memory management.
-func (c *RealClient) GetLogLinesWithLimit(jail, ip string, maxLines int) ([]string, error) {
-	return c.GetLogLinesWithLimitContext(context.Background(), jail, ip, maxLines)
-}
-
-// GetLogLinesWithLimitContext returns log lines with configurable limits and context support.
+// GetLogLinesWithLimitContext returns the newest maxLines log lines matching
+// jail and ip. It is the single log-read entry point: every other read
+// delegates here, so the limit bounds and the jail/IP validation (an invalid
+// filter must error, not silently match nothing) cannot be skipped.
 func (c *RealClient) GetLogLinesWithLimitContext(ctx context.Context, jail, ip string, maxLines int) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if err := validateMaxLines(maxLines); err != nil {
 		return nil, err
 	}
@@ -309,8 +266,6 @@ func (c *RealClient) GetLogLinesWithLimitContext(ctx context.Context, jail, ip s
 		return []string{}, nil
 	}
 
-	// Same filter validation as the package-level entry point: an invalid
-	// jail/IP must error, not silently match nothing.
 	jail, ip, err := validateLogFilters(jail, ip)
 	if err != nil {
 		return nil, err
@@ -327,8 +282,12 @@ func (c *RealClient) GetLogLinesWithLimitContext(ctx context.Context, jail, ip s
 	return collectLogLines(ctx, c.LogDir, config)
 }
 
-// ListFilters returns a list of available fail2ban filter files.
-func (c *RealClient) ListFilters() ([]string, error) {
+// ListFiltersWithContext returns the names of the *.conf files in the filter
+// directory. It honors cancellation like every other client operation.
+func (c *RealClient) ListFiltersWithContext(ctx context.Context) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	entries, err := os.ReadDir(c.FilterDir)
 	if err != nil {
 		return nil, fmt.Errorf("could not list filters: %w", err)
@@ -343,26 +302,15 @@ func (c *RealClient) ListFilters() ([]string, error) {
 	return filters, nil
 }
 
-// Context-aware implementations for RealClient
-
-// ListJailsWithContext returns a list of all fail2ban jails with context support.
-func (c *RealClient) ListJailsWithContext(ctx context.Context) ([]string, error) {
-	return wrapWithContext0(c.ListJails)(ctx)
-}
-
 // StatusAllWithContext returns the status of all fail2ban jails with context support.
 func (c *RealClient) StatusAllWithContext(ctx context.Context) (string, error) {
-	currentRunner := GetRunner()
-
-	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, c.Path, constants.CommandArgStatus)
+	out, err := c.cmdRunner().CombinedOutputWithSudoContext(ctx, c.Path, constants.CommandArgStatus)
 	return string(out), err
 }
 
 // StatusJailWithContext returns the status of a specific fail2ban jail with context support.
 func (c *RealClient) StatusJailWithContext(ctx context.Context, jail string) (string, error) {
-	currentRunner := GetRunner()
-
-	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, c.Path, constants.CommandArgStatus, jail)
+	out, err := c.cmdRunner().CombinedOutputWithSudoContext(ctx, c.Path, constants.CommandArgStatus, jail)
 	return string(out), err
 }
 
@@ -379,15 +327,15 @@ func (c *RealClient) executeIPActionWithContext(
 		return 0, err
 	}
 
-	currentRunner := GetRunner()
-	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, c.Path, constants.ActionSet, jail, action, ip)
+	out, err := c.cmdRunner().CombinedOutputWithSudoContext(ctx, c.Path, constants.ActionSet, jail, action, ip)
 	if err != nil {
 		return 0, fmt.Errorf(errorTemplate, ip, jail, err)
 	}
 	// fail2ban >= 0.11 (the enforced minimum) prints the NUMBER of addresses
 	// affected by set <jail> banip/unbanip: >=1 means the IP was newly
 	// banned/unbanned (success), 0 means it was already in the desired state.
-	code := strings.TrimSpace(string(out))
+	// Only the last line is the answer; earlier lines are stderr noise.
+	code := lastLine(out)
 	count, convErr := strconv.Atoi(code)
 	if convErr != nil {
 		return 0, fmt.Errorf(constants.ErrUnexpectedOutput, code)
@@ -414,13 +362,13 @@ func (c *RealClient) BannedInWithContext(ctx context.Context, ip string) ([]stri
 		return nil, err
 	}
 
-	currentRunner := GetRunner()
-
-	out, err := currentRunner.CombinedOutputWithSudoContext(ctx, c.Path, constants.ActionBanned, ip)
+	out, err := c.cmdRunner().CombinedOutputWithSudoContext(ctx, c.Path, constants.ActionBanned, ip)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get banned status for IP %s: %w", ip, err)
 	}
-	return ParseBracketedList(string(out)), nil
+	// The jail list is the last line; earlier lines are stderr noise that would
+	// otherwise be parsed as jail names.
+	return ParseBracketedList(lastLine(out)), nil
 }
 
 // GetBanRecordsWithContext retrieves ban records for the specified jails with context support.
@@ -428,43 +376,14 @@ func (c *RealClient) GetBanRecordsWithContext(ctx context.Context, jails []strin
 	return c.getBanRecordsInternal(ctx, jails)
 }
 
-// GetLogLinesWithContext retrieves log lines related to an IP address from the specified jail with context support.
+// GetLogLinesWithContext returns the newest DefaultLogLinesLimit matching log
+// lines. It delegates to GetLogLinesWithLimitContext; its former standalone
+// implementation skipped the jail/IP filter validation.
 func (c *RealClient) GetLogLinesWithContext(ctx context.Context, jail, ip string) ([]string, error) {
-	return c.GetLogLinesWithLimitAndContext(ctx, jail, ip, constants.DefaultLogLinesLimit)
+	return c.GetLogLinesWithLimitContext(ctx, jail, ip, constants.DefaultLogLinesLimit)
 }
 
-// GetLogLinesWithLimitAndContext returns log lines with configurable limits
-// and context support for memory management and timeouts.
-func (c *RealClient) GetLogLinesWithLimitAndContext(
-	ctx context.Context,
-	jail, ip string,
-	maxLines int,
-) ([]string, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-
-	if err := validateMaxLines(maxLines); err != nil {
-		return nil, err
-	}
-	if maxLines == 0 {
-		return []string{}, nil
-	}
-
-	config := LogReadConfig{
-		MaxLines:    maxLines,
-		MaxFileSize: constants.DefaultMaxFileSize,
-		JailFilter:  jail,
-		IPFilter:    ip,
-		BaseDir:     c.LogDir,
-	}
-
-	return collectLogLines(ctx, c.LogDir, config)
-}
-
-// validateMaxLines rejects negative limits and limits above MaxLogLinesLimit,
-// so the RealClient log methods cannot bypass the bounds enforced by the
-// package-level GetLogLinesWithLimit.
+// validateMaxLines rejects negative limits and limits above MaxLogLinesLimit.
 func validateMaxLines(maxLines int) error {
 	if maxLines < 0 {
 		return fmt.Errorf(constants.ErrMaxLinesNegative, maxLines)
@@ -475,16 +394,10 @@ func validateMaxLines(maxLines int) error {
 	return nil
 }
 
-// ListFiltersWithContext returns a list of available fail2ban filter files with context support.
-func (c *RealClient) ListFiltersWithContext(ctx context.Context) ([]string, error) {
-	return wrapWithContext0(c.ListFilters)(ctx)
-}
-
-// validateFilterPath validates filter name and returns secure path and log path
 // resolveFilterPath validates the filter name and returns the absolute path to
 // its .conf file, guaranteeing the result stays within the client's filter
 // directory (defense against path traversal).
-func (c *RealClient) resolveFilterPath(_ context.Context, filter string) (string, error) {
+func (c *RealClient) resolveFilterPath(filter string) (string, error) {
 	if err := ValidateFilter(filter); err != nil {
 		return "", err
 	}
@@ -504,8 +417,10 @@ func (c *RealClient) resolveFilterPath(_ context.Context, filter string) (string
 	return cleanPath, nil
 }
 
-func (c *RealClient) validateFilterPath(ctx context.Context, filter string) (string, string, error) {
-	cleanPath, err := c.resolveFilterPath(ctx, filter)
+// validateFilterPath validates the filter name and returns the filter's path
+// and the logpath it declares.
+func (c *RealClient) validateFilterPath(filter string) (string, string, error) {
+	cleanPath, err := c.resolveFilterPath(filter)
 	if err != nil {
 		return "", "", err
 	}
@@ -553,7 +468,10 @@ func (c *RealClient) validateFilterPath(ctx context.Context, filter string) (str
 
 // TestFilterWithContext tests a fail2ban filter against its configured log files with context support.
 func (c *RealClient) TestFilterWithContext(ctx context.Context, filter string) (string, error) {
-	cleanPath, logPath, err := c.validateFilterPath(ctx, filter)
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	cleanPath, logPath, err := c.validateFilterPath(filter)
 	if err != nil {
 		return "", err
 	}
@@ -567,14 +485,7 @@ func (c *RealClient) TestFilterWithContext(ctx context.Context, filter string) (
 		return "", fmt.Errorf("filter %q has an invalid logpath %q: %w", filter, logPath, err)
 	}
 
-	currentRunner := GetRunner()
-
-	output, err := currentRunner.CombinedOutputWithSudoContext(
+	output, err := c.cmdRunner().CombinedOutputWithSudoContext(
 		ctx, constants.Fail2BanRegexCommand, validatedLogPath, cleanPath)
 	return string(output), err
-}
-
-// TestFilter tests a fail2ban filter against its configured log files and returns the test output.
-func (c *RealClient) TestFilter(filter string) (string, error) {
-	return c.TestFilterWithContext(context.Background(), filter)
 }

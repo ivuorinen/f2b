@@ -152,7 +152,7 @@ func TestIsTestEnvironment(t *testing.T) {
 		{
 			name:     "No test environment",
 			envVars:  map[string]string{},
-			expected: true, // Will be true because we're running in test mode (os.Args contains -test)
+			expected: true, // true: the go test binary registers -test.v (false case: TestDetectTestEnvironment)
 		},
 	}
 
@@ -177,58 +177,32 @@ func TestIsTestEnvironment(t *testing.T) {
 	}
 }
 
-func TestConfigureCITestLogging(t *testing.T) {
-	// Save original logger
-	originalLogger := getLogger()
-	defer SetLogger(originalLogger)
-
-	tests := []struct {
-		name  string
-		isCI  bool
-		setup func(t *testing.T)
-	}{
-		{
-			name: "in CI environment",
-			isCI: true,
-			setup: func(t *testing.T) {
-				t.Helper()
-				t.Setenv("CI", "true")
-			},
-		},
-		{
-			name: "not in CI environment",
-			isCI: false,
-			setup: func(t *testing.T) {
-				t.Helper()
-				t.Setenv("CI", "")
-				t.Setenv("GITHUB_ACTIONS", "")
-				t.Setenv("TRAVIS", "")
-				t.Setenv("CIRCLECI", "")
-				t.Setenv("JENKINS_URL", "")
-				t.Setenv("BUILDKITE", "")
-				t.Setenv("TF_BUILD", "")
-				t.Setenv("GITLAB_CI", "")
-				t.Setenv("GO_TEST", "")
-				t.Setenv("F2B_TEST", "")
-				t.Setenv("F2B_TEST_SUDO", "")
-			},
-		},
+// TestDetectTestEnvironment drives the detection with injected inputs so the
+// production case is constructible: inside `go test` the -test.v flag is
+// always registered, which made IsTestEnvironment true in every case and let
+// a constant-true implementation pass.
+func TestDetectTestEnvironment(t *testing.T) {
+	envOf := func(vars map[string]string) func(string) string {
+		return func(key string) string { return vars[key] }
 	}
-
+	tests := []struct {
+		name         string
+		env          map[string]string
+		goTestBinary bool
+		want         bool
+	}{
+		{name: "production: no env, not a test binary", env: nil, goTestBinary: false, want: false},
+		{name: "unrelated env only", env: map[string]string{"CI": "true"}, goTestBinary: false, want: false},
+		{name: "go test binary", env: nil, goTestBinary: true, want: true},
+		{name: "GO_TEST opt-in", env: map[string]string{"GO_TEST": "1"}, goTestBinary: false, want: true},
+		{name: "F2B_TEST opt-in", env: map[string]string{"F2B_TEST": "1"}, goTestBinary: false, want: true},
+		{name: "F2B_TEST_SUDO opt-in", env: map[string]string{"F2B_TEST_SUDO": "1"}, goTestBinary: false, want: true},
+	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.setup(t)
-
-			// Create a new logger to test with
-			testLogger := NewSlogLogger(SlogText)
-			SetLogger(testLogger)
-
-			// Call ConfigureCITestLogging
-			ConfigureCITestLogging()
-
-			// The function should not panic - that's the main test
-			// We can't easily verify the log level was changed without accessing internal state
-			// but we can verify the function runs without error
+			if got := detectTestEnvironment(envOf(tt.env), tt.goTestBinary); got != tt.want {
+				t.Errorf("detectTestEnvironment() = %v, want %v", got, tt.want)
+			}
 		})
 	}
 }

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -10,7 +11,7 @@ import (
 	"github.com/ivuorinen/f2b/fail2ban"
 )
 
-// TestProcessBanOperation tests the ProcessBanOperation function
+// TestProcessBanOperation tests the ProcessBanOperationWithContext function
 func TestProcessBanOperation(t *testing.T) {
 	restoreRunner := fail2ban.WithTestRunner(t, fail2ban.GetRunner())
 	defer restoreRunner()
@@ -69,7 +70,7 @@ func TestProcessBanOperation(t *testing.T) {
 			client, err := fail2ban.NewClient("/var/log/fail2ban", "/etc/fail2ban/filter.d")
 			require.NoError(t, err)
 
-			results, err := ProcessBanOperation(client, tt.ip, tt.jails)
+			results, err := ProcessBanOperationWithContext(context.Background(), client, tt.ip, tt.jails)
 
 			if tt.expectError {
 				assert.Error(t, err)

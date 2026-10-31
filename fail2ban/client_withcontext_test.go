@@ -36,7 +36,7 @@ func TestListJailsWithContext(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := NewMockRunner()
 			tt.setupMock(mock)
-			SetRunner(mock)
+			t.Cleanup(WithTestRunner(t, mock))
 
 			client, err := NewClient("/var/log", "/etc/fail2ban/filter.d")
 			require.NoError(t, err)
@@ -96,7 +96,7 @@ func TestStatusAllWithContext(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := NewMockRunner()
 			tt.setupMock(mock)
-			SetRunner(mock)
+			t.Cleanup(WithTestRunner(t, mock))
 
 			client, err := NewClient("/var/log", "/etc/fail2ban/filter.d")
 			require.NoError(t, err)
@@ -181,7 +181,7 @@ func TestStatusJailWithContext(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := NewMockRunner()
 			tt.setupMock(mock)
-			SetRunner(mock)
+			t.Cleanup(WithTestRunner(t, mock))
 
 			client, err := NewClient("/var/log", "/etc/fail2ban/filter.d")
 			require.NoError(t, err)
@@ -286,7 +286,7 @@ func TestUnbanIPWithContext(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := NewMockRunner()
 			tt.setupMock(mock)
-			SetRunner(mock)
+			t.Cleanup(WithTestRunner(t, mock))
 
 			client, err := NewClient("/var/log", "/etc/fail2ban/filter.d")
 			require.NoError(t, err)
@@ -351,7 +351,7 @@ func TestListFiltersWithContext(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := NewMockRunner()
 			tt.setupMock(mock)
-			SetRunner(mock)
+			t.Cleanup(WithTestRunner(t, mock))
 			tt.setupEnv()
 
 			client, err := NewClient("/var/log", "/etc/fail2ban/filter.d")
@@ -466,7 +466,7 @@ failregex = ^.* Failed .* for .* from <HOST>
 		t.Run(tt.name, func(t *testing.T) {
 			mock := NewMockRunner()
 			tt.setupMock(mock)
-			SetRunner(mock)
+			t.Cleanup(WithTestRunner(t, mock))
 
 			client, err := NewClient("/var/log", tmpDir)
 			require.NoError(t, err)
@@ -494,7 +494,7 @@ failregex = ^.* Failed .* for .* from <HOST>
 func TestWithContextCancellation(t *testing.T) {
 	mock := NewMockRunner()
 	StandardMockSetup(mock)
-	SetRunner(mock)
+	t.Cleanup(WithTestRunner(t, mock))
 
 	client, err := NewClient("/var/log", "/etc/fail2ban/filter.d")
 	require.NoError(t, err)
@@ -529,7 +529,7 @@ func TestWithContextCancellation(t *testing.T) {
 func TestWithContextDeadline(t *testing.T) {
 	mock := NewMockRunner()
 	StandardMockSetup(mock)
-	SetRunner(mock)
+	t.Cleanup(WithTestRunner(t, mock))
 
 	client, err := NewClient("/var/log", "/etc/fail2ban/filter.d")
 	require.NoError(t, err)
@@ -585,7 +585,7 @@ func TestWithContextDeadline(t *testing.T) {
 func TestWithContextValidation(t *testing.T) {
 	mock := NewMockRunner()
 	StandardMockSetup(mock)
-	SetRunner(mock)
+	t.Cleanup(WithTestRunner(t, mock))
 
 	client, err := NewClient("/var/log", "/etc/fail2ban/filter.d")
 	require.NoError(t, err)
@@ -598,9 +598,21 @@ func TestWithContextValidation(t *testing.T) {
 		assert.Contains(t, err.Error(), "invalid")
 	})
 
+	// The IP checks assert that no command ran: the mock also rejects an
+	// unregistered command, so an error alone passed even with the
+	// ValidateIP guard deleted.
 	t.Run("UnbanIPWithContext validates IP", func(t *testing.T) {
+		before := len(mock.GetCalls())
 		_, err := client.UnbanIPWithContext(ctx, "invalid-ip", "sshd")
-		assert.Error(t, err)
+		require.Error(t, err)
+		assert.Len(t, mock.GetCalls(), before, "an invalid IP must be rejected before any command runs")
+	})
+
+	t.Run("BanIPWithContext validates IP", func(t *testing.T) {
+		before := len(mock.GetCalls())
+		_, err := client.BanIPWithContext(ctx, "invalid-ip", "sshd")
+		require.Error(t, err)
+		assert.Len(t, mock.GetCalls(), before, "an invalid IP must be rejected before any command runs")
 	})
 
 	t.Run("UnbanIPWithContext validates jail", func(t *testing.T) {

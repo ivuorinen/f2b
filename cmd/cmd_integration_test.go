@@ -175,7 +175,7 @@ func TestIntegration_BannedCommand_JSON(t *testing.T) {
 		WithMockClient(mock).
 		WithJSONFormat().
 		ExpectSuccess().
-		ExpectOutput("\"Jail\"").
+		ExpectOutput(`"jail": "sshd"`).
 		Run()
 }
 

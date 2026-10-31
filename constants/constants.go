@@ -256,9 +256,6 @@ const (
 
 	// ConfExtension is the configuration file extension
 	ConfExtension = ".conf"
-
-	// TestDataDir is the directory for test data files
-	TestDataDir = "testdata"
 )
 
 // Error message templates
@@ -308,12 +305,6 @@ const (
 	// ErrScanLogFile is the error message for log scanning errors
 	ErrScanLogFile = "error scanning log file: %w"
 
-	// ErrTestDataNotFound is the error message for missing test data
-	ErrTestDataNotFound = "Test data file not found: %s"
-
-	// ErrFailedToGetAbsPath is the error message for absolute path failures
-	ErrFailedToGetAbsPath = "Failed to get absolute path: %v"
-
 	// ErrMaxLinesNegative is the error message for negative maxLines values
 	ErrMaxLinesNegative = "maxLines must be non-negative, got %d"
 
@@ -351,19 +342,19 @@ const (
 	MsgUnbanResult = "Unban result"
 
 	// MsgFailedToEncodeJSON is the error message for JSON encoding failures
-	MsgFailedToEncodeJSON = "Failed to encode JSON output"
+	MsgFailedToEncodeJSON = "failed to encode JSON output"
 
 	// MsgFailedToWriteOutput is the error message for output write failures
-	MsgFailedToWriteOutput = "Failed to write fallback output"
+	MsgFailedToWriteOutput = "failed to write output"
 )
 
-// Command names for metrics and logging
+// Operation names used in logs and status text
 const (
-	// MetricsBan is the metrics key for ban operations
-	MetricsBan = "ban"
+	// OpBan names the ban operation
+	OpBan = "ban"
 
-	// MetricsUnban is the metrics key for unban operations
-	MetricsUnban = "unban"
+	// OpUnban names the unban operation
+	OpUnban = "unban"
 )
 
 // Sudo constants
@@ -391,9 +382,6 @@ const (
 
 	// ErrTestUnexpectedWithOutput is the template for unexpected errors with output
 	ErrTestUnexpectedWithOutput = "%s: unexpected error: %v, output: %s"
-
-	// ErrTestJSONFieldMismatch is the template for JSON field mismatches
-	ErrTestJSONFieldMismatch = "%s: expected JSON field %q to be %q, got %v"
 )
 
 // CLI flag names

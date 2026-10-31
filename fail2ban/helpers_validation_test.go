@@ -2,104 +2,43 @@ package fail2ban
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TestValidateFilterName tests the ValidateFilterName function
-func TestValidateFilterName(t *testing.T) {
-	tests := []struct {
-		name        string
-		filter      string
-		expectError bool
-		errorMsg    string
-	}{
-		{
-			name:        "valid filter name",
-			filter:      "sshd",
-			expectError: false,
-		},
-		{
-			name:        "valid filter name with dash",
-			filter:      "sshd-aggressive",
-			expectError: false,
-		},
-		{
-			name:        "empty filter name",
-			filter:      "",
-			expectError: true,
-			errorMsg:    "filter name cannot be empty",
-		},
-		{
-			name:        "filter name with spaces gets trimmed",
-			filter:      "  sshd  ",
-			expectError: false,
-		},
-		{
-			name:        "filter name with path traversal",
-			filter:      "../../../etc/passwd",
-			expectError: true,
-			errorMsg:    "filter name contains path traversal",
-		},
-		{
-			name:        "filter name with dot dot - caught by character validation",
-			filter:      "filter..conf",
-			expectError: true,
-			errorMsg:    "filter name contains invalid characters",
-		},
-		{
-			name:        "absolute path filter name - caught by path traversal first",
-			filter:      "/etc/fail2ban/filter.d/sshd.conf",
-			expectError: true,
-			errorMsg:    "filter name contains path traversal",
-		},
+// writeFail2banLog writes lines as dir/fail2ban.log.
+func writeFail2banLog(t *testing.T, dir string, lines ...string) {
+	t.Helper()
+	content := ""
+	for _, l := range lines {
+		content += l + "\n"
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateFilterName(tt.filter)
-
-			if tt.expectError {
-				assert.Error(t, err)
-				if tt.errorMsg != "" {
-					assert.Contains(t, err.Error(), tt.errorMsg)
-				}
-			} else {
-				assert.NoError(t, err)
-			}
-		})
-	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "fail2ban.log"), []byte(content), 0o600))
 }
 
-// TestGetLogLinesWrapper tests the GetLogLines wrapper function
-func TestGetLogLinesWrapper(t *testing.T) {
-	mockRunner := NewMockRunner()
-	restoreRunner := WithTestRunner(t, mockRunner)
-	defer restoreRunner()
-	mockRunner.SetResponse("fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
-	mockRunner.SetResponse("sudo fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
-	mockRunner.SetResponse("fail2ban-client ping", []byte("Server replied: pong"))
-	mockRunner.SetResponse("sudo fail2ban-client ping", []byte("Server replied: pong"))
-	mockRunner.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-	mockRunner.SetResponse("sudo fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
+// TestGetLogLinesWithContextDefaultLimit checks that the default-limit read
+// returns the matching lines and validates its filters like the limited read.
+func TestGetLogLinesWithContextDefaultLimit(t *testing.T) {
+	dir := t.TempDir()
+	writeFail2banLog(t, dir,
+		"2025-01-01 10:00:00 fail2ban.actions [1]: NOTICE [sshd] Ban 192.168.1.1",
+		"2025-01-01 10:01:00 fail2ban.actions [1]: NOTICE [apache] Ban 192.168.1.1",
+		"2025-01-01 10:02:00 fail2ban.actions [1]: NOTICE [sshd] Ban 192.168.1.10",
+	)
+	client := &RealClient{LogDir: dir}
 
-	// Create temporary log directory
-	tmpDir := t.TempDir()
-	oldLogDir := GetLogDir()
-	SetLogDir(tmpDir)
-	defer SetLogDir(oldLogDir)
-
-	client, err := NewClient("/var/log/fail2ban", "/etc/fail2ban/filter.d")
+	lines, err := client.GetLogLinesWithContext(context.Background(), "sshd", "192.168.1.1")
 	require.NoError(t, err)
+	assert.Equal(t, []string{"2025-01-01 10:00:00 fail2ban.actions [1]: NOTICE [sshd] Ban 192.168.1.1"}, lines)
 
-	// Call GetLogLines (wrapper for GetLogLinesWithLimit)
-	lines, err := client.GetLogLines("sshd", "192.168.1.1")
-
-	// May return error if no log files exist, which is ok
-	_ = err
-	_ = lines
+	_, err = client.GetLogLinesWithContext(context.Background(), "bad jail;rm", "")
+	require.Error(t, err, "an invalid jail filter must be rejected, not silently match nothing")
+	_, err = client.GetLogLinesWithContext(context.Background(), "", "not-an-ip")
+	require.Error(t, err, "an invalid IP filter must be rejected, not silently match nothing")
 }
 
 // TestBanIPWithContext tests the BanIPWithContext function
@@ -154,56 +93,73 @@ func TestBanIPWithContext(t *testing.T) {
 	}
 }
 
-// TestGetLogLinesWithLimitAndContext tests the GetLogLinesWithLimitAndContext function
-func TestGetLogLinesWithLimitAndContext(t *testing.T) {
-	mockRunner := NewMockRunner()
-	restoreRunner := WithTestRunner(t, mockRunner)
-	defer restoreRunner()
-	mockRunner.SetResponse("fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
-	mockRunner.SetResponse("sudo fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
-	mockRunner.SetResponse("fail2ban-client ping", []byte("Server replied: pong"))
-	mockRunner.SetResponse("sudo fail2ban-client ping", []byte("Server replied: pong"))
-	mockRunner.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-	mockRunner.SetResponse("sudo fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
+// TestGetLogLinesWithLimitContextOutcomes pins the exact result of the
+// limited read: the newest maxLines matching lines, nothing for a zero limit,
+// and the context error for an expired deadline.
+func TestGetLogLinesWithLimitContextOutcomes(t *testing.T) {
+	dir := t.TempDir()
+	writeFail2banLog(t, dir,
+		"2025-01-01 10:00:00 fail2ban.actions [1]: NOTICE [sshd] Ban 192.168.1.1",
+		"2025-01-01 10:01:00 fail2ban.actions [1]: NOTICE [apache] Ban 192.168.1.1",
+		"2025-01-01 10:02:00 fail2ban.actions [1]: NOTICE [sshd] Unban 192.168.1.1",
+		"2025-01-01 10:03:00 fail2ban.actions [1]: NOTICE [sshd] Ban 192.168.1.1",
+	)
+	client := &RealClient{LogDir: dir}
 
-	// Create temporary log directory
-	tmpDir := t.TempDir()
-	oldLogDir := GetLogDir()
-	SetLogDir(tmpDir)
-	defer SetLogDir(oldLogDir)
-
-	client, err := NewClient("/var/log/fail2ban", "/etc/fail2ban/filter.d")
-	require.NoError(t, err)
-
-	ctx := context.Background()
+	expired, cancel := context.WithTimeout(context.Background(), 0)
+	defer cancel()
 
 	tests := []struct {
 		name     string
-		jail     string
-		ip       string
+		expired  bool
 		maxLines int
+		want     []string
+		wantErr  error
 	}{
 		{
-			name:     "get log lines with limit",
-			jail:     "sshd",
-			ip:       "192.168.1.1",
-			maxLines: 10,
+			name:     "limit keeps the newest matching lines",
+			maxLines: 2,
+			want: []string{
+				"2025-01-01 10:02:00 fail2ban.actions [1]: NOTICE [sshd] Unban 192.168.1.1",
+				"2025-01-01 10:03:00 fail2ban.actions [1]: NOTICE [sshd] Ban 192.168.1.1",
+			},
 		},
 		{
-			name:     "zero max lines",
-			jail:     "sshd",
-			ip:       "192.168.1.1",
+			name:     "limit above the match count returns every match",
+			maxLines: 10,
+			want: []string{
+				"2025-01-01 10:00:00 fail2ban.actions [1]: NOTICE [sshd] Ban 192.168.1.1",
+				"2025-01-01 10:02:00 fail2ban.actions [1]: NOTICE [sshd] Unban 192.168.1.1",
+				"2025-01-01 10:03:00 fail2ban.actions [1]: NOTICE [sshd] Ban 192.168.1.1",
+			},
+		},
+		{
+			name:     "zero max lines returns an empty slice",
 			maxLines: 0,
+			want:     []string{},
+		},
+		{
+			name:     "expired context returns the deadline error",
+			expired:  true,
+			maxLines: 10,
+			wantErr:  context.DeadlineExceeded,
 		},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.name, func(_ *testing.T) {
-			lines, err := client.GetLogLinesWithLimitAndContext(ctx, tt.jail, tt.ip, tt.maxLines)
-
-			// May return error if no log files exist, which is ok for this test
-			_ = err
-			_ = lines
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			if tt.expired {
+				ctx = expired
+			}
+			lines, err := client.GetLogLinesWithLimitContext(ctx, "sshd", "192.168.1.1", tt.maxLines)
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+				assert.Nil(t, lines)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, lines)
 		})
 	}
 }

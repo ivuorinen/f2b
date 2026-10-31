@@ -1,7 +1,6 @@
 package fail2ban
 
 import (
-	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -19,16 +18,23 @@ type PathSecurityConfig struct {
 	ResolveSymlinks  bool     // Whether to resolve symlinks before validation
 }
 
-// GetLogAllowedPaths returns allowed paths for log directories
+// GetLogAllowedPaths returns allowed paths for log directories.
+//
+// Only /var/log: test-filter hands the filter's logpath to sudo fail2ban-regex,
+// which prints the file's lines, so every allowed tree is a tree root can be
+// made to read. Whole subtrees such as /home, /opt and /usr/local exposed other
+// users' keys and secrets under `sudo f2b`.
 func GetLogAllowedPaths() []string {
-	paths := []string{"/var/log", "/opt", "/usr/local", "/home"}
+	paths := []string{"/var/log"}
 	paths = appendDevPathsIfAllowed(paths)
 	return expandAllowedPaths(paths)
 }
 
-// GetFilterAllowedPaths returns allowed paths for filter directories
+// GetFilterAllowedPaths returns allowed paths for filter directories: the
+// fail2ban configuration locations only, never a user-writable tree such as
+// /home, because a filter file names the logpath root reads.
 func GetFilterAllowedPaths() []string {
-	paths := []string{"/etc/fail2ban", "/usr/local/etc/fail2ban", "/opt/fail2ban", "/home"}
+	paths := []string{"/etc/fail2ban", "/usr/local/etc/fail2ban", "/opt/fail2ban"}
 	paths = appendDevPathsIfAllowed(paths)
 	return expandAllowedPaths(paths)
 }
@@ -333,29 +339,20 @@ func validateFileType(path string) error {
 	return nil
 }
 
-// ValidateLogPath validates and sanitizes a log file path using standard log directory config
-// Context parameter accepted for API consistency but not currently used
-func ValidateLogPath(ctx context.Context, path string, logDir string) (string, error) {
-	_ = ctx // Context not currently used by ValidatePathWithSecurity
-	config := CreateSingleDirPathConfig(logDir)
-	return ValidatePathWithSecurity(path, config)
+// The validators below take no context: they do no blocking work, so a
+// context parameter would promise cancellation they cannot honor.
+
+// ValidateLogPath validates and sanitizes a log file path, confined to logDir.
+func ValidateLogPath(path string, logDir string) (string, error) {
+	return ValidatePathWithSecurity(path, CreateSingleDirPathConfig(logDir))
 }
 
-// validateClientPath is a generic helper for client path validation.
-// It reduces duplication between ValidateClientLogPath and ValidateClientFilterPath.
-func validateClientPath(ctx context.Context, path string, configFn func() PathSecurityConfig) (string, error) {
-	_ = ctx // Context not currently used by ValidatePathWithSecurity
-	return ValidatePathWithSecurity(path, configFn())
+// ValidateClientLogPath validates a log directory against the log allowlist.
+func ValidateClientLogPath(logDir string) (string, error) {
+	return ValidatePathWithSecurity(logDir, CreateLogPathConfig())
 }
 
-// ValidateClientLogPath validates log directory path for client initialization
-// Context parameter accepted for API consistency but not currently used
-func ValidateClientLogPath(ctx context.Context, logDir string) (string, error) {
-	return validateClientPath(ctx, logDir, CreateLogPathConfig)
-}
-
-// ValidateClientFilterPath validates filter directory path for client initialization
-// Context parameter accepted for API consistency but not currently used
-func ValidateClientFilterPath(ctx context.Context, filterDir string) (string, error) {
-	return validateClientPath(ctx, filterDir, CreateFilterPathConfig)
+// ValidateClientFilterPath validates a filter directory against the filter allowlist.
+func ValidateClientFilterPath(filterDir string) (string, error) {
+	return ValidatePathWithSecurity(filterDir, CreateFilterPathConfig())
 }

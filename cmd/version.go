@@ -16,8 +16,8 @@ func VersionCmd(config *Config) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   constants.CLICmdVersion,
 		Short: "Show f2b version",
-		Run: func(cmd *cobra.Command, _ []string) {
-			PrintOutputTo(GetCmdOutput(cmd), fmt.Sprintf(constants.VersionFormat, Version), config.Format)
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return PrintOutputTo(GetCmdOutput(cmd), fmt.Sprintf(constants.VersionFormat, Version), config.Format)
 		},
 	}
 

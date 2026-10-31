@@ -7,49 +7,30 @@ import (
 	"testing"
 )
 
-// BenchmarkOriginalLogParsing benchmarks the current log parsing implementation
-func BenchmarkOriginalLogParsing(b *testing.B) {
+// BenchmarkLimitedLogRead benchmarks a limited, jail-filtered log read through
+// the client entry point.
+func BenchmarkLimitedLogRead(b *testing.B) {
 	testLogFile := filepath.Join("testdata", "fail2ban_full.log")
 	if _, err := os.Stat(testLogFile); os.IsNotExist(err) {
 		b.Skip("Test log file not found:", testLogFile)
 	}
 
-	cleanup := setupBenchmarkLogEnvironment(b, testLogFile)
-	defer cleanup()
+	client := &RealClient{LogDir: setupBenchmarkLogDir(b, testLogFile)}
 
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for b.Loop() {
-		_, err := GetLogLinesWithLimit(context.Background(), "sshd", "", 100)
+		_, err := client.GetLogLinesWithLimitContext(context.Background(), "sshd", "", 100)
 		if err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
-// BenchmarkOptimizedLogParsing benchmarks the simplified optimized entrypoint
-func BenchmarkOptimizedLogParsing(b *testing.B) {
-	testLogFile := filepath.Join("testdata", "fail2ban_full.log")
-	if _, err := os.Stat(testLogFile); os.IsNotExist(err) {
-		b.Skip("Test log file not found:", testLogFile)
-	}
-
-	cleanup := setupBenchmarkLogEnvironment(b, testLogFile)
-	defer cleanup()
-
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for b.Loop() {
-		_, err := GetLogLinesUltraOptimized("sshd", "", 100)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-func setupBenchmarkLogEnvironment(b *testing.B, source string) func() {
+// setupBenchmarkLogDir copies source into a temp dir as fail2ban.log and
+// returns the dir.
+func setupBenchmarkLogDir(b *testing.B, source string) string {
 	b.Helper()
 	data, err := os.ReadFile(source) // #nosec G304 // Reading a test file
 	if err != nil {
@@ -62,11 +43,5 @@ func setupBenchmarkLogEnvironment(b *testing.B, source string) func() {
 	if err := os.WriteFile(dest, data, 0o600); err != nil {
 		b.Fatalf("failed to create benchmark log file: %v", err)
 	}
-
-	origDir := GetLogDir()
-	SetLogDir(tempDir)
-
-	return func() {
-		SetLogDir(origDir)
-	}
+	return tempDir
 }

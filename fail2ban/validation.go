@@ -1,12 +1,10 @@
 package fail2ban
 
 import (
-	"context"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"unicode"
 
@@ -213,15 +211,12 @@ func resolveCommandName(command string) (string, error) {
 	return command, nil
 }
 
-// ValidateArguments validates command arguments for security
+// ValidateArguments validates command arguments for security. It is the one
+// argument validator: its WithContext twin took a context it never used, so
+// the name promised cancellation that never happened.
 func ValidateArguments(args []string) error {
-	return ValidateArgumentsWithContext(context.Background(), args)
-}
-
-// ValidateArgumentsWithContext validates command arguments for security with context support
-func ValidateArgumentsWithContext(ctx context.Context, args []string) error {
 	for i, arg := range args {
-		if err := validateSingleArgument(ctx, arg, i); err != nil {
+		if err := validateSingleArgument(arg); err != nil {
 			return fmt.Errorf("argument %d invalid: %w", i, err)
 		}
 	}
@@ -229,7 +224,7 @@ func ValidateArgumentsWithContext(ctx context.Context, args []string) error {
 }
 
 // validateSingleArgument validates a single command argument
-func validateSingleArgument(_ context.Context, arg string, _ int) error {
+func validateSingleArgument(arg string) error {
 	// Check for null bytes
 	if strings.ContainsRune(arg, '\x00') {
 		return NewInvalidArgumentError(arg + " (contains null byte)")
@@ -329,32 +324,4 @@ func isValidFilterChar(r rune) bool {
 		r == '@' || // Allow @ for email-like patterns
 		r == '+' || // Allow + for variations
 		r == '~' // Allow ~ for common naming
-}
-
-// ValidateFilterName validates a filter name for path traversal prevention.
-// Rejects: "..", "/", "\", absolute paths, drive letters
-// Allows: letters, digits, dash, underscore only
-func ValidateFilterName(filter string) error {
-	filter = strings.TrimSpace(filter)
-
-	if filter == "" {
-		return fmt.Errorf("filter name cannot be empty")
-	}
-
-	// Check for path traversal
-	if ContainsPathTraversal(filter) {
-		return fmt.Errorf("filter name contains path traversal")
-	}
-
-	// Check for absolute paths
-	if filepath.IsAbs(filter) {
-		return fmt.Errorf("filter name cannot be an absolute path")
-	}
-
-	// Only allow safe characters (alphanumeric, dash, underscore)
-	if !regexp.MustCompile(`^[a-zA-Z0-9_-]+$`).MatchString(filter) {
-		return fmt.Errorf("filter name contains invalid characters")
-	}
-
-	return nil
 }

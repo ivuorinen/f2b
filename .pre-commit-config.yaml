@@ -1,17 +1,21 @@
 ---
 # yaml-language-server: $schema=https://json.schemastore.org/pre-commit-config.json
-# Hooks are run by prek, which reads this pre-commit-format config.
-# Require at least the config feature set of pre-commit 3.4.
-minimum_pre_commit_version: "3.4.0"
+# Hooks are run by prek, which reads this pre-commit-format config. No hook pins
+# a version: the file checks are prek built-ins (versioned with prek), and every
+# other hook runs a tool from mise.toml through `mise exec` or `mise run`, so
+# the git hooks, `mise run hooks` and CI all run the same versions.
 
-# Generated API docs (produced by `make docs-api`) and the vendored graphify
+# Install the commit-msg shim too (`mise run setup`), so commit-message hooks
+# below run on every commit; `stages:` alone installs nothing.
+default_install_hook_types: [pre-commit, commit-msg]
+
+# Generated API docs (produced by `mise run docs-api`) and the vendored graphify
 # skill (a third-party tool install under .claude/skills/) must not be linted,
 # reformatted, or whitespace-fixed by any hook.
 exclude: ^(docs/api/|\.claude/skills/)
 
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v6.0.0
+  - repo: builtin
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -22,79 +26,107 @@ repos:
       - id: check-json
       - id: check-shebang-scripts-are-executable
 
-  - repo: https://github.com/pre-commit/sync-pre-commit-deps
-    rev: v0.0.5
-    hooks:
-      - id: sync-pre-commit-deps
-
   - repo: local
     hooks:
       - id: golangci-lint
         name: golangci-lint
-        entry: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2 run
+        entry: mise run lint
         language: system
         types: [go]
         pass_filenames: false
 
-  - repo: https://github.com/google/yamlfmt
-    rev: v0.21.0
-    hooks:
-      - id: yamlfmt
+      # Claude Code session links must never be published; two reached main
+      # (5b45d70, 8cac473) because nothing inspected commit messages.
+      - id: no-session-reference
+        name: Reject Claude session references
+        language: pygrep
+        entry: '(?i)(^claude-session:|claude\.ai/code/session_)'
+        stages: [commit-msg]
 
-  - repo: https://github.com/DavidAnson/markdownlint-cli2
-    rev: v0.24.0
-    hooks:
+      # AGENTS.md mandates semantic commits and the goreleaser changelog
+      # filters on the type prefix; git's own Merge/Revert/fixup! subjects pass.
+      # (?x) verbose mode lets the pattern span lines in a literal block, which
+      # yamlfmt does not re-wrap past the line limit; [ ] is a literal space.
+      - id: semantic-commit-subject
+        name: Require a semantic commit subject
+        language: pygrep
+        entry: |-
+          (?x)\A(
+            (feat|fix|chore|docs|test|refactor|ci|build|perf|style|revert)(\([^)]+\))?!?:[ ]
+            | Merge[ ] | Revert[ ]" | fixup![ ] | squash![ ] | amend![ ]
+          )
+        args: [--multiline, --negate]
+        stages: [commit-msg]
+
+      # Tests that discard their *testing.T cannot fail; the shape recurred
+      # after being fixed under several findings.
+      - id: no-discarded-testing-t
+        name: Tests must use their *testing.T
+        language: pygrep
+        entry: '\(\s*_\s+\*testing\.T\s*\)'
+        files: _test\.go$
+
+      # The hooks below keep the entry, file types and file patterns of the
+      # upstream hook each one replaced.
+      - id: yamlfmt
+        name: yamlfmt
+        entry: mise exec -- yamlfmt
+        language: system
+        types: [yaml]
+
       - id: markdownlint-cli2
-        args: [--fix]
+        name: markdownlint-cli2
+        entry: mise exec -- markdownlint-cli2 --fix
+        language: system
+        types: [markdown]
         exclude: ^docs/(api|audit)/ # generated (docs/api) / machine-managed (docs/audit) markdown
 
-  - repo: https://github.com/tcort/markdown-link-check
-    rev: v3.15.0
-    hooks:
       - id: markdown-link-check
-        args: [-q, -c, .markdown-link-check.json]
+        name: markdown-link-check
+        entry: mise exec -- markdown-link-check -q -c .markdown-link-check.json
+        language: system
+        types: [markdown]
         stages: [manual] # Network-dependent; run with `prek run --stage manual`
 
-  - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.12
-    hooks:
       - id: actionlint
+        name: actionlint
+        entry: mise exec -- actionlint
+        language: system
+        types: [yaml]
+        files: ^\.github/workflows/
 
-  - repo: https://github.com/scop/pre-commit-shfmt
-    rev: v3.13.1-1
-    hooks:
       - id: shfmt
+        name: shfmt
+        entry: mise exec -- shfmt --write
+        language: system
+        types: [shell]
 
-  - repo: https://github.com/checkmake/checkmake
-    rev: v0.3.2
-    hooks:
-      - id: checkmake
-        name: Makefile Linter
-        files: ^Makefile$
-
-  - repo: https://github.com/bridgecrewio/checkov.git
-    rev: "3.3.30"
-    hooks:
+      # checkov scans the whole tree (`-d .`) once; upstream triggered only on
+      # *.tf files, which this repo has none of, so it never ran.
       - id: checkov
-        args:
-          - "--quiet"
+        name: checkov
+        entry: mise exec -- checkov -d . --quiet
+        language: system
+        files: ^\.github/workflows/.*\.ya?ml$
+        pass_filenames: false
+        require_serial: true
 
-  - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.38.2
-    hooks:
       - id: check-github-workflows
-        args: ["--verbose"]
+        name: Validate GitHub workflows
+        entry: mise exec -- check-jsonschema --builtin-schema vendor.github-workflows --verbose
+        language: system
+        types: [yaml]
+        files: ^\.github/workflows/[^/]+$
 
-  - repo: https://github.com/editorconfig-checker/editorconfig-checker
-    rev: v4.0.2
-    hooks:
       - id: editorconfig-checker
+        name: editorconfig-checker
+        entry: mise exec -- editorconfig-checker
+        language: system
         exclude: ^docs/(api|audit)/ # generated (docs/api) / machine-managed (docs/audit)
 
-  - repo: https://github.com/hukkin/mdformat
-    rev: 1.0.0
-    hooks:
       - id: mdformat
-        additional_dependencies:
-          - mdformat-gfm
+        name: mdformat
+        entry: mise exec -- mdformat
+        language: system
+        types: [markdown]
         exclude: ^(\.serena/|\.github/ISSUE_TEMPLATE/|docs/(api|audit)/)

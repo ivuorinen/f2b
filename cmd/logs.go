@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -18,11 +19,7 @@ func LogsCmd(client fail2ban.Client, config *Config) *cobra.Command {
 		func(cmd *cobra.Command, args []string) error {
 			// Derive from cmd.Context() so SIGINT cancels the read instead of
 			// waiting out the file timeout.
-			base := cmd.Context()
-			if base == nil {
-				base = context.Background()
-			}
-			ctx, cancel := context.WithTimeout(base, config.FileTimeout)
+			ctx, cancel := context.WithTimeout(cmd.Context(), config.FileTimeout)
 			defer cancel()
 
 			// Parse optional arguments
@@ -40,27 +37,28 @@ func LogsCmd(client fail2ban.Client, config *Config) *cobra.Command {
 				limit = constants.MaxLogLinesLimit
 			}
 
-			// Read-time limit when available (see logLinesLimiter): the
-			// fallback path caps at the fail2ban layer's default, so -n above
-			// that would silently truncate.
-			var lines []string
-			var err error
-			if lc, ok := client.(logLinesLimiter); ok {
-				lines, err = lc.GetLogLinesWithLimitContext(ctx, jail, ip, limit)
-			} else {
-				lines, err = client.GetLogLinesWithContext(ctx, jail, ip)
-				if err == nil && limit > 0 && len(lines) > limit {
-					lines = lines[len(lines)-limit:]
-				}
-			}
+			lines, err := client.GetLogLinesWithLimitContext(ctx, jail, ip, limit)
 			if err != nil {
 				return HandleClientError(err)
 			}
 
-			PrintOutputTo(GetCmdOutput(cmd), lines, config.Format)
-			return nil
+			return printLogLines(cmd, lines, config.Format)
 		})
 
 	AddLogFlags(cmd)
 	return cmd
+}
+
+// printLogLines writes log lines one per line in plain mode, so `f2b logs |
+// wc -l` counts matches, and as a JSON array otherwise. Printing the slice
+// through the generic plain path rendered every match space-joined inside
+// "[ ]" on a single line.
+func printLogLines(cmd *cobra.Command, lines []string, format string) error {
+	if format == JSONFormat {
+		return PrintOutputTo(GetCmdOutput(cmd), lines, format)
+	}
+	if len(lines) == 0 {
+		return nil
+	}
+	return PrintOutputTo(GetCmdOutput(cmd), strings.Join(lines, "\n"), format)
 }

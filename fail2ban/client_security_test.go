@@ -76,9 +76,32 @@ func TestNewClientPathTraversalProtection(t *testing.T) {
 		},
 		{
 			name:        "allowed alternative paths",
-			logDir:      "/opt/myapp/logs",
+			logDir:      "/var/log/myapp",
 			filterDir:   "/opt/fail2ban/filters",
 			expectError: false,
+		},
+		{
+			// test-filter makes root read the logpath, so arbitrary
+			// application trees are not an allowed log location.
+			name:          "log dir under /opt rejected",
+			logDir:        "/opt/myapp/logs",
+			filterDir:     "/etc/fail2ban/filter.d",
+			expectError:   true,
+			errorContains: "invalid log directory",
+		},
+		{
+			name:          "log dir under /home rejected",
+			logDir:        "/home/user/logs",
+			filterDir:     "/etc/fail2ban/filter.d",
+			expectError:   true,
+			errorContains: "invalid log directory",
+		},
+		{
+			name:          "filter dir under /home rejected",
+			logDir:        "/var/log",
+			filterDir:     "/home/user/filters",
+			expectError:   true,
+			errorContains: "invalid filter directory",
 		},
 		{
 			name:          "mixed case traversal in logDir",

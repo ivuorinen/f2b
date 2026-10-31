@@ -17,33 +17,33 @@ import (
 	"github.com/ivuorinen/f2b/fail2ban"
 )
 
+// readLogs reads through RealClient, the single production log-read entry
+// point, from the global log directory these tests point at.
+func readLogs(ctx context.Context, jail, ip string) ([]string, error) {
+	return (&fail2ban.RealClient{LogDir: fail2ban.GetLogDir()}).GetLogLinesWithContext(ctx, jail, ip)
+}
+
 // TestSetLogDir tests the log directory setting functionality
 func TestSetLogDir(t *testing.T) {
 	// Save original log directory using GetLogDir to avoid test pollution
 	originalLogDir := fail2ban.GetLogDir()
-
-	// Test setting a new log directory
-	testDir := "/tmp/test-logs"
-	fail2ban.SetLogDir(testDir)
+	t.Cleanup(func() { fail2ban.SetLogDir(originalLogDir) })
 
 	// Create test directory and files
 	tempDir := t.TempDir()
 	fail2ban.SetLogDir(tempDir)
 
-	// Test that GetLogLines uses the new directory
+	// The log read uses the new directory
 	logContent := "2024-01-01 12:00:00 [sshd] Test log entry"
 	err := os.WriteFile(filepath.Join(tempDir, "fail2ban.log"), []byte(logContent), 0600)
 	fail2ban.AssertError(t, err, false, "create test log file")
 
-	lines, err := fail2ban.GetLogLines(context.Background(), "", "")
-	fail2ban.AssertError(t, err, false, "GetLogLines")
+	lines, err := readLogs(context.Background(), "", "")
+	fail2ban.AssertError(t, err, false, "readLogs")
 
 	if len(lines) != 1 || lines[0] != logContent {
 		t.Errorf("expected log content %q, got %v", logContent, lines)
 	}
-
-	// Restore original directory
-	fail2ban.SetLogDir(originalLogDir)
 }
 
 // TestSetRunner tests the runner setting functionality
@@ -63,8 +63,13 @@ func TestSetRunner(t *testing.T) {
 	// Test that the runner is used
 	testRunner.SetResponse("fail2ban-client status sshd", []byte("test-output"))
 
-	output, err := fail2ban.RunnerCombinedOutput("fail2ban-client", "status", "sshd")
-	fail2ban.AssertError(t, err, false, "RunnerCombinedOutput")
+	output, err := fail2ban.RunnerCombinedOutputWithSudoContext(
+		context.Background(),
+		"fail2ban-client",
+		"status",
+		"sshd",
+	)
+	fail2ban.AssertError(t, err, false, "RunnerCombinedOutputWithSudoContext")
 
 	if string(output) != "test-output" {
 		t.Errorf("expected output %q, got %q", "test-output", string(output))
@@ -91,8 +96,9 @@ func TestOSRunnerWithSudo(t *testing.T) {
 		Errors:    map[string]error{},
 	}
 	fail2ban.SetRunner(mock)
-	out, err := fail2ban.RunnerCombinedOutput("sudo", "fail2ban-client", "status")
-	fail2ban.AssertError(t, err, false, "RunnerCombinedOutput with sudo (mocked)")
+	out, err := fail2ban.GetRunner().
+		CombinedOutputWithContext(context.Background(), "sudo", "fail2ban-client", "status")
+	fail2ban.AssertError(t, err, false, "CombinedOutputWithContext with sudo (mocked)")
 	if strings.TrimSpace(string(out)) != "ok" {
 		t.Fatalf("expected %q, got %q", "ok", strings.TrimSpace(string(out)))
 	}
@@ -200,7 +206,7 @@ func TestLogFileReading(t *testing.T) {
 			}
 
 			// Test reading
-			lines, err := fail2ban.GetLogLines(context.Background(), "", "")
+			lines, err := readLogs(context.Background(), "", "")
 			fail2ban.AssertError(t, err, false, tt.name)
 
 			validateLogLines(t, lines, tt.expected, tt.name)
@@ -228,7 +234,7 @@ func TestLogFileOrdering(t *testing.T) {
 		}
 	}
 
-	lines, err := fail2ban.GetLogLines(context.Background(), "", "")
+	lines, err := readLogs(context.Background(), "", "")
 	fail2ban.AssertError(t, err, false, "GetLogLines ordering test")
 
 	// Should be in chronological order: oldest rotated first, then current
@@ -322,7 +328,7 @@ func TestLogFiltering(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			lines, err := fail2ban.GetLogLines(context.Background(), tt.jailFilter, tt.ipFilter)
+			lines, err := readLogs(context.Background(), tt.jailFilter, tt.ipFilter)
 			fail2ban.AssertError(t, err, false, tt.name)
 
 			if len(lines) != tt.expectedCount {
@@ -359,7 +365,7 @@ func TestBanRecordFormatting(t *testing.T) {
 	client, err := fail2ban.NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
 	fail2ban.AssertError(t, err, false, "create client")
 
-	records, err := client.GetBanRecords([]string{"sshd"})
+	records, err := client.GetBanRecordsWithContext(context.Background(), []string{"sshd"})
 	fail2ban.AssertError(t, err, false, "GetBanRecords")
 
 	if len(records) != 1 {
@@ -548,13 +554,13 @@ func TestConcurrentAccess(t *testing.T) {
 			defer func() { done <- true }()
 
 			// Test various operations
-			_, err := client.ListJails()
+			_, err := client.ListJailsWithContext(context.Background())
 			if err != nil {
 				errors <- err
 				return
 			}
 
-			_, err = client.BannedIn("192.168.1.100")
+			_, err = client.BannedInWithContext(context.Background(), "192.168.1.100")
 			if err != nil {
 				errors <- err
 				return
@@ -591,7 +597,7 @@ func TestMemoryUsage(t *testing.T) {
 		fail2ban.AssertError(t, err, false, "create client in memory test")
 
 		// Use the client
-		_, err = client.ListJails()
+		_, err = client.ListJailsWithContext(context.Background())
 		fail2ban.AssertError(t, err, false, "list jails in memory test")
 
 		// Client should be garbage collected

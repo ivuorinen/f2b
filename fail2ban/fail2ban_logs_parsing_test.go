@@ -128,10 +128,10 @@ func TestParseLogLineWithRealData(t *testing.T) {
 func assertProductionFilterPath(t *testing.T, line, wantJail, wantIP string) {
 	t.Helper()
 	if wantJail != "" {
-		if !passesFilters(line, LogReadConfig{JailFilter: wantJail}) {
+		if !passesFilters(line, prepareLogFilters(LogReadConfig{JailFilter: wantJail})) {
 			t.Errorf("passesFilters(jail=%q) = false, want true for line %q", wantJail, line)
 		}
-		if passesFilters(line, LogReadConfig{JailFilter: "no-such-jail"}) {
+		if passesFilters(line, prepareLogFilters(LogReadConfig{JailFilter: "no-such-jail"})) {
 			t.Errorf("passesFilters(jail=no-such-jail) = true, want false for line %q", line)
 		}
 	}
@@ -282,7 +282,7 @@ func TestGetLogLinesWithRealTestData(t *testing.T) {
 // minimum line count, expected content, and per-line filter correctness.
 func assertGetLogLinesCase(t *testing.T, jail, ip string, wantMinimum int, checkLine string) {
 	t.Helper()
-	lines, err := GetLogLines(context.Background(), jail, ip)
+	lines, err := readLogs(context.Background(), jail, ip)
 	if err != nil {
 		t.Fatalf("GetLogLines failed: %v", err)
 	}
@@ -307,10 +307,7 @@ func assertGetLogLinesCase(t *testing.T, jail, ip string, wantMinimum int, check
 
 func TestParseBanRecordsFromRealLogs(t *testing.T) {
 	// Test with real ban/unban patterns from production
-	parser, err := NewBanRecordParser()
-	if err != nil {
-		t.Fatal(err)
-	}
+	parser := NewBanRecordParser()
 
 	tests := []struct {
 		name      string
@@ -444,7 +441,7 @@ func TestMalformedLogHandling(t *testing.T) {
 	defer cleanup()
 
 	// Should handle malformed entries gracefully
-	lines, err := GetLogLines(context.Background(), "", "")
+	lines, err := readLogs(context.Background(), "", "")
 	if err != nil {
 		t.Fatalf("GetLogLines should handle malformed entries: %v", err)
 	}
@@ -480,7 +477,7 @@ func TestMultiJailLogParsing(t *testing.T) {
 
 	for _, jail := range jails {
 		t.Run("jail_"+jail, func(t *testing.T) {
-			lines, err := GetLogLines(context.Background(), jail, "")
+			lines, err := readLogs(context.Background(), jail, "")
 			if err != nil {
 				t.Fatalf("GetLogLines failed for jail %s: %v", jail, err)
 			}
@@ -508,8 +505,9 @@ func isNumeric(s string) bool {
 
 // TestParseLogFilesOrdering verifies rotated logs are ordered oldest-first for
 // both logrotate schemes: numbered (higher N = older) and dateext (higher
-// date = newer). A newest-first order would make appendAndTrim keep the
-// oldest rotated lines and drop the newest when MaxLines trims.
+// date = newer). collectLogLines walks this list backwards (newest first), so a
+// wrong order would read the oldest rotated lines first and drop the newest
+// when MaxLines trims.
 func TestParseLogFilesOrdering(t *testing.T) {
 	t.Run("numbered scheme", func(t *testing.T) {
 		assertRotatedOrder(t,

@@ -35,13 +35,23 @@ func BannedCmd(client bannedClient, config *Config) *cobra.Command {
 				return err
 			}
 
-			records, err := client.GetBanRecordsWithContext(ctx, []string{target})
+			// "all" fans out over every jail, so it gets the multi-jail budget
+			// (derived from cmd.Context(), not from the CommandTimeout context,
+			// which it cannot outlive): under CommandTimeout alone a host with
+			// many jails always failed with "context deadline exceeded".
+			recordsCtx := ctx
+			if target == constants.AllFilter {
+				parallelCtx, parallelCancel := context.WithTimeout(cmd.Context(), config.ParallelTimeout)
+				defer parallelCancel()
+				recordsCtx = parallelCtx
+			}
+
+			records, err := client.GetBanRecordsWithContext(recordsCtx, []string{target})
 			if err != nil {
 				return HandleClientError(err)
 			}
 
-			printBanRecords(cmd, records, config.Format)
-			return nil
+			return printBanRecords(cmd, records, config.Format)
 		})
 }
 
@@ -73,13 +83,22 @@ func resolveBannedJail(ctx context.Context, client bannedClient, args []string) 
 	return target, nil
 }
 
-// printBanRecords writes ban records in the requested format.
-func printBanRecords(cmd *cobra.Command, records []fail2ban.BanRecord, format string) {
+// printBanRecords writes ban records in the requested format. Plain output is
+// built in memory and written once: one unbuffered write per record made a
+// large ban list cost one write(2) per banned IP.
+func printBanRecords(cmd *cobra.Command, records []fail2ban.BanRecord, format string) error {
 	if format == JSONFormat {
-		PrintOutputTo(GetCmdOutput(cmd), records, format)
-		return
+		return PrintOutputTo(GetCmdOutput(cmd), records, format)
 	}
-	for _, r := range records {
-		PrintOutputTo(GetCmdOutput(cmd), r.Jail+" | "+r.IP+" | "+r.Remaining+" remaining", format)
+	if len(records) == 0 {
+		return nil
 	}
+	var b strings.Builder
+	for i, r := range records {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(r.Jail + " | " + r.IP + " | " + r.Remaining + " remaining")
+	}
+	return PrintOutputTo(GetCmdOutput(cmd), b.String(), format)
 }

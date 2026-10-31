@@ -20,11 +20,11 @@ func newTestLogger(buf *bytes.Buffer, format SlogFormat, level slog.Level) *Slog
 }
 
 func TestSlogAdapter_ImplementsInterface(t *testing.T) {
-	// Compile-time proof that the concrete adapter satisfies LoggerInterface;
+	// Compile-time proof that the concrete adapter satisfies LoggerEntry;
 	// exercising it keeps the test failing-capable rather than tautological.
 	var buf bytes.Buffer
 	iface := newTestLogger(&buf, SlogText, slog.LevelInfo)
-	var _ LoggerInterface = iface
+	var _ LoggerEntry = iface
 	iface.WithField("k", "v").Info("implements interface")
 	assert.Contains(t, buf.String(), "implements interface")
 }
@@ -89,14 +89,14 @@ func TestSlogAdapter_LogLevels(t *testing.T) {
 	tests := []struct {
 		name     string
 		logLevel slog.Level
-		logFunc  func(LoggerInterface)
+		logFunc  func(LoggerEntry)
 		expected bool
 	}{
-		{"debug_enabled", slog.LevelDebug, func(l LoggerInterface) { l.Debug("debug message") }, true},
-		{"info_enabled", slog.LevelInfo, func(l LoggerInterface) { l.Info("info message") }, true},
-		{"warn_enabled", slog.LevelWarn, func(l LoggerInterface) { l.Warn("warn message") }, true},
-		{"error_enabled", slog.LevelError, func(l LoggerInterface) { l.Error("error message") }, true},
-		{"debug_disabled_at_info_level", slog.LevelInfo, func(l LoggerInterface) { l.Debug("debug message") }, false},
+		{"debug_enabled", slog.LevelDebug, func(l LoggerEntry) { l.Debug("debug message") }, true},
+		{"info_enabled", slog.LevelInfo, func(l LoggerEntry) { l.Info("info message") }, true},
+		{"warn_enabled", slog.LevelWarn, func(l LoggerEntry) { l.Warn("warn message") }, true},
+		{"error_enabled", slog.LevelError, func(l LoggerEntry) { l.Error("error message") }, true},
+		{"debug_disabled_at_info_level", slog.LevelInfo, func(l LoggerEntry) { l.Debug("debug message") }, false},
 	}
 
 	for _, tt := range tests {
@@ -118,13 +118,13 @@ func TestSlogAdapter_LogLevels(t *testing.T) {
 func TestSlogAdapter_FormattedLogs(t *testing.T) {
 	tests := []struct {
 		name     string
-		logFunc  func(LoggerInterface)
+		logFunc  func(LoggerEntry)
 		expected string
 	}{
-		{"debugf", func(l LoggerInterface) { l.Debugf("formatted %s %d", "test", 42) }, "formatted test 42"},
-		{"infof", func(l LoggerInterface) { l.Infof("info %s", "test") }, "info test"},
-		{"warnf", func(l LoggerInterface) { l.Warnf("warn %d", 123) }, "warn 123"},
-		{"errorf", func(l LoggerInterface) { l.Errorf("error %v", "failed") }, "error failed"},
+		{"debugf", func(l LoggerEntry) { l.Debugf("formatted %s %d", "test", 42) }, "formatted test 42"},
+		{"infof", func(l LoggerEntry) { l.Infof("info %s", "test") }, "info test"},
+		{"warnf", func(l LoggerEntry) { l.Warnf("warn %d", 123) }, "warn 123"},
+		{"errorf", func(l LoggerEntry) { l.Errorf("error %v", "failed") }, "error failed"},
 	}
 
 	for _, tt := range tests {

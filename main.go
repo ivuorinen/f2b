@@ -12,7 +12,7 @@ import (
 
 func main() {
 	// Set up centralized logging - the fail2ban package logs through cmd.Logger,
-	// which implements fail2ban.LoggerInterface directly (slog-backed).
+	// which implements fail2ban.LoggerEntry directly (slog-backed).
 	fail2ban.SetLogger(cmd.Logger)
 
 	// Reuse the config the cmd package built at init (its flags are bound to
@@ -46,7 +46,7 @@ func main() {
 	// A signal-interrupted but gracefully completed run (Ctrl-C on logs-watch)
 	// exits 130/143 so scripts can tell interruption from success. Exiting
 	// here, after Execute's deferred cleanup ran, keeps graceful shutdown
-	// (metrics persisted, log file closed) intact.
+	// (log file closed) intact.
 	if code := cmd.SignalExitCode(); code != 0 {
 		os.Exit(code)
 	}

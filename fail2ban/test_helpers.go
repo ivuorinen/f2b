@@ -1,62 +1,21 @@
 package fail2ban
 
-import (
-	"compress/gzip"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
+// Test support shared with the cmd and main test packages. It has to live in
+// a non-test file because Go test files are invisible to other packages, and
+// it cannot move to a separate fail2bantest package because fail2ban's own
+// internal tests use it too (that package would import fail2ban, a cycle).
+// It must not import "testing": that would link the testing package into the
+// release binary. TestingInterface stands in for testing.TB, and helpers used
+// only by fail2ban's own tests live in _test.go files.
 
+import (
 	"github.com/ivuorinen/f2b/constants"
 )
 
-// TestingInterface represents the common interface between testing.T and testing.B
+// TestingInterface is the subset of testing.TB these helpers need.
 type TestingInterface interface {
 	Helper()
 	Fatalf(format string, args ...any)
-	Skipf(format string, args ...any)
-	TempDir() string
-}
-
-// setupTestLogEnvironment creates a temp directory, copies test data, and sets up log directory
-// Returns a cleanup function that should be deferred
-func setupTestLogEnvironment(t *testing.T, testDataFile string) (cleanup func()) {
-	t.Helper()
-	// Validate test data file exists and is safe to read
-	absTestLogFile, err := filepath.Abs(testDataFile)
-	if err != nil {
-		t.Fatalf(constants.ErrFailedToGetAbsPath, err)
-	}
-	if _, err := os.Stat(absTestLogFile); os.IsNotExist(err) {
-		t.Skipf(constants.ErrTestDataNotFound, absTestLogFile)
-	}
-
-	// Ensure the file is within testdata directory for security
-	if !strings.Contains(absTestLogFile, constants.TestDataDir) {
-		t.Fatalf("Test file must be in testdata directory: %s", absTestLogFile)
-	}
-
-	// Create temp directory and copy test file
-	tempDir := t.TempDir()
-	mainLog := filepath.Join(tempDir, "fail2ban.log")
-
-	// #nosec G304 - This is test code reading controlled test data files
-	data, err := os.ReadFile(absTestLogFile)
-	if err != nil {
-		t.Fatalf("Failed to read test file: %v", err)
-	}
-	// #nosec G703 -- path is constructed from t.TempDir() and a literal string, not user input
-	if err := os.WriteFile(mainLog, data, constants.DefaultFilePermissions); err != nil {
-		t.Fatalf("Failed to create test log: %v", err)
-	}
-
-	// Set up test environment
-	origLogDir := GetLogDir()
-	SetLogDir(tempDir)
-
-	return func() {
-		SetLogDir(origLogDir)
-	}
 }
 
 // SetupMockEnvironment sets up complete mock environment with client, runner, and sudo checker
@@ -134,16 +93,6 @@ func SetupMockEnvironmentWithSudo(t TestingInterface, hasSudo bool) (client *Moc
 	return mockClient, cleanup
 }
 
-// SetupBasicMockClient creates a mock client with standard responses configured
-func SetupBasicMockClient() *MockClient {
-	client := NewMockClient()
-	// Set up common test data
-	client.StatusAllData = "Status: [sshd, apache] Jail list: sshd, apache"
-	client.StatusJailData["sshd"] = "Status for jail: sshd"
-	client.StatusJailData["apache"] = "Status for jail: apache"
-	return client
-}
-
 // AssertError provides standardized error checking for tests
 func AssertError(t TestingInterface, err error, expectError bool, testName string) {
 	t.Helper()
@@ -153,114 +102,6 @@ func AssertError(t TestingInterface, err error, expectError bool, testName strin
 	if !expectError && err != nil {
 		t.Fatalf(constants.ErrTestUnexpected, testName, err)
 	}
-}
-
-// AssertErrorContains checks that error contains expected substring
-func AssertErrorContains(t TestingInterface, err error, expectedSubstring string, testName string) {
-	t.Helper()
-	if err == nil {
-		t.Fatalf("%s: expected error containing %q but got none", testName, expectedSubstring)
-	}
-	if !strings.Contains(err.Error(), expectedSubstring) {
-		t.Fatalf("%s: expected error containing %q but got %q", testName, expectedSubstring, err.Error())
-	}
-}
-
-// AssertCommandSuccess checks that command succeeded and output contains expected text
-func AssertCommandSuccess(t TestingInterface, err error, output, expectedOutput, testName string) {
-	t.Helper()
-	if err != nil {
-		t.Fatalf(constants.ErrTestUnexpectedWithOutput, testName, err, output)
-	}
-	if expectedOutput != "" && !strings.Contains(output, expectedOutput) {
-		t.Fatalf(constants.ErrTestExpectedOutput, testName, expectedOutput, output)
-	}
-}
-
-// AssertCommandError checks that command failed and output contains expected error text
-func AssertCommandError(t TestingInterface, err error, output, expectedError, testName string) {
-	t.Helper()
-	if err == nil {
-		t.Fatalf("%s: expected error but got none, output: %s", testName, output)
-	}
-	if expectedError != "" && !strings.Contains(output, expectedError) {
-		t.Fatalf("%s: expected error output to contain %q, got: %s", testName, expectedError, output)
-	}
-}
-
-// createTestGzipFile creates a gzip file with given content for testing
-func createTestGzipFile(t TestingInterface, path string, content []byte) {
-	// Validate path is safe for test file creation
-	if !strings.Contains(path, os.TempDir()) && !strings.Contains(path, constants.TestDataDir) {
-		t.Fatalf("Test file path must be in temp directory or testdata: %s", path)
-	}
-
-	// #nosec G304 - This is test code creating files in controlled test locations
-	f, err := os.Create(path)
-	if err != nil {
-		t.Fatalf("Failed to create gzip file: %v", err)
-	}
-	defer func() {
-		if err := f.Close(); err != nil {
-			t.Fatalf("Failed to close file: %v", err)
-		}
-	}()
-
-	gz := gzip.NewWriter(f)
-
-	_, err = gz.Write(content)
-	if err != nil {
-		t.Fatalf("Failed to write gzip content: %v", err)
-	}
-	if err := gz.Close(); err != nil {
-		t.Fatalf("Failed to close gzip writer: %v", err)
-	}
-}
-
-// setupTempDirWithFiles creates a temp directory with multiple test files
-func setupTempDirWithFiles(t TestingInterface, files map[string][]byte) string {
-	tempDir := t.TempDir()
-
-	for filename, content := range files {
-		path := filepath.Join(tempDir, filename)
-		if err := os.WriteFile(path, content, constants.DefaultFilePermissions); err != nil {
-			t.Fatalf("Failed to create file %s: %v", filename, err)
-		}
-	}
-
-	return tempDir
-}
-
-// validateTestDataFile checks if a test data file exists and returns its absolute path
-func validateTestDataFile(t *testing.T, testDataFile string) string {
-	t.Helper()
-	absTestLogFile, err := filepath.Abs(testDataFile)
-	if err != nil {
-		t.Fatalf(constants.ErrFailedToGetAbsPath, err)
-	}
-	if _, err := os.Stat(absTestLogFile); os.IsNotExist(err) {
-		t.Skipf(constants.ErrTestDataNotFound, absTestLogFile)
-	}
-	return absTestLogFile
-}
-
-// assertMinimumLines checks that result has at least the expected number of lines
-func assertMinimumLines(t *testing.T, lines []string, minimum int, description string) {
-	t.Helper()
-	if len(lines) < minimum {
-		t.Errorf("Expected at least %d %s, got %d", minimum, description, len(lines))
-	}
-}
-
-// assertContainsText checks that at least one line contains the expected text
-func assertContainsText(t *testing.T, lines []string, text string) {
-	t.Helper()
-	for _, line := range lines {
-		if strings.Contains(line, text) {
-			return
-		}
-	}
-	t.Errorf("Expected to find '%s' in results", text)
 }
 
 // WithTestRunner sets a test runner and returns a cleanup function.
@@ -275,22 +116,22 @@ func WithTestRunner(t TestingInterface, runner Runner) func() {
 // MustMockRunner returns the current global runner as a *MockRunner, failing
 // the test when the global runner is anything else (e.g. a prior test leaked
 // a different runner).
-func MustMockRunner(tb testing.TB) *MockRunner {
-	tb.Helper()
+func MustMockRunner(t TestingInterface) *MockRunner {
+	t.Helper()
 	mock, ok := GetRunner().(*MockRunner)
 	if !ok {
-		tb.Fatalf("global runner is %T, want *MockRunner", GetRunner())
+		t.Fatalf("global runner is %T, want *MockRunner", GetRunner())
 	}
 	return mock
 }
 
 // MustMockSudoChecker returns the current sudo checker as a *MockSudoChecker,
 // failing the test when it is anything else.
-func MustMockSudoChecker(tb testing.TB) *MockSudoChecker {
-	tb.Helper()
+func MustMockSudoChecker(t TestingInterface) *MockSudoChecker {
+	t.Helper()
 	mock, ok := GetSudoChecker().(*MockSudoChecker)
 	if !ok {
-		tb.Fatalf("sudo checker is %T, want *MockSudoChecker", GetSudoChecker())
+		t.Fatalf("sudo checker is %T, want *MockSudoChecker", GetSudoChecker())
 	}
 	return mock
 }

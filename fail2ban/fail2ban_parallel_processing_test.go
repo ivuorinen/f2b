@@ -2,6 +2,7 @@ package fail2ban
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 )
@@ -132,5 +133,26 @@ func TestProcessJailsParallelCancellation(t *testing.T) {
 	}
 	if records != nil {
 		t.Errorf("expected nil records on cancellation, got %v", records)
+	}
+}
+
+// TestProcessJailsParallelNoBansIsEmptyNotNil pins the JSON contract of
+// `banned all`: the result is encoded directly, and a nil slice printed null,
+// which jq cannot iterate.
+func TestProcessJailsParallelNoBansIsEmptyNotNil(t *testing.T) {
+	records, err := ProcessJailsParallel(context.Background(), []string{"sshd", "apache"},
+		func(context.Context, string) ([]BanRecord, error) { return nil, nil })
+	if err != nil {
+		t.Fatalf("ProcessJailsParallel returned error: %v", err)
+	}
+	if records == nil {
+		t.Fatal("ProcessJailsParallel returned nil for a no-ban run, want an empty slice")
+	}
+	out, err := json.Marshal(records)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if string(out) != "[]" {
+		t.Errorf("JSON = %s, want []", out)
 	}
 }
