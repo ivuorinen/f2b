@@ -33,5 +33,6 @@ Rules:
 - If graphify-out/wiki/index.md exists, use it for broad navigation instead of
   raw source browsing.
 - For broad architecture review, analyze graphify-out/GRAPH_REPORT.md with
-  `ctx_execute_file`; never read it whole.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+  `ctx_execute_file` instead of reading it whole. When that cannot answer the
+  question, say so and ask before reading the report directly.
+- After modifying code, run `graphify update .` to keep the graph current (abstract syntax tree only, no API cost).
