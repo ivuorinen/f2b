@@ -97,8 +97,8 @@ func currentGroupNames() ([]string, error) {
 // defaultSudoProbe runs the non-interactive sudo probes against the real sudo binary.
 func defaultSudoProbe(ctx context.Context) error {
 	return probeSudo(ctx, func(ctx context.Context, args ...string) error {
-		// #nosec G204 -- constants.SudoCommand is a hardcoded constant "sudo"; args are fixed literals
-		return exec.CommandContext(ctx, constants.SudoCommand, args...).Run()
+		// #nosec G204 -- the command is the literal "sudo"; args are probeSudo's fixed literals
+		return exec.CommandContext(ctx, "sudo", args...).Run()
 	})
 }
 

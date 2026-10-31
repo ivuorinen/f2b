@@ -343,7 +343,7 @@ func validateFileType(path string) error {
 // context parameter would promise cancellation they cannot honor.
 
 // ValidateLogPath validates and sanitizes a log file path, confined to logDir.
-func ValidateLogPath(path string, logDir string) (string, error) {
+func ValidateLogPath(path, logDir string) (string, error) {
 	return ValidatePathWithSecurity(path, CreateSingleDirPathConfig(logDir))
 }
 

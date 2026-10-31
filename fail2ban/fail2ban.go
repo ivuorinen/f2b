@@ -72,6 +72,9 @@ func validateCommandExecution(name string, args []string) error {
 // N". The trimmed output is therefore folded into the error, keeping the
 // ExitError reachable through errors.As.
 func runCombined(ctx context.Context, name string, args ...string) ([]byte, error) {
+	// name cannot be a literal: ValidateCommand admits an allowlisted bare name
+	// or a trusted absolute path, which keeps sudo from resolving it via PATH.
+	// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command, go_subproc_rule-subproc
 	cmd := exec.CommandContext(ctx, name, args...) // #nosec G204 -- callers validate via validateCommandExecution
 	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
 	cmd.WaitDelay = commandWaitDelay
