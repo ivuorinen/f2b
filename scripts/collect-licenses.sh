@@ -35,9 +35,11 @@ printf '%s\n' "$mods" | while IFS='=' read -r mod dir; do
   found=
   for f in "$dir"/LICENSE* "$dir"/LICENCE* "$dir"/COPYING* "$dir"/NOTICE*; do
     if [ -f "$f" ]; then
-      printf '==> %s/%s <==\n\n' "$mod" "${f##*/}" >>"$out"
-      cat "$f" >>"$out"
-      printf '\n' >>"$out"
+      {
+        printf '==> %s/%s <==\n\n' "$mod" "${f##*/}"
+        cat "$f"
+        printf '\n'
+      } >>"$out"
       found=1
     fi
   done
