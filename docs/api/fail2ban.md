@@ -248,7 +248,7 @@ func AssertError(t TestingInterface, err error, expectError bool, testName strin
 AssertError provides standardized error checking for tests
 
 <a name="CheckSudoRequirements"></a>
-## func [CheckSudoRequirements](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L194>)
+## func [CheckSudoRequirements](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L197>)
 
 ```go
 func CheckSudoRequirements() error
@@ -445,7 +445,7 @@ func ParseJailList(output string) ([]string, error)
 ParseJailList parses the jail list output from fail2ban\-client status
 
 <a name="RequiresSudo"></a>
-## func [RequiresSudo](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L152>)
+## func [RequiresSudo](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L155>)
 
 ```go
 func RequiresSudo(command string, args ...string) bool
@@ -1586,7 +1586,7 @@ type RealSudoChecker struct {
 ```
 
 <a name="RealSudoChecker.CanUseSudo"></a>
-### func \(\*RealSudoChecker\) [CanUseSudo](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L120>)
+### func \(\*RealSudoChecker\) [CanUseSudo](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L123>)
 
 ```go
 func (r *RealSudoChecker) CanUseSudo() bool
@@ -1595,7 +1595,7 @@ func (r *RealSudoChecker) CanUseSudo() bool
 CanUseSudo returns true if the current user can use sudo
 
 <a name="RealSudoChecker.HasSudoPrivileges"></a>
-### func \(\*RealSudoChecker\) [HasSudoPrivileges](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L138>)
+### func \(\*RealSudoChecker\) [HasSudoPrivileges](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L141>)
 
 ```go
 func (r *RealSudoChecker) HasSudoPrivileges() bool

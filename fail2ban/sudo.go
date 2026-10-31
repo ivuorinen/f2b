@@ -97,8 +97,11 @@ func currentGroupNames() ([]string, error) {
 // defaultSudoProbe runs the non-interactive sudo probes against the real sudo binary.
 func defaultSudoProbe(ctx context.Context) error {
 	return probeSudo(ctx, func(ctx context.Context, args ...string) error {
-		// #nosec G204 -- the command is the literal "sudo"; args are probeSudo's fixed literals
-		return exec.CommandContext(ctx, "sudo", args...).Run()
+		// #nosec G204 -- constants.SudoCommand is the compile-time constant "sudo"
+		// and args are probeSudo's fixed literals. Opengrep cannot resolve a
+		// constant from another package, hence the nosemgrep below.
+		// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command, go_subproc_rule-subproc
+		return exec.CommandContext(ctx, constants.SudoCommand, args...).Run()
 	})
 }
 
