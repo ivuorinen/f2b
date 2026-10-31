@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"slices"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ivuorinen/f2b/constants"
 )
@@ -21,7 +23,7 @@ func TestProbeSudoAcceptsFail2banScopedGrant(t *testing.T) {
 	tests := []struct {
 		name      string
 		allowed   func(args []string) bool
-		wantErr   bool
+		wantErr   error
 		wantCalls [][]string
 	}{
 		{
@@ -37,7 +39,7 @@ func TestProbeSudoAcceptsFail2banScopedGrant(t *testing.T) {
 		{
 			name:      "no grant fails both probes",
 			allowed:   func([]string) bool { return false },
-			wantErr:   true,
+			wantErr:   errDenied,
 			wantCalls: [][]string{{"-n", "true"}, scoped},
 		},
 	}
@@ -51,17 +53,8 @@ func TestProbeSudoAcceptsFail2banScopedGrant(t *testing.T) {
 				}
 				return errDenied
 			})
-			if (err != nil) != tt.wantErr {
-				t.Fatalf("probeSudo() error = %v, wantErr %v", err, tt.wantErr)
-			}
-			if len(calls) != len(tt.wantCalls) {
-				t.Fatalf("probe calls = %v, want %v", calls, tt.wantCalls)
-			}
-			for i := range calls {
-				if strings.Join(calls[i], " ") != strings.Join(tt.wantCalls[i], " ") {
-					t.Fatalf("probe call %d = %v, want %v", i, calls[i], tt.wantCalls[i])
-				}
-			}
+			require.ErrorIs(t, err, tt.wantErr)
+			assert.Equal(t, tt.wantCalls, calls)
 		})
 	}
 }

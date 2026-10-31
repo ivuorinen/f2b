@@ -203,3 +203,129 @@ func TestCanUseSudo_MockConsistency(t *testing.T) {
 		assert.False(t, checker.CanUseSudo(), "Should return false when mock is set to false")
 	})
 }
+
+func TestMockSudoChecker(t *testing.T) {
+	tests := []struct {
+		name               string
+		isRoot             bool
+		inSudoGroup        bool
+		canUseSudo         bool
+		expectedPrivileges bool
+	}{
+		{
+			name:               "root user",
+			isRoot:             true,
+			inSudoGroup:        false,
+			canUseSudo:         false,
+			expectedPrivileges: true,
+		},
+		{
+			name:               "sudo group member",
+			isRoot:             false,
+			inSudoGroup:        true,
+			canUseSudo:         false,
+			expectedPrivileges: true,
+		},
+		{
+			name:               "can use sudo",
+			isRoot:             false,
+			inSudoGroup:        false,
+			canUseSudo:         true,
+			expectedPrivileges: true,
+		},
+		{
+			name:               "no privileges",
+			isRoot:             false,
+			inSudoGroup:        false,
+			canUseSudo:         false,
+			expectedPrivileges: false,
+		},
+		{
+			name:               "all privileges",
+			isRoot:             true,
+			inSudoGroup:        true,
+			canUseSudo:         true,
+			expectedPrivileges: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &MockSudoChecker{
+				MockIsRoot:      tt.isRoot,
+				MockInSudoGroup: tt.inSudoGroup,
+				MockCanUseSudo:  tt.canUseSudo,
+			}
+
+			if mock.IsRoot() != tt.isRoot {
+				t.Errorf("IsRoot() = %v, want %v", mock.IsRoot(), tt.isRoot)
+			}
+			if mock.InSudoGroup() != tt.inSudoGroup {
+				t.Errorf("InSudoGroup() = %v, want %v", mock.InSudoGroup(), tt.inSudoGroup)
+			}
+			if mock.CanUseSudo() != tt.canUseSudo {
+				t.Errorf("CanUseSudo() = %v, want %v", mock.CanUseSudo(), tt.canUseSudo)
+			}
+			if mock.HasSudoPrivileges() != tt.expectedPrivileges {
+				t.Errorf("HasSudoPrivileges() = %v, want %v", mock.HasSudoPrivileges(), tt.expectedPrivileges)
+			}
+		})
+	}
+}
+
+func TestMockSudoCheckerWithPrivileges(t *testing.T) {
+	tests := []struct {
+		name          string
+		hasPrivileges bool
+	}{
+		{
+			name:          "has privileges",
+			hasPrivileges: true,
+		},
+		{
+			name:          "no privileges",
+			hasPrivileges: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &MockSudoChecker{
+				MockHasPrivileges:     tt.hasPrivileges,
+				ExplicitPrivilegesSet: true,
+			}
+
+			if mock.HasSudoPrivileges() != tt.hasPrivileges {
+				t.Errorf("HasSudoPrivileges() = %v, want %v", mock.HasSudoPrivileges(), tt.hasPrivileges)
+			}
+		})
+	}
+}
+
+func TestMockSudoCheckerEdgeCases(t *testing.T) {
+	// Test edge cases with explicit MockHasPrivileges override
+	mock := &MockSudoChecker{
+		MockIsRoot:            false,
+		MockInSudoGroup:       false,
+		MockCanUseSudo:        false,
+		MockHasPrivileges:     true, // Override to true despite other fields being false
+		ExplicitPrivilegesSet: true,
+	}
+
+	if !mock.HasSudoPrivileges() {
+		t.Error("expected HasSudoPrivileges() to return true when MockHasPrivileges is true")
+	}
+
+	// Test the opposite
+	mock2 := &MockSudoChecker{
+		MockIsRoot:            true,
+		MockInSudoGroup:       true,
+		MockCanUseSudo:        true,
+		MockHasPrivileges:     false, // Override to false despite other fields being true
+		ExplicitPrivilegesSet: true,
+	}
+
+	if mock2.HasSudoPrivileges() {
+		t.Error("expected HasSudoPrivileges() to return false when MockHasPrivileges is false")
+	}
+}

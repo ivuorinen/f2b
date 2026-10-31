@@ -93,10 +93,10 @@ func TestBanIPWithContext(t *testing.T) {
 	}
 }
 
-// TestGetLogLinesWithLimitContextOutcomes pins the exact result of the
-// limited read: the newest maxLines matching lines, nothing for a zero limit,
-// and the context error for an expired deadline.
-func TestGetLogLinesWithLimitContextOutcomes(t *testing.T) {
+// newLimitReadClient returns a client over a log with three sshd entries for
+// 192.168.1.1 around one apache entry for the same IP.
+func newLimitReadClient(t *testing.T) *RealClient {
+	t.Helper()
 	dir := t.TempDir()
 	writeFail2banLog(t, dir,
 		"2025-01-01 10:00:00 fail2ban.actions [1]: NOTICE [sshd] Ban 192.168.1.1",
@@ -104,17 +104,18 @@ func TestGetLogLinesWithLimitContextOutcomes(t *testing.T) {
 		"2025-01-01 10:02:00 fail2ban.actions [1]: NOTICE [sshd] Unban 192.168.1.1",
 		"2025-01-01 10:03:00 fail2ban.actions [1]: NOTICE [sshd] Ban 192.168.1.1",
 	)
-	client := &RealClient{LogDir: dir}
+	return &RealClient{LogDir: dir}
+}
 
-	expired, cancel := context.WithTimeout(context.Background(), 0)
-	defer cancel()
+// TestGetLogLinesWithLimitContextOutcomes pins the exact result of the
+// limited read: the newest maxLines matching lines and nothing for a zero limit.
+func TestGetLogLinesWithLimitContextOutcomes(t *testing.T) {
+	client := newLimitReadClient(t)
 
 	tests := []struct {
 		name     string
-		expired  bool
 		maxLines int
 		want     []string
-		wantErr  error
 	}{
 		{
 			name:     "limit keeps the newest matching lines",
@@ -138,28 +139,25 @@ func TestGetLogLinesWithLimitContextOutcomes(t *testing.T) {
 			maxLines: 0,
 			want:     []string{},
 		},
-		{
-			name:     "expired context returns the deadline error",
-			expired:  true,
-			maxLines: 10,
-			wantErr:  context.DeadlineExceeded,
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.Background()
-			if tt.expired {
-				ctx = expired
-			}
-			lines, err := client.GetLogLinesWithLimitContext(ctx, "sshd", "192.168.1.1", tt.maxLines)
-			if tt.wantErr != nil {
-				require.ErrorIs(t, err, tt.wantErr)
-				assert.Nil(t, lines)
-				return
-			}
+			lines, err := client.GetLogLinesWithLimitContext(context.Background(), "sshd", "192.168.1.1", tt.maxLines)
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, lines)
 		})
 	}
+}
+
+// TestGetLogLinesWithLimitContextExpiredDeadline pins that an expired context
+// returns the deadline error and no lines.
+func TestGetLogLinesWithLimitContextExpiredDeadline(t *testing.T) {
+	client := newLimitReadClient(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 0)
+	defer cancel()
+
+	lines, err := client.GetLogLinesWithLimitContext(ctx, "sshd", "192.168.1.1", 10)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	assert.Nil(t, lines)
 }
