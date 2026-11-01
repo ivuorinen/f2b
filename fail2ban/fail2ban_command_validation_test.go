@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/ivuorinen/f2b/constants"
 )
 
 func TestValidateCommand(t *testing.T) {
@@ -156,6 +158,51 @@ func TestValidateCommandSecurityPatterns(t *testing.T) {
 				t.Errorf("ValidateCommand() should reject malicious command: %s", cmd)
 			}
 		})
+	}
+}
+
+// TestDangerousCommandSentinelsAreTestFixtures pins that the DANGEROUS_*
+// placeholders stay test data: production patterns carry no sentinel, and
+// every sentinel command is still rejected (by the allowlist, not by a
+// test-only pattern compiled into the binary).
+func TestDangerousCommandSentinelsAreTestFixtures(t *testing.T) {
+	for _, pattern := range GetDangerousCommandPatterns() {
+		if strings.HasPrefix(pattern, "DANGEROUS_") {
+			t.Errorf("production pattern list contains test sentinel %q", pattern)
+		}
+	}
+	for _, sentinel := range dangerousCommandSentinels {
+		err := ValidateCommand(sentinel)
+		if err == nil {
+			t.Errorf("ValidateCommand(%q) = nil, want rejection", sentinel)
+			continue
+		}
+		if !strings.Contains(err.Error(), "not allowed") {
+			t.Errorf("ValidateCommand(%q) = %v, want an allowlist rejection", sentinel, err)
+		}
+	}
+}
+
+// TestValidateJailLengthBoundary pins the length guard at its boundary.
+func TestValidateJailLengthBoundary(t *testing.T) {
+	if err := ValidateJail(strings.Repeat("a", constants.MaxJailNameLength)); err != nil {
+		t.Errorf("jail of exactly MaxJailNameLength rejected: %v", err)
+	}
+	err := ValidateJail(strings.Repeat("a", constants.MaxJailNameLength+1))
+	if err == nil || !strings.Contains(err.Error(), "too long") {
+		t.Errorf("jail of MaxJailNameLength+1 = %v, want a too-long rejection", err)
+	}
+}
+
+// TestValidateArgumentsIPv6Shape pins the IPv6-shape guard: a two-colon
+// argument is validated as an IP even though it is not hex-only.
+func TestValidateArgumentsIPv6Shape(t *testing.T) {
+	err := ValidateArguments([]string{"1:2:zz"})
+	if err == nil || !strings.Contains(err.Error(), "invalid IP format") {
+		t.Errorf("ValidateArguments(1:2:zz) = %v, want an invalid IP format error", err)
+	}
+	if err := ValidateArguments([]string{"2001:db8::1"}); err != nil {
+		t.Errorf("ValidateArguments rejected a valid IPv6 address: %v", err)
 	}
 }
 

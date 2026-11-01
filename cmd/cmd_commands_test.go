@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -76,6 +77,19 @@ func TestListJailsCommand(t *testing.T) {
 				Run()
 		})
 	}
+}
+
+// TestListJailsCommandJSON pins that list-jails honors --format json; it used
+// to print the space-joined plain list regardless of the format flag.
+func TestListJailsCommandJSON(t *testing.T) {
+	NewCommandTest(t, "list-jails").
+		WithSetup(func(mock *fail2ban.MockClient) {
+			setMockJails(mock, []string{"sshd", "apache"})
+		}).
+		WithJSONFormat().
+		ExpectSuccess().
+		ExpectExactOutput("[\n  \"apache\",\n  \"sshd\"\n]\n").
+		Run()
 }
 
 func TestStatusCommand(t *testing.T) {
@@ -226,7 +240,7 @@ func runIPCommandTests(t *testing.T, command string, tests []ipCommandTestCase) 
 					setMockJails(mock, tt.jails)
 					mock.BanResults = tt.banResults
 					if tt.setupBanned {
-						_, _ = mock.BanIP("192.168.1.100", "sshd")
+						_, _ = mock.BanIPWithContext(context.Background(), "192.168.1.100", "sshd")
 					}
 				})
 
@@ -352,7 +366,7 @@ func TestTestIPCommand(t *testing.T) {
 					// Set up bans
 					for jail, ips := range tt.setupBans {
 						for _, ip := range ips {
-							_, _ = mock.BanIP(ip, jail)
+							_, _ = mock.BanIPWithContext(context.Background(), ip, jail)
 						}
 					}
 				})
@@ -368,59 +382,25 @@ func TestTestIPCommand(t *testing.T) {
 	}
 }
 
-func TestLogsCommand(t *testing.T) {
-	tests := []struct {
-		name       string
-		args       []string
-		logLines   []string
-		wantOutput string
-		wantError  bool
-	}{
-		{
-			name: "show all logs",
-			args: []string{},
-			logLines: []string{
-				"2024-01-01 12:00:00 [sshd] Ban 192.168.1.100",
-				"2024-01-01 12:01:00 [apache] Ban 192.168.1.101",
-			},
-			wantOutput: "[2024-01-01 12:00:00 [sshd] Ban 192.168.1.100 2024-01-01 12:01:00 [apache] Ban 192.168.1.101]",
-			wantError:  false,
-		},
-		{
-			name:       "show logs with jail filter",
-			args:       []string{"sshd"},
-			logLines:   []string{"2024-01-01 12:00:00 [sshd] Ban 192.168.1.100"},
-			wantOutput: "[2024-01-01 12:00:00 [sshd] Ban 192.168.1.100]",
-			wantError:  false,
-		},
-		{
-			name:       "show logs with jail and IP filter",
-			args:       []string{"sshd", "192.168.1.100"},
-			logLines:   []string{"2024-01-01 12:00:00 [sshd] Ban 192.168.1.100"},
-			wantOutput: "[2024-01-01 12:00:00 [sshd] Ban 192.168.1.100]",
-			wantError:  false,
-		},
-		{
-			name:       "show logs when no logs exist",
-			args:       []string{},
-			logLines:   []string{}, // Explicitly set empty slice
-			wantOutput: "[]",
-			wantError:  false,
-		},
-	}
+// TestTestFilterCommandAcceptsListedNames pins that test-filter validates with
+// the client's filter rules: a name test-filter lists (e.g. "foo.bar") must
+// not be rejected by a stricter cmd-only check.
+func TestTestFilterCommandAcceptsListedNames(t *testing.T) {
+	mock := NewMockClient()
+	mock.Filters = []string{"foo.bar"}
+	mock.FilterTests = map[string]string{"foo.bar": "Success: 1 matched"}
+	NewCommandTest(t, "test-filter").
+		WithArgs("foo.bar").
+		WithMockClient(mock).
+		ExpectSuccess().
+		ExpectOutput("Success: 1 matched").
+		Run()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			NewCommandTest(t, "logs").
-				WithArgs(tt.args...).
-				WithSetup(func(mock *fail2ban.MockClient) {
-					mock.LogLines = tt.logLines
-				}).
-				ExpectSuccess().
-				ExpectOutput(tt.wantOutput).
-				Run()
-		})
-	}
+	NewCommandTest(t, "test-filter").
+		WithArgs("../etc/passwd").
+		WithMockClient(mock).
+		ExpectError().
+		Run()
 }
 
 func TestTestFilterCommand(t *testing.T) {

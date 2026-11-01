@@ -1,6 +1,7 @@
 package fail2ban
 
 import (
+	"context"
 	"runtime"
 	"sync"
 	"testing"
@@ -50,36 +51,8 @@ func TestRunnerConcurrentAccess(t *testing.T) {
 	wg.Wait()
 }
 
-// TestRunnerCombinedOutputConcurrency tests that concurrent calls to
-// RunnerCombinedOutput are safe.
-func TestRunnerCombinedOutputConcurrency(t *testing.T) {
-	mockRunner := NewMockRunner()
-	restoreRunner := WithTestRunner(t, mockRunner)
-	defer restoreRunner()
-	mockRunner.SetResponse("fail2ban-client status", []byte("test output"))
-
-	const numGoroutines = 50
-	var wg sync.WaitGroup
-
-	for range numGoroutines {
-		wg.Go(func() {
-			output, err := RunnerCombinedOutput("fail2ban-client", "status")
-			if err != nil {
-				t.Errorf("RunnerCombinedOutput failed: %v", err)
-				return
-			}
-
-			if string(output) != "test output" {
-				t.Errorf("Expected 'test output', got '%s'", string(output))
-			}
-		})
-	}
-
-	wg.Wait()
-}
-
 // TestRunnerCombinedOutputWithSudoConcurrency tests concurrent calls to
-// RunnerCombinedOutputWithSudo.
+// RunnerCombinedOutputWithSudoContext.
 func TestRunnerCombinedOutputWithSudoConcurrency(t *testing.T) {
 	// Set up mock environment with root privileges to avoid sudo prefix
 	_, cleanup := SetupMockEnvironment(t)
@@ -94,9 +67,9 @@ func TestRunnerCombinedOutputWithSudoConcurrency(t *testing.T) {
 
 	for range numGoroutines {
 		wg.Go(func() {
-			output, err := RunnerCombinedOutputWithSudo("fail2ban-client", "status")
+			output, err := RunnerCombinedOutputWithSudoContext(context.Background(), "fail2ban-client", "status")
 			if err != nil {
-				t.Errorf("RunnerCombinedOutputWithSudo failed: %v", err)
+				t.Errorf("RunnerCombinedOutputWithSudoContext failed: %v", err)
 				return
 			}
 
@@ -167,12 +140,12 @@ func mixedConcurrentSetRunnerWorker() {
 func mixedConcurrentRegularWorker(t *testing.T) {
 	t.Helper()
 	for range 20 {
-		output, err := RunnerCombinedOutput("fail2ban-client", "status")
+		output, err := GetRunner().CombinedOutputWithContext(context.Background(), "fail2ban-client", "status")
 		if err != nil {
-			t.Errorf("RunnerCombinedOutput failed: %v", err)
+			t.Errorf("CombinedOutputWithContext failed: %v", err)
 		}
 		if len(output) == 0 {
-			t.Error("RunnerCombinedOutput returned empty output")
+			t.Error("CombinedOutputWithContext returned empty output")
 		}
 		time.Sleep(time.Millisecond)
 	}
@@ -183,12 +156,12 @@ func mixedConcurrentRegularWorker(t *testing.T) {
 func mixedConcurrentSudoWorker(t *testing.T) {
 	t.Helper()
 	for range 20 {
-		output, err := RunnerCombinedOutputWithSudo("fail2ban-client", "-V")
+		output, err := RunnerCombinedOutputWithSudoContext(context.Background(), "fail2ban-client", "-V")
 		if err != nil {
-			t.Errorf("RunnerCombinedOutputWithSudo failed: %v", err)
+			t.Errorf("RunnerCombinedOutputWithSudoContext failed: %v", err)
 		}
 		if len(output) == 0 {
-			t.Error("RunnerCombinedOutputWithSudo returned empty output")
+			t.Error("RunnerCombinedOutputWithSudoContext returned empty output")
 		}
 		time.Sleep(time.Millisecond)
 	}
@@ -216,8 +189,7 @@ func TestRunnerManagerLockOrdering(t *testing.T) {
 				for range 100 {
 					SetRunner(NewMockRunner())
 					GetRunner()
-					_, _ = RunnerCombinedOutput("test")
-					_, _ = RunnerCombinedOutputWithSudo("test")
+					_, _ = RunnerCombinedOutputWithSudoContext(context.Background(), "test")
 				}
 			})
 		}

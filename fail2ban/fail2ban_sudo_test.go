@@ -1,6 +1,8 @@
 package fail2ban
 
 import (
+	"context"
+	"errors"
 	"os"
 	"testing"
 )
@@ -18,14 +20,65 @@ func TestRealSudoChecker_IsRoot(t *testing.T) {
 	}
 }
 
-func TestRealSudoChecker_InSudoGroup(_ *testing.T) {
-	checker := &RealSudoChecker{}
+// TestRealSudoChecker_InSudoGroup pins the group-name match through the
+// groupNames seam, so it does not depend on the host's group database.
+func TestRealSudoChecker_InSudoGroup(t *testing.T) {
+	tests := []struct {
+		name   string
+		groups []string
+		err    error
+		want   bool
+	}{
+		{name: "sudo group", groups: []string{"users", "sudo"}, want: true},
+		{name: "wheel group", groups: []string{"wheel"}, want: true},
+		{name: "admin group", groups: []string{"staff", "admin"}, want: true},
+		{name: "no privileged group", groups: []string{"users", "docker"}, want: false},
+		{name: "lookup failure", err: errors.New("no such user"), want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			checker := &RealSudoChecker{groupNames: func() ([]string, error) { return tt.groups, tt.err }}
+			if got := checker.InSudoGroup(); got != tt.want {
+				t.Errorf("InSudoGroup() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
 
-	// We can't easily test this without modifying groups, but we can verify it doesn't panic
-	inSudoGroup := checker.InSudoGroup()
+// TestRealSudoCheckerProbe exercises CanUseSudo/HasSudoPrivileges through the
+// runSudoProbe seam: an accepting probe grants, a refusing one denies, and the
+// probe always runs under a deadline so a hung sudo cannot stall startup.
+func TestRealSudoCheckerProbe(t *testing.T) {
+	gotDeadline := false
+	ok := &RealSudoChecker{
+		runSudoProbe: func(ctx context.Context) error {
+			_, gotDeadline = ctx.Deadline()
+			return nil
+		},
+		groupNames: func() ([]string, error) { return nil, nil },
+	}
+	denied := &RealSudoChecker{
+		runSudoProbe: func(context.Context) error { return errors.New("sudo: a password is required") },
+		groupNames:   func() ([]string, error) { return nil, nil },
+	}
 
-	// This is a basic smoke test - result depends on actual system configuration
-	_ = inSudoGroup // Just ensure it doesn't panic
+	if !ok.CanUseSudo() {
+		t.Error("CanUseSudo() = false with an accepting probe")
+	}
+	if !gotDeadline {
+		t.Error("sudo probe ran without a deadline")
+	}
+	if denied.CanUseSudo() {
+		t.Error("CanUseSudo() = true with a refusing probe")
+	}
+	if os.Geteuid() != 0 {
+		if !ok.HasSudoPrivileges() {
+			t.Error("HasSudoPrivileges() = false for a non-root user whose probe succeeds")
+		}
+		if denied.HasSudoPrivileges() {
+			t.Error("HasSudoPrivileges() = true for a non-root user with no group and a refusing probe")
+		}
+	}
 }
 
 func TestRealSudoChecker_CanUseSudo(t *testing.T) {
@@ -35,109 +88,6 @@ func TestRealSudoChecker_CanUseSudo(t *testing.T) {
 	// deterministically returns false.
 	if checker.CanUseSudo() {
 		t.Error("CanUseSudo() should be false in the test environment")
-	}
-}
-
-// HasSudoPrivileges is exercised via injected sub-checks in
-// TestSudoCheckingIntegration / TestMockSudoChecker; a RealSudoChecker test
-// that recomputes IsRoot()||InSudoGroup()||CanUseSudo() would only restate the
-// implementation and pass for any consistent (even entirely broken) version.
-
-func TestMockSudoChecker(t *testing.T) {
-	tests := []struct {
-		name               string
-		isRoot             bool
-		inSudoGroup        bool
-		canUseSudo         bool
-		expectedPrivileges bool
-	}{
-		{
-			name:               "root user",
-			isRoot:             true,
-			inSudoGroup:        false,
-			canUseSudo:         false,
-			expectedPrivileges: true,
-		},
-		{
-			name:               "sudo group member",
-			isRoot:             false,
-			inSudoGroup:        true,
-			canUseSudo:         false,
-			expectedPrivileges: true,
-		},
-		{
-			name:               "can use sudo",
-			isRoot:             false,
-			inSudoGroup:        false,
-			canUseSudo:         true,
-			expectedPrivileges: true,
-		},
-		{
-			name:               "no privileges",
-			isRoot:             false,
-			inSudoGroup:        false,
-			canUseSudo:         false,
-			expectedPrivileges: false,
-		},
-		{
-			name:               "all privileges",
-			isRoot:             true,
-			inSudoGroup:        true,
-			canUseSudo:         true,
-			expectedPrivileges: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mock := &MockSudoChecker{
-				MockIsRoot:      tt.isRoot,
-				MockInSudoGroup: tt.inSudoGroup,
-				MockCanUseSudo:  tt.canUseSudo,
-			}
-
-			if mock.IsRoot() != tt.isRoot {
-				t.Errorf("IsRoot() = %v, want %v", mock.IsRoot(), tt.isRoot)
-			}
-			if mock.InSudoGroup() != tt.inSudoGroup {
-				t.Errorf("InSudoGroup() = %v, want %v", mock.InSudoGroup(), tt.inSudoGroup)
-			}
-			if mock.CanUseSudo() != tt.canUseSudo {
-				t.Errorf("CanUseSudo() = %v, want %v", mock.CanUseSudo(), tt.canUseSudo)
-			}
-			if mock.HasSudoPrivileges() != tt.expectedPrivileges {
-				t.Errorf("HasSudoPrivileges() = %v, want %v", mock.HasSudoPrivileges(), tt.expectedPrivileges)
-			}
-		})
-	}
-}
-
-func TestMockSudoCheckerWithPrivileges(t *testing.T) {
-	tests := []struct {
-		name          string
-		hasPrivileges bool
-	}{
-		{
-			name:          "has privileges",
-			hasPrivileges: true,
-		},
-		{
-			name:          "no privileges",
-			hasPrivileges: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mock := &MockSudoChecker{
-				MockHasPrivileges:     tt.hasPrivileges,
-				ExplicitPrivilegesSet: true,
-			}
-
-			if mock.HasSudoPrivileges() != tt.hasPrivileges {
-				t.Errorf("HasSudoPrivileges() = %v, want %v", mock.HasSudoPrivileges(), tt.hasPrivileges)
-			}
-		})
 	}
 }
 
@@ -153,6 +103,19 @@ func TestRequiresSudo(t *testing.T) {
 			command:  "fail2ban-client",
 			args:     []string{"set", "sshd", "banip", "192.168.1.100"},
 			expected: true,
+		},
+		{
+			// Production passes the exec.LookPath result, not the bare name.
+			name:     "absolute fail2ban-client path with subcommand",
+			command:  "/usr/bin/fail2ban-client",
+			args:     []string{"ping"},
+			expected: true,
+		},
+		{
+			name:     "absolute fail2ban-client path with -V",
+			command:  "/usr/bin/fail2ban-client",
+			args:     []string{"-V"},
+			expected: false,
 		},
 		{
 			name:     "fail2ban-client get banip command",
@@ -419,34 +382,6 @@ func TestSudoCheckingIntegration(t *testing.T) {
 				t.Error("CheckSudoRequirements() passed when it should fail")
 			}
 		})
-	}
-}
-
-func TestMockSudoCheckerEdgeCases(t *testing.T) {
-	// Test edge cases with explicit MockHasPrivileges override
-	mock := &MockSudoChecker{
-		MockIsRoot:            false,
-		MockInSudoGroup:       false,
-		MockCanUseSudo:        false,
-		MockHasPrivileges:     true, // Override to true despite other fields being false
-		ExplicitPrivilegesSet: true,
-	}
-
-	if !mock.HasSudoPrivileges() {
-		t.Error("expected HasSudoPrivileges() to return true when MockHasPrivileges is true")
-	}
-
-	// Test the opposite
-	mock2 := &MockSudoChecker{
-		MockIsRoot:            true,
-		MockInSudoGroup:       true,
-		MockCanUseSudo:        true,
-		MockHasPrivileges:     false, // Override to false despite other fields being true
-		ExplicitPrivilegesSet: true,
-	}
-
-	if mock2.HasSudoPrivileges() {
-		t.Error("expected HasSudoPrivileges() to return false when MockHasPrivileges is false")
 	}
 }
 

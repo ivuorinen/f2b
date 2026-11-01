@@ -26,6 +26,9 @@ func ListJailsCmd(client fail2ban.Client, config *Config) *cobra.Command {
 				return HandleClientError(err)
 			}
 
+			if config.Format == JSONFormat {
+				return PrintOutputTo(GetCmdOutput(cmd), jails, config.Format)
+			}
 			if _, err := fmt.Fprintln(GetCmdOutput(cmd), strings.Join(jails, " ")); err != nil {
 				return err
 			}

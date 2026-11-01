@@ -22,7 +22,7 @@ func TestLogPathSecurityValidation(t *testing.T) {
 
 	for _, path := range maliciousPaths {
 		t.Run("malicious_log_path_"+path, func(t *testing.T) {
-			_, err := ValidateLogPath(context.Background(), path, GetLogDir())
+			_, err := ValidateLogPath(path, GetLogDir())
 			if err == nil {
 				t.Errorf("ValidateLogPath should have rejected malicious path: %s", path)
 				return
@@ -53,11 +53,11 @@ func TestLogPathValidation_LegitVsOutside(t *testing.T) {
 		t.Fatalf("Failed to create test log file: %v", err)
 	}
 
-	if _, err := ValidateLogPath(context.Background(), testLogFile, GetLogDir()); err != nil {
+	if _, err := ValidateLogPath(testLogFile, GetLogDir()); err != nil {
 		t.Errorf("ValidateLogPath should accept a file inside the log directory: %v", err)
 	}
 
-	if _, err := ValidateLogPath(context.Background(), "/etc/passwd", GetLogDir()); err == nil {
+	if _, err := ValidateLogPath("/etc/passwd", GetLogDir()); err == nil {
 		t.Errorf("ValidateLogPath should reject paths outside the log directory")
 	}
 }
@@ -66,7 +66,8 @@ func TestLogPathValidation_LegitVsOutside(t *testing.T) {
 // through ValidateLogPath: streaming a traversal path is rejected before any
 // file is opened.
 func TestStreamLogFileRejectsTraversal(t *testing.T) {
-	lines, err := streamLogFile("../../../etc/passwd", LogReadConfig{BaseDir: t.TempDir()})
+	lines, err := streamLogFileWithContext(
+		context.Background(), "../../../etc/passwd", LogReadConfig{BaseDir: t.TempDir()})
 	if err == nil {
 		t.Fatalf("expected traversal path to be rejected, got %d lines", len(lines))
 	}
@@ -94,13 +95,12 @@ func BenchmarkLogPathSecurity(b *testing.B) {
 		"../../../etc/passwd",
 		"%2e%2e%2f%2e%2e%2fetc%2fpasswd",
 	}
-	ctx := context.Background()
 	base := GetLogDir()
 
 	b.ResetTimer()
 	for b.Loop() {
 		for _, path := range testPaths {
-			_, _ = ValidateLogPath(ctx, path, base)
+			_, _ = ValidateLogPath(path, base)
 		}
 	}
 }

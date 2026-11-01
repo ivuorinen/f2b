@@ -1,12 +1,13 @@
-// Package cmd provides common helper functions and utilities for CLI commands.
-// This package contains shared functionality used across multiple f2b commands,
-// including argument validation, error handling, and output formatting helpers.
+// Shared helpers for CLI commands: argument validation, error handling and
+// output formatting.
+
 package cmd
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -17,29 +18,15 @@ import (
 	"github.com/ivuorinen/f2b/fail2ban"
 )
 
-// createTimeoutContext creates a context with the configured command timeout.
-// This helper consolidates the duplicate timeout handling pattern.
-// If base is nil, context.Background() is used.
+// createTimeoutContext derives a context with the configured command timeout
+// from base, which is always cmd.Context() (cobra sets it before RunE).
 func createTimeoutContext(base context.Context, config *Config) (context.Context, context.CancelFunc) {
-	if base == nil {
-		base = context.Background()
-	}
 	timeout := constants.DefaultCommandTimeout
 	if config != nil && config.CommandTimeout > 0 {
 		timeout = config.CommandTimeout
 	}
 	// #nosec G118 -- cancel is returned to callers who are responsible for calling it
 	return context.WithTimeout(base, timeout)
-}
-
-// IsCI detects if we're running in a CI environment
-func IsCI() bool {
-	return fail2ban.IsCI()
-}
-
-// IsTestEnvironment detects if we're running in a test environment
-func IsTestEnvironment() bool {
-	return fail2ban.IsTestEnvironment()
 }
 
 // Command creation helpers
@@ -66,8 +53,10 @@ func AddLogFlags(cmd *cobra.Command) {
 
 // Validation helpers
 
-// ValidateIPArgumentWithContext validates that an IP address is provided in args with context support
-func ValidateIPArgumentWithContext(_ context.Context, args []string) (string, error) {
+// ValidateIPArgument validates that a valid IP address is the first of args.
+// It took a context it never used, so the "WithContext" name promised
+// cancellation that never happened.
+func ValidateIPArgument(args []string) (string, error) {
 	if len(args) < 1 {
 		return "", fmt.Errorf("IP address required")
 	}
@@ -79,23 +68,15 @@ func ValidateIPArgumentWithContext(_ context.Context, args []string) (string, er
 	return ip, nil
 }
 
+// serviceActions is the single list of accepted `f2b service` actions; the
+// usage text, the missing-action message and validation are all built from
+// it, so they cannot drift apart.
+var serviceActions = []string{"start", "stop", "restart", "status", "reload", "enable", "disable"}
+
 // ValidateServiceAction validates that a service action is valid
 func ValidateServiceAction(action string) error {
-	validActions := map[string]bool{
-		"start":   true,
-		"stop":    true,
-		"restart": true,
-		"status":  true,
-		"reload":  true,
-		"enable":  true,
-		"disable": true,
-	}
-
-	if !validActions[action] {
-		return fmt.Errorf(
-			"invalid service action: %s. Valid actions: start, stop, restart, status, reload, enable, disable",
-			action,
-		)
+	if !slices.Contains(serviceActions, action) {
+		return fmt.Errorf("invalid service action: %s. Valid actions: %s", action, strings.Join(serviceActions, ", "))
 	}
 	return nil
 }
@@ -194,23 +175,6 @@ func HandleValidationError(err error) error {
 	)
 }
 
-// HandlePermissionError specifically handles permission/sudo errors with helpful hints
-func HandlePermissionError(err error) error {
-	return handleCategorizedError(
-		err,
-		fail2ban.ErrorCategoryPermission,
-		[]errorPatternMatch{
-			{
-				patterns:    []string{"permission denied", "sudo"},
-				remediation: "Try running with sudo privileges or check that fail2ban service is running.",
-			},
-		},
-		func(err error, remediation string) error {
-			return fail2ban.NewPermissionError(err.Error(), remediation)
-		},
-	)
-}
-
 // HandleSystemError specifically handles system-level errors with diagnostic hints
 func HandleSystemError(err error) error {
 	return handleCategorizedError(
@@ -232,26 +196,15 @@ func HandleSystemError(err error) error {
 	)
 }
 
-// Output helpers
-
-// OutputResults outputs results in the specified format
-func OutputResults(cmd *cobra.Command, results any, config *Config) {
-	if config != nil && config.Format == JSONFormat {
-		PrintOutputTo(GetCmdOutput(cmd), results, JSONFormat)
-	} else {
-		PrintOutputTo(GetCmdOutput(cmd), results, PlainFormat)
-	}
-}
-
 // InterpretBanStatus interprets ban operation status codes
 func InterpretBanStatus(code int, operation string) string {
 	switch operation {
-	case constants.MetricsBan:
+	case constants.OpBan:
 		if code == 1 {
 			return "Already banned"
 		}
 		return "Banned"
-	case constants.MetricsUnban:
+	case constants.OpUnban:
 		if code == 1 {
 			return "Already unbanned"
 		}
@@ -272,23 +225,18 @@ type OperationResult struct {
 
 // OperationType defines a ban or unban operation with its associated metadata
 type OperationType struct {
-	// MetricsType is the metrics key for this operation (e.g., constants.MetricsBan)
-	MetricsType string
+	// Operation is the operation name used in logs and status text (e.g., constants.OpBan)
+	Operation string
 	// Message is the log message for this operation (e.g., constants.MsgBanResult)
 	Message string
-	// Operation is the function to execute without context
-	Operation func(client fail2ban.Client, ip, jail string) (int, error)
 	// OperationCtx is the function to execute with context
 	OperationCtx func(ctx context.Context, client fail2ban.Client, ip, jail string) (int, error)
 }
 
 // BanOperationType defines the ban operation
 var BanOperationType = OperationType{
-	MetricsType: constants.MetricsBan,
-	Message:     constants.MsgBanResult,
-	Operation: func(c fail2ban.Client, ip, jail string) (int, error) {
-		return c.BanIP(ip, jail)
-	},
+	Operation: constants.OpBan,
+	Message:   constants.MsgBanResult,
 	OperationCtx: func(ctx context.Context, c fail2ban.Client, ip, jail string) (int, error) {
 		return c.BanIPWithContext(ctx, ip, jail)
 	},
@@ -296,49 +244,17 @@ var BanOperationType = OperationType{
 
 // UnbanOperationType defines the unban operation
 var UnbanOperationType = OperationType{
-	MetricsType: constants.MetricsUnban,
-	Message:     constants.MsgUnbanResult,
-	Operation: func(c fail2ban.Client, ip, jail string) (int, error) {
-		return c.UnbanIP(ip, jail)
-	},
+	Operation: constants.OpUnban,
+	Message:   constants.MsgUnbanResult,
 	OperationCtx: func(ctx context.Context, c fail2ban.Client, ip, jail string) (int, error) {
 		return c.UnbanIPWithContext(ctx, ip, jail)
 	},
 }
 
-// ProcessOperation processes operations across multiple jails using the specified operation type
-func ProcessOperation(
-	client fail2ban.Client,
-	ip string,
-	jails []string,
-	opType OperationType,
-) ([]OperationResult, error) {
-	results := make([]OperationResult, 0, len(jails))
-
-	for _, jail := range jails {
-		code, err := opType.Operation(client, ip, jail)
-		if err != nil {
-			return nil, err
-		}
-
-		status := InterpretBanStatus(code, opType.MetricsType)
-		Logger.WithFields(map[string]any{
-			"ip":     ip,
-			"jail":   jail,
-			"status": status,
-		}).Info(opType.Message)
-
-		results = append(results, OperationResult{
-			IP:     ip,
-			Jail:   jail,
-			Status: status,
-		})
-	}
-
-	return results, nil
-}
-
-// ProcessOperationWithContext processes operations across multiple jails with timeout context
+// ProcessOperationWithContext processes operations across jails in order with
+// timeout context. On a failing jail it returns the results gathered so far
+// with the error: earlier jails were already banned/unbanned, and dropping
+// their results hid that firewall state had changed.
 func ProcessOperationWithContext(
 	ctx context.Context,
 	client fail2ban.Client,
@@ -351,7 +267,7 @@ func ProcessOperationWithContext(
 
 	for _, jail := range jails {
 		// Add jail to context for this operation
-		jailCtx := WithJail(ctx, jail)
+		jailCtx := fail2ban.WithJail(ctx, jail)
 
 		// Time the operation
 		start := time.Now()
@@ -360,14 +276,14 @@ func ProcessOperationWithContext(
 
 		if err != nil {
 			// Log the failed operation with timing
-			logger.LogBanOperation(jailCtx, opType.MetricsType, ip, jail, false, duration)
-			return nil, err
+			logger.LogBanOperation(jailCtx, opType.Operation, ip, jail, false, duration)
+			return results, err
 		}
 
-		status := InterpretBanStatus(code, opType.MetricsType)
+		status := InterpretBanStatus(code, opType.Operation)
 
 		// Log the successful operation with timing
-		logger.LogBanOperation(jailCtx, opType.MetricsType, ip, jail, true, duration)
+		logger.LogBanOperation(jailCtx, opType.Operation, ip, jail, true, duration)
 
 		// Log the operation-specific message (ban vs unban)
 		Logger.WithFields(map[string]any{
@@ -386,11 +302,6 @@ func ProcessOperationWithContext(
 	return results, nil
 }
 
-// ProcessBanOperation processes ban operations across multiple jails
-func ProcessBanOperation(client fail2ban.Client, ip string, jails []string) ([]OperationResult, error) {
-	return ProcessOperation(client, ip, jails, BanOperationType)
-}
-
 // ProcessBanOperationWithContext processes ban operations across multiple jails with timeout context
 func ProcessBanOperationWithContext(
 	ctx context.Context,
@@ -399,11 +310,6 @@ func ProcessBanOperationWithContext(
 	jails []string,
 ) ([]OperationResult, error) {
 	return ProcessOperationWithContext(ctx, client, ip, jails, BanOperationType)
-}
-
-// ProcessUnbanOperation processes unban operations across multiple jails
-func ProcessUnbanOperation(client fail2ban.Client, ip string, jails []string) ([]OperationResult, error) {
-	return ProcessOperation(client, ip, jails, UnbanOperationType)
 }
 
 // ProcessUnbanOperationWithContext processes unban operations across multiple jails with timeout context
@@ -457,11 +363,4 @@ func FormatStatusResult(jail, status string) string {
 // IsEmptyString checks if a string is empty after trimming whitespace
 func IsEmptyString(s string) bool {
 	return strings.TrimSpace(s) == ""
-}
-
-// Command output helpers
-
-// TrimmedOutput safely trims whitespace from command output bytes
-func TrimmedOutput(output []byte) string {
-	return strings.TrimSpace(string(output))
 }

@@ -13,11 +13,20 @@ concurrency:
 permissions:
   contents: read
 
+# Go and every tool come from mise.toml (Go through go.mod), so CI runs the same
+# versions and the same tasks as local runs and the git hooks. mise itself is
+# pinned: an unpinned tool changes CI behaviour without a commit. Renovate bumps
+# it via the customManagers:githubActionsVersions preset, and the tools via
+# mise.toml.
+env:
+  # renovate: datasource=github-releases depName=jdx/mise
+  MISE_VERSION: v2026.10.21
+
 jobs:
   lint:
     name: Lint Code
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -25,23 +34,18 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - name: Set up mise
+        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
         with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: go.sum
+          version: ${{ env.MISE_VERSION }}
 
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
-        with:
-          version: v2.15.0
-          install-mode: goinstall
+      - name: Lint (gofmt, go vet, golangci-lint)
+        run: mise run lint
 
   test:
     name: Test
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -49,12 +53,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - name: Set up mise
+        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
         with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: go.sum
+          version: ${{ env.MISE_VERSION }}
 
       - name: Run tests
-        run: go test -race ./...
+        run: mise run test-race

@@ -1,6 +1,6 @@
-// Package fail2ban provides security utility functions for input validation and threat detection.
-// This module handles path traversal detection, dangerous command pattern identification,
-// and other security-related checks to prevent injection attacks and unauthorized access.
+// Security utility functions for input validation and threat detection: path
+// traversal detection and dangerous command pattern identification.
+
 package fail2ban
 
 import (
@@ -46,46 +46,17 @@ func ContainsPathTraversal(input string) bool {
 	return false
 }
 
-// GetDangerousCommandPatterns returns patterns for log sanitization and threat detection.
+// GetDangerousCommandPatterns returns the attack signatures ValidateCommand
+// rejects before a command name reaches the allowlist check.
 //
-// Purpose: This list is used for:
-//   - Sanitizing/masking dangerous patterns in logs to prevent sensitive data leakage
-//   - Detecting suspicious patterns in command outputs for monitoring/alerting
-//
-// NOT for: Input validation or injection prevention (use proper validation instead)
-//
-// The returned patterns include both production patterns (real attack signatures)
-// and test sentinels (used exclusively in test fixtures for validation).
+// Only real signatures belong here. The DANGEROUS_* placeholder names the
+// injection tests use are test fixtures and live in the test files: shipping
+// them made production validation depend on test data.
 func GetDangerousCommandPatterns() []string {
-	// Test sentinels: Markers used exclusively in test fixtures
-	// These help verify pattern detection logic in tests
-	testSentinels := []string{
-		"DANGEROUS_RM_COMMAND",
-		"DANGEROUS_SYSTEM_CALL",
-		"DANGEROUS_COMMAND",
-		"DANGEROUS_PWD_COMMAND",
-		"DANGEROUS_LIST_COMMAND",
-		"DANGEROUS_READ_COMMAND",
-		"DANGEROUS_OUTPUT_FILE",
-		"DANGEROUS_INPUT_FILE",
-		"DANGEROUS_EXEC_COMMAND",
-		"DANGEROUS_WGET_COMMAND",
-		"DANGEROUS_CURL_COMMAND",
-		"DANGEROUS_EXEC_FUNCTION",
-		"DANGEROUS_SYSTEM_FUNCTION",
-		"DANGEROUS_EVAL_FUNCTION",
-	}
-
-	// Production patterns: Real command injection and SQL injection signatures
-	productionPatterns := []string{
+	return []string{
 		"rm -rf",                     // Destructive file operations
 		"drop table",                 // SQL injection attempts
 		"'; cat",                     // Command injection with file reads
 		"/etc/passwd", "/etc/shadow", // Specific sensitive file access
 	}
-
-	// Combine both lists for backward compatibility; preallocate to avoid reallocation
-	combined := make([]string, 0, len(productionPatterns)+len(testSentinels))
-	combined = append(combined, productionPatterns...)
-	return append(combined, testSentinels...)
 }

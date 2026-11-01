@@ -3,6 +3,9 @@ package fail2ban
 import (
 	"context"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // setupMockForBannedInTest sets up mock responses for BannedIn tests
@@ -19,111 +22,67 @@ func setupMockForBannedInTest(ip, mockResponse string) *MockRunner {
 	return mock
 }
 
-func TestBannedInWithContext_SingleJail(t *testing.T) {
-	mock := setupMockForBannedInTest("192.168.1.100", `["sshd"]`)
-	t.Cleanup(WithTestRunner(t, mock))
-
+// newBannedInClient builds a client whose banned query for ip returns response.
+func newBannedInClient(t *testing.T, ip, response string) *RealClient {
+	t.Helper()
+	t.Cleanup(WithTestRunner(t, setupMockForBannedInTest(ip, response)))
 	client, err := NewClient("/var/log", "/etc/fail2ban/filter.d")
-	if err != nil {
-		t.Fatalf("failed to create client: %v", err)
-	}
-
-	// Test both versions return the same result
-	nonContextResult, err1 := client.BannedIn("192.168.1.100")
-	if err1 != nil {
-		t.Fatalf("non-context version failed: %v", err1)
-	}
-
-	contextResult, err2 := client.BannedInWithContext(context.Background(), "192.168.1.100")
-	if err2 != nil {
-		t.Fatalf("context version failed: %v", err2)
-	}
-
-	// Both should return ["sshd"]
-	if len(nonContextResult) != 1 || nonContextResult[0] != "sshd" {
-		t.Errorf("non-context result: expected [sshd], got %v", nonContextResult)
-	}
-	if len(contextResult) != 1 || contextResult[0] != "sshd" {
-		t.Errorf("context result: expected [sshd], got %v", contextResult)
-	}
+	require.NoError(t, err)
+	return client
 }
 
-func TestBannedInWithContext_MultipleJails(t *testing.T) {
-	mock := setupMockForBannedInTest("192.168.1.100", `["sshd", "apache"]`)
-	t.Cleanup(WithTestRunner(t, mock))
-
-	client, err := NewClient("/var/log", "/etc/fail2ban/filter.d")
-	if err != nil {
-		t.Fatalf("failed to create client: %v", err)
+func TestBannedInWithContext(t *testing.T) {
+	tests := []struct {
+		name     string
+		response string
+		want     []string
+	}{
+		{name: "single jail", response: `["sshd"]`, want: []string{"sshd"}},
+		{name: "multiple jails", response: `["sshd", "apache"]`, want: []string{"sshd", "apache"}},
+		{name: "not banned", response: `[]`, want: []string{}},
+		{
+			// Combined output carries stderr too; only the last line is the
+			// jail list, so sudo's warning must not become a jail name.
+			name:     "stderr noise before the jail list",
+			response: "sudo: unable to resolve host h: Name or service not known\n['sshd']\n",
+			want:     []string{"sshd"},
+		},
 	}
-
-	// Test both versions return the same result
-	nonContextResult, err1 := client.BannedIn("192.168.1.100")
-	if err1 != nil {
-		t.Fatalf("non-context version failed: %v", err1)
-	}
-
-	contextResult, err2 := client.BannedInWithContext(context.Background(), "192.168.1.100")
-	if err2 != nil {
-		t.Fatalf("context version failed: %v", err2)
-	}
-
-	// Both should return ["sshd", "apache"]
-	expected := []string{"sshd", "apache"}
-	if len(nonContextResult) != len(expected) {
-		t.Errorf("non-context result: expected %v, got %v", expected, nonContextResult)
-	}
-	if len(contextResult) != len(expected) {
-		t.Errorf("context result: expected %v, got %v", expected, contextResult)
-	}
-}
-
-func TestBannedInWithContext_NotBanned(t *testing.T) {
-	mock := setupMockForBannedInTest("192.168.1.100", `[]`)
-	t.Cleanup(WithTestRunner(t, mock))
-
-	client, err := NewClient("/var/log", "/etc/fail2ban/filter.d")
-	if err != nil {
-		t.Fatalf("failed to create client: %v", err)
-	}
-
-	// Test both versions return empty result
-	nonContextResult, err1 := client.BannedIn("192.168.1.100")
-	if err1 != nil {
-		t.Fatalf("non-context version failed: %v", err1)
-	}
-
-	contextResult, err2 := client.BannedInWithContext(context.Background(), "192.168.1.100")
-	if err2 != nil {
-		t.Fatalf("context version failed: %v", err2)
-	}
-
-	// Both should return empty slice
-	if len(nonContextResult) != 0 {
-		t.Errorf("non-context result: expected [], got %v", nonContextResult)
-	}
-	if len(contextResult) != 0 {
-		t.Errorf("context result: expected [], got %v", contextResult)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := newBannedInClient(t, "192.168.1.100", tt.response)
+			got, err := client.BannedInWithContext(context.Background(), "192.168.1.100")
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
 	}
 }
 
 func TestBannedInWithContext_InvalidIP(t *testing.T) {
-	mock := setupMockForBannedInTest("invalid-ip", "")
+	client := newBannedInClient(t, "invalid-ip", "")
+	_, err := client.BannedInWithContext(context.Background(), "invalid-ip")
+	require.Error(t, err)
+}
+
+// TestBanIPParsesLastOutputLine pins that the ban/unban count is read from the
+// last output line: a stderr line before fail2ban-client's count turned a
+// successful ban into "unexpected output".
+func TestBanIPParsesLastOutputLine(t *testing.T) {
+	mock := setupMockForBannedInTest("192.168.1.100", `[]`)
+	noisy := []byte("sudo: unable to resolve host h: Name or service not known\n1\n")
+	mock.SetResponse("sudo fail2ban-client set sshd banip 192.168.1.100", noisy)
+	mock.SetResponse("fail2ban-client set sshd banip 192.168.1.100", noisy)
+	mock.SetResponse("sudo fail2ban-client set sshd unbanip 192.168.1.100", []byte("warning\n0\n"))
+	mock.SetResponse("fail2ban-client set sshd unbanip 192.168.1.100", []byte("warning\n0\n"))
 	t.Cleanup(WithTestRunner(t, mock))
-
 	client, err := NewClient("/var/log", "/etc/fail2ban/filter.d")
-	if err != nil {
-		t.Fatalf("failed to create client: %v", err)
-	}
+	require.NoError(t, err)
 
-	// Test invalid IP validation works the same in both versions
-	_, err1 := client.BannedIn("invalid-ip")
-	_, err2 := client.BannedInWithContext(context.Background(), "invalid-ip")
+	code, err := client.BanIPWithContext(context.Background(), "192.168.1.100", "sshd")
+	require.NoError(t, err)
+	assert.Equal(t, 0, code, "count 1 means newly banned")
 
-	if err1 == nil {
-		t.Error("Expected error from non-context version for invalid IP")
-	}
-	if err2 == nil {
-		t.Error("Expected error from context version for invalid IP")
-	}
+	code, err = client.UnbanIPWithContext(context.Background(), "192.168.1.100", "sshd")
+	require.NoError(t, err)
+	assert.Equal(t, 1, code, "count 0 means already unbanned")
 }

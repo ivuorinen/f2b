@@ -12,10 +12,7 @@ import (
 // A 6/7-field line whose fields aren't timestamps is an exotic variant, not
 // garbage: it must produce a simple-format fallback record, not an error.
 func TestParseBanRecordSixFieldNonTimestampFallback(t *testing.T) {
-	parser, err := NewBanRecordParser()
-	if err != nil {
-		t.Fatal(err)
-	}
+	parser := NewBanRecordParser()
 
 	record, err := parser.ParseBanRecordLine("192.168.1.100 foo bar + baz qux", "sshd")
 	if err != nil {
@@ -34,10 +31,7 @@ func TestParseBanRecordSixFieldNonTimestampFallback(t *testing.T) {
 }
 
 func TestBanRecordParser(t *testing.T) {
-	parser, err := NewBanRecordParser()
-	if err != nil {
-		t.Fatal(err)
-	}
+	parser := NewBanRecordParser()
 
 	tests := []struct {
 		name    string
@@ -134,10 +128,7 @@ func assertBanRecordParserCase(t *testing.T, parser *BanRecordParser, line, jail
 // ParseBanRecordLine (empty / path-separator / traversal jail names). Without
 // this, the guard is mutation-blind: no test ever passed it an unsafe jail.
 func TestParseBanRecordLineRejectsUnsafeJail(t *testing.T) {
-	parser, err := NewBanRecordParser()
-	if err != nil {
-		t.Fatal(err)
-	}
+	parser := NewBanRecordParser()
 	line := "192.168.1.100 2023-12-01 14:30:45 + 2023-12-02 14:30:45 remaining"
 	unsafeJails := []string{"", "..", "../etc", "a/b", `a\b`, "foo/../bar"}
 	for _, jail := range unsafeJails {
@@ -153,10 +144,7 @@ func TestParseBanRecordLineRejectsUnsafeJail(t *testing.T) {
 }
 
 func TestParseBanRecords(t *testing.T) {
-	parser, err := NewBanRecordParser()
-	if err != nil {
-		t.Fatal(err)
-	}
+	parser := NewBanRecordParser()
 
 	output := strings.Join([]string{
 		"192.168.1.100 2023-12-01 14:30:45 + 2023-12-02 14:30:45 remaining",
@@ -187,12 +175,12 @@ func TestParseBanRecords(t *testing.T) {
 	}
 }
 
-func TestParseBanRecordLineOptimized(t *testing.T) {
+func TestDefaultParserParseBanRecordLine(t *testing.T) {
 	line := "192.168.1.100 2023-12-01 14:30:45 + 2023-12-02 14:30:45 remaining"
-	record, err := ParseBanRecordLineOptimized(line, "sshd")
+	record, err := defaultBanRecordParser.ParseBanRecordLine(line, "sshd")
 
 	if err != nil {
-		t.Fatalf("ParseBanRecordLineOptimized failed: %v", err)
+		t.Fatalf("ParseBanRecordLine failed: %v", err)
 	}
 
 	if record == nil {
@@ -209,15 +197,15 @@ func TestParseBanRecordLineOptimized(t *testing.T) {
 	validateTimeParsing(t, record, line)
 }
 
-func TestParseBanRecordsOptimized(t *testing.T) {
+func TestParseBanRecordsPackageEntryPoint(t *testing.T) {
 	lines := []string{
 		"192.168.1.100 2023-12-01 14:30:45 + 2023-12-02 14:30:45 remaining",
 		"192.168.1.101 2023-12-01 15:00:00 + 2023-12-02 15:00:00 remaining",
 	}
-	records, err := ParseBanRecordsOptimized(strings.Join(lines, "\n"), "sshd")
+	records, err := ParseBanRecords(strings.Join(lines, "\n"), "sshd")
 
 	if err != nil {
-		t.Fatalf("ParseBanRecordsOptimized failed: %v", err)
+		t.Fatalf("ParseBanRecords failed: %v", err)
 	}
 
 	if len(records) != 2 {
@@ -235,10 +223,7 @@ func TestParseBanRecordsOptimized(t *testing.T) {
 }
 
 func BenchmarkParseBanRecordLine(b *testing.B) {
-	parser, err := NewBanRecordParser()
-	if err != nil {
-		b.Fatal(err)
-	}
+	parser := NewBanRecordParser()
 	line := "192.168.1.100 2023-12-01 14:30:45 + 2023-12-02 14:30:45 remaining"
 
 	b.ResetTimer()
@@ -248,10 +233,7 @@ func BenchmarkParseBanRecordLine(b *testing.B) {
 }
 
 func BenchmarkParseBanRecords(b *testing.B) {
-	parser, err := NewBanRecordParser()
-	if err != nil {
-		b.Fatal(err)
-	}
+	parser := NewBanRecordParser()
 	output := strings.Repeat("192.168.1.100 2023-12-01 14:30:45 + 2023-12-02 14:30:45 remaining\n", 100)
 
 	b.ResetTimer()
@@ -262,10 +244,7 @@ func BenchmarkParseBanRecords(b *testing.B) {
 
 // Test error handling for invalid time formats
 func TestParseBanRecordInvalidTime(t *testing.T) {
-	parser, err := NewBanRecordParser()
-	if err != nil {
-		t.Fatal(err)
-	}
+	parser := NewBanRecordParser()
 
 	// Invalid ban time should be skipped (original behavior) - must have 8+ fields
 	line := "192.168.1.100 invalid-date 14:30:45 + 2023-12-02 14:30:45 remaining extra"
@@ -287,10 +266,7 @@ func TestParseBanRecordInvalidTime(t *testing.T) {
 
 // Test concurrent access to parser
 func TestBanRecordParserConcurrent(t *testing.T) {
-	parser, err := NewBanRecordParser()
-	if err != nil {
-		t.Fatal(err)
-	}
+	parser := NewBanRecordParser()
 	line := "192.168.1.100 2023-12-01 14:30:45 + 2023-12-02 14:30:45 remaining"
 
 	const numGoroutines = 10
@@ -320,10 +296,7 @@ func TestBanRecordParserConcurrent(t *testing.T) {
 
 // TestRealWorldBanRecordPatterns tests with actual patterns from production logs
 func TestRealWorldBanRecordPatterns(t *testing.T) {
-	parser, err := NewBanRecordParser()
-	if err != nil {
-		t.Fatal(err)
-	}
+	parser := NewBanRecordParser()
 
 	// Real patterns observed in production fail2ban
 	realWorldPatterns := []struct {
@@ -410,10 +383,7 @@ func assertRealWorldBanPattern(
 
 // TestProductionLogTimingPatterns verifies timing patterns from real logs
 func TestProductionLogTimingPatterns(t *testing.T) {
-	parser, err := NewBanRecordParser()
-	if err != nil {
-		t.Fatal(err)
-	}
+	parser := NewBanRecordParser()
 
 	// Test various real production patterns
 	tests := []struct {
@@ -495,7 +465,6 @@ func isExpectedError(err error) bool {
 		return true
 	}
 	return errors.Is(err, ErrEmptyLine) ||
-		errors.Is(err, ErrInsufficientFields) ||
 		errors.Is(err, ErrInvalidBanTime)
 }
 

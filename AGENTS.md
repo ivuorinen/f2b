@@ -4,7 +4,7 @@ Use this guide to contribute effectively to f2b, the Go-based CLI for managing F
 
 ## Project Structure & Module Organization
 
-- `main.go` wires logging, sudo detection, and client startup.
+- `main.go` wires logging and the lazy client (sudo checks run on the first client operation).
 - `cmd/` contains Cobra commands and fluent command tests.
   Mirror changes under `cmd/*_test.go` when adding scenarios.
 - `fail2ban/` hosts the client interfaces, runners, and mocks used across commands.
@@ -14,13 +14,13 @@ Use this guide to contribute effectively to f2b, the Go-based CLI for managing F
 ## Build, Test, and Development Commands
 
 - Build the CLI with:
-  `go build -ldflags "-X github.com/ivuorinen/f2b/cmd.Version=1.2.3" -o f2b .`
+  `go build -ldflags "-X github.com/ivuorinen/f2b/cmd.Version=2026.10.0" -o f2b .`
   This embeds the release version string in the binary.
-- Run tests with coverage:
-  `go test -covermode=atomic -coverprofile=coverage.out ./...`
-  This generates a coverage profile with race-safe metrics.
-- `prek run --all-files` applies formatting, linting, and link checks; run before every push.
-- `make update-deps` refreshes Go dependencies when coordinating dependency upgrades.
+- `mise run test-cov` measures coverage with the race detector on; the report lands in `coverage.out`.
+- `prek run --all-files` passes before every push.
+- `mise run update` refreshes Go dependencies and the `mise.toml` tool pins when coordinating upgrades.
+- Releases are cut with `mise run release` (pushes the next CalVer tag); CI builds and signs them.
+- Tool versions live only in `mise.toml`; the prek hooks and CI workflows run them through mise.
 
 ## Coding Style & Naming Conventions
 
@@ -35,29 +35,40 @@ Use this guide to contribute effectively to f2b, the Go-based CLI for managing F
 - Use the fluent helpers such as `NewCommandTest` and `NewMockClientBuilder` for CLI coverage.
 - Co-locate unit tests with their packages and create `*_integration_test.go` only for integration scenarios.
 - Mock sudo interactions with the provided `MockRunner` and `MockSudoChecker`; never issue real sudo.
+  `F2B_TEST_SUDO` only skips the sudo probe; it does not mock sudo.
+  An exception needs the maintainer's explicit approval in the pull request.
 - Ensure security cases include path traversal, privilege errors, and context timeouts.
+- Every test and subtest uses its `t` and asserts an outcome.
+- Never write `func(_ *testing.T)` (a prek hook rejects it) or discard a result with `_ = err`.
+  An exception needs the maintainer's explicit approval in the pull request.
+- Name test files after the behavior under test.
+- Do not add `*_coverage_test.go` or `*_additional_test.go` files written to raise coverage.
 
 ## Commit & Pull Request Guidelines
 
 - Write semantic commits (`type(scope): message`) that describe the observable change, such as:
   `feat(cli): add logs-watch command`.
-- Include rationale, testing evidence, and configuration updates in PR descriptions; link issues when relevant.
-- Run `prek run --all-files` and `go test ./...` before requesting review and mention the results.
+- Give each PR description its rationale, testing evidence, and configuration updates.
+- Link the issue a PR resolves, if one exists.
+- `prek run --all-files` passes before review is requested.
+- `mise run test-race` passes before review is requested.
+- The PR description reports both results.
 - Keep PRs focused; split large features into reviewable increments and update docs alongside code.
 
 ## Agent Context Discipline (context-mode)
 
-- Coding agents MUST route read/inspect work through the context-mode tools —
-  `ctx_execute` / `ctx_batch_execute` for shell output (searches, git reads, test/build/lint
-  output, anything with unpredictable size) and `ctx_execute_file` for analyzing file
-  contents — so raw bytes stay in the sandbox and only derived answers enter context.
+- Coding agents must route read/inspect work through the context-mode tools; an exception
+  needs the maintainer's explicit approval. The tools are `ctx_execute` / `ctx_batch_execute`
+  for shell output (searches, git reads, test/build/lint output, anything with unpredictable
+  size) and `ctx_execute_file` for analyzing file contents, so raw bytes stay in the sandbox
+  and only derived answers enter context.
 - Plain Bash is reserved for state mutations (git writes, `mkdir`/`rm`/`mv`/`cp`,
-  installs) and tiny fixed outputs. If raw Bash output is genuinely required, append
-  `# ctx-ok` to the command.
+  installs) and tiny fixed outputs. There is no opt-out marker for raw output.
 - Direct file `Read` is only for files you are about to edit; analysis and extraction
   go through `ctx_execute_file`.
-- Enforcement: the context-mode plugin's PreToolUse hook blocks non-conforming Bash
-  calls. Agents without the plugin follow this section as written.
+- Enforcement: the context-mode plugin only nudges toward these tools; it does not
+  block plain Bash. Agents follow this section as written whether or not a hook
+  enforces it.
 
 ## Security & Configuration Tips
 

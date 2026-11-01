@@ -3,10 +3,14 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ivuorinen/f2b/constants"
 
@@ -91,7 +95,7 @@ func assertLogsWatchCase(
 	}
 
 	config := &Config{Format: "plain"}
-	cmd := LogsWatchCmd(context.Background(), mock, config)
+	cmd := LogsWatchCmd(mock, config)
 
 	// Set up command flags
 	if limit > 0 {
@@ -135,7 +139,7 @@ func TestLogsWatchCmdJSON(t *testing.T) {
 	}
 
 	config := &Config{Format: JSONFormat}
-	cmd := LogsWatchCmd(context.Background(), mock, config)
+	cmd := LogsWatchCmd(mock, config)
 
 	var outBuf bytes.Buffer
 	cmd.SetOut(&outBuf)
@@ -174,7 +178,7 @@ func TestLogsWatchCmdLimit(t *testing.T) {
 	}
 
 	config := &Config{Format: "plain"}
-	cmd := LogsWatchCmd(context.Background(), mock, config)
+	cmd := LogsWatchCmd(mock, config)
 
 	if err := cmd.Flags().Set("limit", "3"); err != nil {
 		t.Fatalf("failed to set limit flag: %v", err)
@@ -195,6 +199,10 @@ func TestLogsWatchCmdLimit(t *testing.T) {
 	got := strings.TrimRight(outBuf.String(), "\n")
 	if want := "line3\nline4\nline5"; got != want {
 		t.Errorf("limited output = %q, want %q", got, want)
+	}
+	// The limit is applied by the client at read time, not trimmed afterwards.
+	if mock.lastLimit != mock.limit {
+		t.Errorf("forwarded limit = %d, want %d", mock.lastLimit, mock.limit)
 	}
 }
 
@@ -268,7 +276,7 @@ func TestLogsWatchCmdFlags(t *testing.T) {
 	}
 
 	config := &Config{Format: "plain"}
-	cmd := LogsWatchCmd(context.Background(), mock, config)
+	cmd := LogsWatchCmd(mock, config)
 
 	// Test that the limit flag is properly defined
 	limitFlag := cmd.Flags().Lookup("limit")
@@ -305,20 +313,26 @@ func TestLogsWatchCmdFlags(t *testing.T) {
 	}
 }
 
-// MockLogsWatchClient is a mock client specifically for testing logs-watch
+// MockLogsWatchClient is a mock client specifically for testing logs-watch.
+// It applies the requested line limit itself, like the real client, and
+// records it in lastLimit.
 type MockLogsWatchClient struct {
 	initialLogs []string
 	limit       int
+	lastLimit   int
 	shouldError bool
 	callCount   int
 }
 
-func (m *MockLogsWatchClient) GetLogLines(jail, ip string) ([]string, error) {
+func (m *MockLogsWatchClient) GetLogLinesWithLimitContext(
+	_ context.Context, jail, ip string, maxLines int,
+) ([]string, error) {
 	if m.shouldError {
 		return nil, fmt.Errorf("mock error getting log lines")
 	}
 
 	m.callCount++
+	m.lastLimit = maxLines
 
 	var logs []string
 	// Return initial logs on first call, then simulate new logs on subsequent calls
@@ -335,6 +349,9 @@ func (m *MockLogsWatchClient) GetLogLines(jail, ip string) ([]string, error) {
 	logs = mockGetLogLinesFiltered(logs, jail, "["+jail+"]")
 	logs = mockGetLogLinesFiltered(logs, ip, ip)
 
+	if maxLines > 0 && len(logs) > maxLines {
+		logs = logs[len(logs)-maxLines:]
+	}
 	return logs, nil
 }
 
@@ -353,82 +370,105 @@ func mockGetLogLinesFiltered(logs []string, value, substr string) []string {
 	return filtered
 }
 
-// Implement other required methods for the interface
-func (m *MockLogsWatchClient) ListJails() ([]string, error) {
+// The remaining fail2ban.Client methods are stubs logs-watch never calls.
+
+func (m *MockLogsWatchClient) ListJailsWithContext(_ context.Context) ([]string, error) {
 	return []string{"sshd", "apache"}, nil
 }
 
-func (m *MockLogsWatchClient) StatusAll() (string, error) {
+func (m *MockLogsWatchClient) StatusAllWithContext(_ context.Context) (string, error) {
 	return "mock status", nil
 }
 
-func (m *MockLogsWatchClient) StatusJail(jail string) (string, error) {
+func (m *MockLogsWatchClient) StatusJailWithContext(_ context.Context, jail string) (string, error) {
 	return fmt.Sprintf("mock status for %s", jail), nil
 }
 
-func (m *MockLogsWatchClient) BanIP(_, _ string) (int, error) {
+func (m *MockLogsWatchClient) BanIPWithContext(_ context.Context, _, _ string) (int, error) {
 	return 0, nil
 }
 
-func (m *MockLogsWatchClient) UnbanIP(_, _ string) (int, error) {
+func (m *MockLogsWatchClient) UnbanIPWithContext(_ context.Context, _, _ string) (int, error) {
 	return 0, nil
 }
 
-func (m *MockLogsWatchClient) BannedIn(_ string) ([]string, error) {
+func (m *MockLogsWatchClient) BannedInWithContext(_ context.Context, _ string) ([]string, error) {
 	return []string{}, nil
 }
 
-func (m *MockLogsWatchClient) GetBanRecords(_ []string) ([]fail2ban.BanRecord, error) {
+func (m *MockLogsWatchClient) GetBanRecordsWithContext(_ context.Context, _ []string) ([]fail2ban.BanRecord, error) {
 	return []fail2ban.BanRecord{}, nil
 }
 
-func (m *MockLogsWatchClient) ListFilters() ([]string, error) {
-	return []string{"sshd"}, nil
-}
-
-func (m *MockLogsWatchClient) TestFilter(_ string) (string, error) {
-	return "mock filter test result", nil
-}
-
-// Context-aware methods for MockLogsWatchClient
-
-func (m *MockLogsWatchClient) ListJailsWithContext(_ context.Context) ([]string, error) {
-	return m.ListJails()
-}
-
-func (m *MockLogsWatchClient) StatusAllWithContext(_ context.Context) (string, error) {
-	return m.StatusAll()
-}
-
-func (m *MockLogsWatchClient) StatusJailWithContext(_ context.Context, jail string) (string, error) {
-	return m.StatusJail(jail)
-}
-
-func (m *MockLogsWatchClient) BanIPWithContext(_ context.Context, ip, jail string) (int, error) {
-	return m.BanIP(ip, jail)
-}
-
-func (m *MockLogsWatchClient) UnbanIPWithContext(_ context.Context, ip, jail string) (int, error) {
-	return m.UnbanIP(ip, jail)
-}
-
-func (m *MockLogsWatchClient) BannedInWithContext(_ context.Context, ip string) ([]string, error) {
-	return m.BannedIn(ip)
-}
-
-func (m *MockLogsWatchClient) GetBanRecordsWithContext(
-	_ context.Context, jails []string) ([]fail2ban.BanRecord, error) {
-	return m.GetBanRecords(jails)
-}
-
-func (m *MockLogsWatchClient) GetLogLinesWithContext(_ context.Context, jail, ip string) ([]string, error) {
-	return m.GetLogLines(jail, ip)
+func (m *MockLogsWatchClient) GetLogLinesWithContext(ctx context.Context, jail, ip string) ([]string, error) {
+	return m.GetLogLinesWithLimitContext(ctx, jail, ip, constants.DefaultLogLinesLimit)
 }
 
 func (m *MockLogsWatchClient) ListFiltersWithContext(_ context.Context) ([]string, error) {
-	return m.ListFilters()
+	return []string{"sshd"}, nil
 }
 
-func (m *MockLogsWatchClient) TestFilterWithContext(_ context.Context, filter string) (string, error) {
-	return m.TestFilter(filter)
+func (m *MockLogsWatchClient) TestFilterWithContext(_ context.Context, _ string) (string, error) {
+	return "mock filter test result", nil
+}
+
+// TestLogsWatchCmdCreation checks the command's shape and flags.
+func TestLogsWatchCmdCreation(t *testing.T) {
+	cmd := LogsWatchCmd(&MockLogsWatchClient{}, &Config{Format: PlainFormat})
+	if cmd == nil || cmd.Use != "logs-watch [jail] [ip]" || cmd.Short == "" || cmd.RunE == nil {
+		t.Fatalf("unexpected logs-watch command: %+v", cmd)
+	}
+	// jail and ip are positional args, not flags
+	for _, name := range []string{"limit", "interval"} {
+		if cmd.Flags().Lookup(name) == nil {
+			t.Errorf("flag %q missing", name)
+		}
+	}
+}
+
+// TestGetLogLinesWithLimitAndContextReadsRealClient pins one poll against the
+// real client: the exact filtered, limited lines, and an error once the
+// per-read timeout has expired.
+func TestGetLogLinesWithLimitAndContextReadsRealClient(t *testing.T) {
+	dir := t.TempDir()
+	content := "a [sshd] Ban 192.168.1.1\nb [apache] Ban 192.168.1.2\nc [sshd] Ban 192.168.1.3\n"
+	if err := os.WriteFile(filepath.Join(dir, "fail2ban.log"), []byte(content), 0o600); err != nil {
+		t.Fatalf("write log: %v", err)
+	}
+	client := &fail2ban.RealClient{LogDir: dir}
+	ctx := context.Background()
+
+	tests := []struct {
+		name     string
+		jail, ip string
+		maxLines int
+		want     []string
+	}{
+		{name: "no filters", maxLines: 10, want: []string{
+			"a [sshd] Ban 192.168.1.1", "b [apache] Ban 192.168.1.2", "c [sshd] Ban 192.168.1.3",
+		}},
+		{name: "jail filter", jail: "sshd", maxLines: 10, want: []string{
+			"a [sshd] Ban 192.168.1.1", "c [sshd] Ban 192.168.1.3",
+		}},
+		{name: "ip filter", ip: "192.168.1.2", maxLines: 10, want: []string{"b [apache] Ban 192.168.1.2"}},
+		{name: "limit keeps the newest", maxLines: 1, want: []string{"c [sshd] Ban 192.168.1.3"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := getLogLinesWithLimitAndContext(ctx, client, tt.jail, tt.ip, tt.maxLines, 5*time.Second)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if strings.Join(got, "\n") != strings.Join(tt.want, "\n") {
+				t.Errorf("lines = %q, want %q", got, tt.want)
+			}
+		})
+	}
+
+	t.Run("expired timeout", func(t *testing.T) {
+		_, err := getLogLinesWithLimitAndContext(ctx, client, "", "", 10, time.Nanosecond)
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Errorf("error = %v, want context.DeadlineExceeded", err)
+		}
+	})
 }

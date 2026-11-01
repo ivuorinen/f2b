@@ -11,14 +11,21 @@ on:
 permissions:
   contents: read
 
+# The cron, dispatch and workflow_call triggers can overlap; two stale passes
+# must not race on the same issues.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 jobs:
   stale:
     name: 🧹 Clean up stale issues and PRs
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     permissions:
       contents: write # only for delete-branch option
-      issues: write
-      pull-requests: write
+      issues: write # label and close stale issues
+      pull-requests: write # label and close stale pull requests
     steps:
-      - uses: ivuorinen/actions/stale@7ade03bb39e406bc0876e000b08534418b6ca914 # v2026.08.28
+      - uses: ivuorinen/actions/stale@9a311175b62e4871d83e682bf2e772d99e6d6f44 # v2026.10.23

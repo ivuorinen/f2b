@@ -11,14 +11,32 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# govulncheck and Go come from mise.toml (Go through go.mod). mise itself is
+# pinned; Renovate bumps it via the customManagers:githubActionsVersions preset.
+env:
+  # renovate: datasource=github-releases depName=jdx/mise
+  MISE_VERSION: v2026.10.21
+
 jobs:
   govulncheck:
     name: Scan for known vulnerabilities
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
 
     steps:
-      - name: Run govulncheck
-        uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          go-version-file: go.mod
+          persist-credentials: false
+
+      - name: Set up mise
+        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        with:
+          version: ${{ env.MISE_VERSION }}
+
+      - name: Run govulncheck
+        run: mise run vuln

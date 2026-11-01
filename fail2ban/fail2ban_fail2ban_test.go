@@ -73,7 +73,7 @@ func TestListJails(t *testing.T) {
 			client, err := NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
 			AssertError(t, err, false, "create client")
 
-			jails, err := client.ListJails()
+			jails, err := client.ListJailsWithContext(context.Background())
 			AssertError(t, err, false, "list jails")
 
 			if len(jails) != len(tt.expectedJails) {
@@ -103,7 +103,7 @@ func TestStatusAll(t *testing.T) {
 	client, err := NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
 	AssertError(t, err, false, "create client")
 
-	output, err := client.StatusAll()
+	output, err := client.StatusAllWithContext(context.Background())
 	AssertError(t, err, false, "status all")
 
 	if output != expectedOutput {
@@ -126,7 +126,7 @@ func TestStatusJail(t *testing.T) {
 	client, err := NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
 	AssertError(t, err, false, "create client")
 
-	output, err := client.StatusJail("sshd")
+	output, err := client.StatusJailWithContext(context.Background(), "sshd")
 	AssertError(t, err, false, "status jail")
 
 	if output != expectedOutput {
@@ -192,7 +192,7 @@ func TestBanIP(t *testing.T) {
 			client, err := NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
 			AssertError(t, err, false, "create client")
 
-			code, err := client.BanIP(tt.ip, tt.jail)
+			code, err := client.BanIPWithContext(context.Background(), tt.ip, tt.jail)
 
 			AssertError(t, err, tt.expectError, tt.name)
 			if tt.expectError {
@@ -249,7 +249,7 @@ func TestUnbanIP(t *testing.T) {
 			client, err := NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
 			AssertError(t, err, false, "create client")
 
-			code, err := client.UnbanIP(tt.ip, tt.jail)
+			code, err := client.UnbanIPWithContext(context.Background(), tt.ip, tt.jail)
 
 			AssertError(t, err, tt.expectError, tt.name)
 			if tt.expectError {
@@ -315,7 +315,7 @@ func TestBannedIn(t *testing.T) {
 			client, err := NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
 			AssertError(t, err, false, "create client")
 
-			jails, err := client.BannedIn(tt.ip)
+			jails, err := client.BannedInWithContext(context.Background(), tt.ip)
 
 			AssertError(t, err, tt.expectError, tt.name)
 			if tt.expectError {
@@ -353,7 +353,7 @@ func TestGetBanRecords(t *testing.T) {
 	client, err := NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
 	AssertError(t, err, false, "create client")
 
-	records, err := client.GetBanRecords([]string{"sshd"})
+	records, err := client.GetBanRecordsWithContext(context.Background(), []string{"sshd"})
 	AssertError(t, err, false, "get ban records")
 
 	if len(records) != 1 {
@@ -374,6 +374,8 @@ func TestGetBanRecords(t *testing.T) {
 func TestGetLogLines(t *testing.T) {
 	// Create a temporary test log directory
 	tempDir := t.TempDir()
+	originalDir := GetLogDir()
+	t.Cleanup(func() { SetLogDir(originalDir) })
 	SetLogDir(tempDir)
 
 	// Create test log files
@@ -388,7 +390,7 @@ func TestGetLogLines(t *testing.T) {
 
 	mock := NewMockRunner()
 	StandardMockSetup(mock)
-	SetRunner(mock)
+	t.Cleanup(WithTestRunner(t, mock))
 
 	tests := []struct {
 		name          string
@@ -424,7 +426,7 @@ func TestGetLogLines(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			lines, err := GetLogLines(context.Background(), tt.jail, tt.ip)
+			lines, err := readLogs(context.Background(), tt.jail, tt.ip)
 			AssertError(t, err, false, "get log lines")
 
 			if len(lines) != tt.expectedLines {
@@ -454,22 +456,25 @@ func TestGetLogLinesWithLimitPrefersRecent(t *testing.T) {
 		t.Fatalf("failed to create current log: %v", err)
 	}
 
-	lines, err := GetLogLinesWithLimit(context.Background(), "", "", 2)
-	if err != nil {
-		t.Fatalf("GetLogLinesWithLimit returned error: %v", err)
-	}
-
 	expected := []string{"new-entry-1", "new-entry-2"}
-	if !reflect.DeepEqual(lines, expected) {
-		t.Fatalf("expected %v, got %v", expected, lines)
-	}
 
 	client := &RealClient{LogDir: logDir}
-	clientLines, err := client.GetLogLinesWithLimit("", "", 2)
+	clientLines, err := client.GetLogLinesWithLimitContext(context.Background(), "", "", 2)
 	if err != nil {
-		t.Fatalf("RealClient.GetLogLinesWithLimit returned error: %v", err)
+		t.Fatalf("RealClient.GetLogLinesWithLimitContext returned error: %v", err)
 	}
 
+	if !reflect.DeepEqual(clientLines, expected) {
+		t.Fatalf("client expected %v, got %v", expected, clientLines)
+	}
+
+	// A window wider than the current log reaches back into the rotated log
+	// and stays chronological.
+	clientLines, err = client.GetLogLinesWithLimitContext(context.Background(), "", "", 4)
+	if err != nil {
+		t.Fatalf("RealClient.GetLogLinesWithLimitContext returned error: %v", err)
+	}
+	expected = []string{"old-entry-2", "old-entry-3", "new-entry-1", "new-entry-2"}
 	if !reflect.DeepEqual(clientLines, expected) {
 		t.Fatalf("client expected %v, got %v", expected, clientLines)
 	}
@@ -501,14 +506,14 @@ func TestListFilters(t *testing.T) {
 	mock.SetResponse("fail2ban-client -V", []byte("0.11.2"))
 	mock.SetResponse("fail2ban-client ping", []byte("pong"))
 	mock.SetResponse("fail2ban-client status", []byte("Status\n|- Number of jail: 1\n`- Jail list: sshd"))
-	SetRunner(mock)
+	t.Cleanup(WithTestRunner(t, mock))
 
 	// Create client with the temporary filter directory
 	client, err := NewClient(constants.DefaultLogDir, filterDir)
 	AssertError(t, err, false, "create client")
 
 	// Test ListFilters with the temporary directory
-	filters, err := client.ListFilters()
+	filters, err := client.ListFiltersWithContext(context.Background())
 	AssertError(t, err, false, "list filters")
 
 	// Should find only .conf files (sshd, apache, nginx - not readme.txt)
@@ -558,7 +563,7 @@ logpath = /var/log/auth.log`
 	AssertError(t, err, false, "create client")
 
 	// Test the actual created filter
-	output, err := client.TestFilter(filterName)
+	output, err := client.TestFilterWithContext(context.Background(), filterName)
 	AssertError(t, err, false, "test filter should succeed")
 
 	if output != expectedOutput {
@@ -566,7 +571,7 @@ logpath = /var/log/auth.log`
 	}
 
 	// Also test that a nonexistent filter fails appropriately
-	_, err = client.TestFilter("nonexistent")
+	_, err = client.TestFilterWithContext(context.Background(), "nonexistent")
 	if err == nil {
 		t.Error("TestFilter should fail for nonexistent filter")
 	}
@@ -866,7 +871,7 @@ func assertInvalidTimeRecords(
 	mockRunner.SetResponse("sudo fail2ban-client get sshd banip --with-time", []byte(mockResponse))
 
 	// Get ban records
-	records, err := client.GetBanRecords([]string{"sshd"})
+	records, err := client.GetBanRecordsWithContext(context.Background(), []string{"sshd"})
 	if err != nil {
 		t.Fatalf("GetBanRecords failed: %v", err)
 	}

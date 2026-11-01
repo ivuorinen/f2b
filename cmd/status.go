@@ -34,9 +34,7 @@ func StatusCmd(client fail2ban.Client, config *Config) *cobra.Command {
 				if err != nil {
 					return HandleClientError(err)
 				}
-				status := FormatStatusResult("", out)
-				PrintOutputTo(GetCmdOutput(cmd), status, config.Format)
-				return nil
+				return PrintOutputTo(GetCmdOutput(cmd), FormatStatusResult("", out), config.Format)
 			}
 
 			// Check if jail exists (with timeout context)
@@ -55,9 +53,7 @@ func StatusCmd(client fail2ban.Client, config *Config) *cobra.Command {
 				return HandleClientError(err)
 			}
 
-			status := FormatStatusResult(target, out)
-			PrintOutputTo(GetCmdOutput(cmd), status, config.Format)
-			return nil
+			return PrintOutputTo(GetCmdOutput(cmd), FormatStatusResult(target, out), config.Format)
 		})
 }
 
@@ -71,8 +67,14 @@ func printStatusUsage(ctx context.Context, cmd *cobra.Command, client fail2ban.C
 		jails = []string{}
 	}
 	out := GetCmdOutput(cmd)
-	PrintOutputTo(out, "Usage: "+cmd.Root().Use+" status all   (show all jails)", config.Format)
-	PrintOutputTo(out, "       "+cmd.Root().Use+" status <jail> (show specific jail)", config.Format)
-	PrintOutputTo(out, "Available jails: "+strings.Join(jails, " "), config.Format)
+	for _, line := range []string{
+		"Usage: " + cmd.Root().Use + " status all   (show all jails)",
+		"       " + cmd.Root().Use + " status <jail> (show specific jail)",
+		"Available jails: " + strings.Join(jails, " "),
+	} {
+		if err := PrintOutputTo(out, line, config.Format); err != nil {
+			return err
+		}
+	}
 	return nil
 }

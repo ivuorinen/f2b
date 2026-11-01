@@ -1,21 +1,19 @@
-// Package fail2ban provides logging and environment detection utilities.
-// This module handles logger configuration, CI detection, and test environment setup
-// for the fail2ban integration system.
+// Logger configuration plus CI and test environment detection.
+
 package fail2ban
 
 import (
 	"flag"
-	"log/slog"
 	"os"
 	"sync"
 	"sync/atomic"
 )
 
-// loggerBox wraps a LoggerInterface so atomic.Value always stores the same
-// concrete type. Storing bare LoggerInterface values panics with "store of
+// loggerBox wraps a LoggerEntry so atomic.Value always stores the same
+// concrete type. Storing bare LoggerEntry values panics with "store of
 // inconsistently typed value" when the concrete type differs from the first
-// store (e.g. a custom logger after the default *logrusAdapter).
-type loggerBox struct{ l LoggerInterface }
+// store (e.g. a custom logger after the default *SlogLogger).
+type loggerBox struct{ l LoggerEntry }
 
 // logger holds the current logger instance in a thread-safe manner
 var logger atomic.Value
@@ -26,7 +24,7 @@ func init() {
 }
 
 // SetLogger allows the cmd package to set the logger instance (thread-safe)
-func SetLogger(l LoggerInterface) {
+func SetLogger(l LoggerEntry) {
 	if l == nil {
 		return
 	}
@@ -34,7 +32,7 @@ func SetLogger(l LoggerInterface) {
 }
 
 // getLogger returns the current logger instance (thread-safe)
-func getLogger() LoggerInterface {
+func getLogger() LoggerEntry {
 	box, ok := logger.Load().(loggerBox)
 	if !ok || box.l == nil {
 		// Fallback to default logger if type assertion fails
@@ -58,23 +56,6 @@ func IsCI() bool {
 	return false
 }
 
-// ConfigureCITestLogging reduces log verbosity in CI and test environments
-// This should be called explicitly during application initialization
-func ConfigureCITestLogging() {
-	if IsCI() || IsTestEnvironment() {
-		// Try interface-based assertion first to support custom loggers
-		currentLogger := getLogger()
-		if l, ok := currentLogger.(interface{ SetLevel(slog.Level) }); ok {
-			l.SetLevel(slog.LevelWarn)
-		} else {
-			// Log when we can't adjust level (observable for debugging)
-			currentLogger.Debug(
-				"Non-standard logger in use; CI/test log level adjustment skipped",
-			)
-		}
-	}
-}
-
 // IsTestEnvironment detects if we're running in a test environment.
 //
 // It must NOT match on os.Args content: the previous substring scan for
@@ -84,11 +65,20 @@ func ConfigureCITestLogging() {
 // registers when running under `go test` — this is present regardless of the
 // test binary's name, so it also closes the renamed-binary bypass.
 func IsTestEnvironment() bool {
+	return detectTestEnvironment(os.Getenv, IsGoTestBinary())
+}
+
+// detectTestEnvironment is IsTestEnvironment with its inputs injected. Every
+// real call runs inside `go test`, where -test.v is always registered, so the
+// non-test branch was unreachable from tests and a constant-true
+// implementation passed; taking getenv and the go-test flag lets a test build
+// the production (false) case.
+func detectTestEnvironment(getenv func(string) string, goTestBinary bool) bool {
 	// Explicit opt-in via environment variables.
 	testEnvVars := []string{"GO_TEST", "F2B_TEST", "F2B_TEST_SUDO"}
 	for _, envVar := range testEnvVars {
-		if os.Getenv(envVar) != "" {
-			if flag.Lookup("test.v") == nil {
+		if getenv(envVar) != "" {
+			if !goTestBinary {
 				// Outside `go test` these vars silently disable real sudo
 				// probing, which later surfaces as confusing "service not
 				// running" errors — say so once, loudly.
@@ -102,7 +92,7 @@ func IsTestEnvironment() bool {
 	}
 
 	// Precise Go-test-binary detection.
-	return flag.Lookup("test.v") != nil
+	return goTestBinary
 }
 
 // IsGoTestBinary reports whether this process is a `go test` binary, using only

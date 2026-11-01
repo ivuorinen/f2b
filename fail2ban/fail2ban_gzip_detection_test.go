@@ -8,9 +8,7 @@ import (
 	"testing"
 )
 
-func TestGzipDetector(t *testing.T) {
-	detector := NewGzipDetector()
-
+func TestIsGzipFile(t *testing.T) {
 	// Create temp directory with test files
 	files := map[string][]byte{
 		"regular.log": []byte("test log line\n"),
@@ -41,20 +39,18 @@ func TestGzipDetector(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			isGzip, err := detector.IsGzipFile(tt.file)
+			isGzip, err := isGzipFile(tt.file)
 			if err != nil {
-				t.Fatalf("IsGzipFile failed: %v", err)
+				t.Fatalf("isGzipFile failed: %v", err)
 			}
 			if isGzip != tt.isGzip {
-				t.Errorf("IsGzipFile = %v, want %v", isGzip, tt.isGzip)
+				t.Errorf("isGzipFile = %v, want %v", isGzip, tt.isGzip)
 			}
 		})
 	}
 }
 
 func TestOpenGzipAwareReader(t *testing.T) {
-	detector := NewGzipDetector()
-
 	// Create temp directory with test files
 	testContent := "test log line\nsecond line\n"
 	files := map[string][]byte{
@@ -87,7 +83,7 @@ func TestOpenGzipAwareReader(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			reader, err := detector.OpenGzipAwareReader(tt.file)
+			reader, err := openGzipAwareReader(tt.file)
 			if err != nil {
 				t.Fatalf("OpenGzipAwareReader failed: %v", err)
 			}
@@ -106,8 +102,6 @@ func TestOpenGzipAwareReader(t *testing.T) {
 }
 
 func TestCreateGzipAwareScanner(t *testing.T) {
-	detector := NewGzipDetector()
-
 	// Create temp directory with test files
 	testLines := []string{"line1", "line2", "line3"}
 	testContent := strings.Join(testLines, "\n")
@@ -142,14 +136,14 @@ func TestCreateGzipAwareScanner(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assertGzipScanner(t, detector, tt.file, tt.expectedLines)
+			assertGzipScanner(t, tt.file, tt.expectedLines)
 		})
 	}
 }
 
-func assertGzipScanner(t *testing.T, detector *GzipDetector, file string, expectedLines []string) {
+func assertGzipScanner(t *testing.T, file string, expectedLines []string) {
 	t.Helper()
-	scanner, cleanup, err := detector.CreateGzipAwareScanner(file)
+	scanner, cleanup, err := createGzipAwareScanner(file, 0)
 	if err != nil {
 		t.Fatalf("CreateGzipAwareScanner failed: %v", err)
 	}
@@ -176,8 +170,6 @@ func assertGzipScanner(t *testing.T, detector *GzipDetector, file string, expect
 }
 
 func TestCreateGzipAwareScannerWithBuffer(t *testing.T) {
-	detector := NewGzipDetector()
-
 	// Create temp file with long line
 	tempDir := t.TempDir()
 	longLineFile := filepath.Join(tempDir, "longline.log")
@@ -188,7 +180,7 @@ func TestCreateGzipAwareScannerWithBuffer(t *testing.T) {
 	}
 
 	// Test with buffer size larger than line
-	scanner, cleanup, err := detector.CreateGzipAwareScannerWithBuffer(longLineFile, 2000)
+	scanner, cleanup, err := createGzipAwareScanner(longLineFile, 2000)
 	if err != nil {
 		t.Fatalf("CreateGzipAwareScannerWithBuffer failed: %v", err)
 	}
@@ -207,58 +199,6 @@ func TestCreateGzipAwareScannerWithBuffer(t *testing.T) {
 	}
 }
 
-func TestGlobalFunctions(t *testing.T) {
-	// Create temp directory for test files
-	tempDir := t.TempDir()
-
-	// Test regular file
-	regularFile := filepath.Join(tempDir, "regular.log")
-	err := os.WriteFile(regularFile, []byte("test content"), 0600)
-	if err != nil {
-		t.Fatalf("Failed to create regular file: %v", err)
-	}
-
-	// Test IsGzipFile global function
-	isGzip, err := IsGzipFile(regularFile)
-	if err != nil {
-		t.Fatalf("IsGzipFile failed: %v", err)
-	}
-	if isGzip {
-		t.Error("Regular file detected as gzip")
-	}
-
-	// Test OpenGzipAwareReader global function
-	reader, err := OpenGzipAwareReader(regularFile)
-	if err != nil {
-		t.Fatalf("OpenGzipAwareReader failed: %v", err)
-	}
-	defer func() { _ = reader.Close() }()
-
-	content, err := io.ReadAll(reader)
-	if err != nil {
-		t.Fatalf("ReadAll failed: %v", err)
-	}
-
-	if string(content) != "test content" {
-		t.Errorf("Content = %q, want %q", string(content), "test content")
-	}
-
-	// Test CreateGzipAwareScanner global function
-	scanner, cleanup, err := CreateGzipAwareScanner(regularFile)
-	if err != nil {
-		t.Fatalf("CreateGzipAwareScanner failed: %v", err)
-	}
-	defer cleanup()
-
-	if scanner.Scan() {
-		if scanner.Text() != "test content" {
-			t.Errorf("Scanned text = %q, want %q", scanner.Text(), "test content")
-		}
-	} else {
-		t.Error("Scanner failed to read line")
-	}
-}
-
 func TestGzipFileReaderClose(t *testing.T) {
 	// Create temp gzip file
 	tempDir := t.TempDir()
@@ -266,9 +206,9 @@ func TestGzipFileReaderClose(t *testing.T) {
 	createTestGzipFile(t, gzipFile, []byte("test content"))
 
 	// Test that gzipFileReader closes both readers properly
-	reader, err := OpenGzipAwareReader(gzipFile)
+	reader, err := openGzipAwareReader(gzipFile)
 	if err != nil {
-		t.Fatalf("OpenGzipAwareReader failed: %v", err)
+		t.Fatalf("openGzipAwareReader failed: %v", err)
 	}
 
 	// Read some content
@@ -286,8 +226,6 @@ func TestGzipFileReaderClose(t *testing.T) {
 }
 
 func BenchmarkGzipDetection(b *testing.B) {
-	detector := NewGzipDetector()
-
 	// Create test files
 	files := map[string][]byte{
 		"regular.log": []byte("test content"),
@@ -300,21 +238,19 @@ func BenchmarkGzipDetection(b *testing.B) {
 
 	b.Run("regular file", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			_, _ = detector.IsGzipFile(regularFile)
+			_, _ = isGzipFile(regularFile)
 		}
 	})
 
 	b.Run("gzip file with extension", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			_, _ = detector.IsGzipFile(gzipFile)
+			_, _ = isGzipFile(gzipFile)
 		}
 	})
 }
 
 // TestGzipDetectionWithRealTestData tests gzip detection with actual test data files
 func TestGzipDetectionWithRealTestData(t *testing.T) {
-	detector := NewGzipDetector()
-
 	// Test with real test data files
 	tests := []struct {
 		name     string
@@ -341,7 +277,7 @@ func TestGzipDetectionWithRealTestData(t *testing.T) {
 				t.Fatalf("checked-in test data file missing: %s", tt.file)
 			}
 
-			isGzip, err := detector.IsGzipFile(tt.file)
+			isGzip, err := isGzipFile(tt.file)
 			if err != nil {
 				t.Fatalf("IsGzipFile failed: %v", err)
 			}
@@ -355,7 +291,6 @@ func TestGzipDetectionWithRealTestData(t *testing.T) {
 
 // TestReadCompressedRealLogs tests reading actual compressed log data
 func TestReadCompressedRealLogs(t *testing.T) {
-	detector := NewGzipDetector()
 	compressedFile := filepath.Join("testdata", "fail2ban_compressed.log.gz")
 
 	// Checked-in fixture: missing means broken tree, so fail instead of skip.
@@ -364,7 +299,7 @@ func TestReadCompressedRealLogs(t *testing.T) {
 	}
 
 	// Create scanner for compressed file
-	scanner, cleanup, err := detector.CreateGzipAwareScanner(compressedFile)
+	scanner, cleanup, err := createGzipAwareScanner(compressedFile, 0)
 	if err != nil {
 		t.Fatalf("Failed to create scanner: %v", err)
 	}
@@ -404,7 +339,6 @@ func TestReadCompressedRealLogs(t *testing.T) {
 
 // BenchmarkGzipDetectionWithRealFile benchmarks with actual test data
 func BenchmarkGzipDetectionWithRealFile(b *testing.B) {
-	detector := NewGzipDetector()
 	compressedFile := filepath.Join("testdata", "fail2ban_compressed.log.gz")
 
 	// Skip if test file doesn't exist
@@ -414,7 +348,7 @@ func BenchmarkGzipDetectionWithRealFile(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		isGzip, err := detector.IsGzipFile(compressedFile)
+		isGzip, err := isGzipFile(compressedFile)
 		if err != nil {
 			b.Fatalf("IsGzipFile failed: %v", err)
 		}

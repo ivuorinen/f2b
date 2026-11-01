@@ -1,6 +1,7 @@
-// Package fail2ban test-support: MockRunner is a mock implementation of the
-// Runner interface used only by unit tests. It was extracted verbatim from
-// fail2ban.go to keep test doubles out of the production Runner machinery.
+// Test support: MockRunner is a mock implementation of the Runner interface
+// used only by unit tests (see test_helpers.go for why it is not a _test.go
+// file).
+
 package fail2ban
 
 import (
@@ -40,7 +41,7 @@ func (m *MockRunner) CombinedOutput(name string, args ...string) ([]byte, error)
 	if name == constants.SudoCommand && len(args) > 0 {
 		inner, innerArgs = args[0], args[1:]
 	}
-	if err := validateCommandExecution(context.Background(), inner, innerArgs); err != nil {
+	if err := validateCommandExecution(inner, innerArgs); err != nil {
 		return nil, err
 	}
 
@@ -147,41 +148,6 @@ func (m *MockRunner) GetCalls() []string {
 	calls := make([]string, len(m.CallLog))
 	copy(calls, m.CallLog)
 	return calls
-}
-
-// SetupStandardResponses configures comprehensive standard responses for testing.
-// This eliminates the need for repetitive SetResponse calls in individual tests.
-func (m *MockRunner) SetupStandardResponses() {
-	StandardMockSetup(m)
-}
-
-// SetupJailResponses configures responses for a specific jail.
-// This is useful for tests that focus on a single jail's behavior.
-func (m *MockRunner) SetupJailResponses(jail string) {
-	statusResponse := fmt.Sprintf("Status for the jail: %s\n|- Filter\n|  |- Currently failed:\t0\n|  "+
-		"|- Total failed:\t5\n|  `- File list:\t/var/log/auth.log\n`- Actions\n   "+
-		"|- Currently banned:\t1\n   |- Total banned:\t2\n   `- Banned IP list:\t192.168.1.100", jail)
-
-	m.SetResponse(fmt.Sprintf("fail2ban-client status %s", jail), []byte(statusResponse))
-	m.SetResponse(fmt.Sprintf("sudo fail2ban-client status %s", jail), []byte(statusResponse))
-
-	// Common ban/unban operations for the jail (use success status, not already-processed)
-	m.SetResponse(
-		fmt.Sprintf("fail2ban-client set %s banip 192.168.1.100", jail),
-		[]byte(constants.Fail2BanStatusSuccess),
-	)
-	m.SetResponse(
-		fmt.Sprintf("sudo fail2ban-client set %s banip 192.168.1.100", jail),
-		[]byte(constants.Fail2BanStatusSuccess),
-	)
-	m.SetResponse(
-		fmt.Sprintf("fail2ban-client set %s unbanip 192.168.1.100", jail),
-		[]byte(constants.Fail2BanStatusSuccess),
-	)
-	m.SetResponse(
-		fmt.Sprintf("sudo fail2ban-client set %s unbanip 192.168.1.100", jail),
-		[]byte(constants.Fail2BanStatusSuccess),
-	)
 }
 
 // CombinedOutputWithContext returns a mocked response or error for a command with context support.

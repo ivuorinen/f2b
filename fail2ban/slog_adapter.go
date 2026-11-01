@@ -1,7 +1,7 @@
-// Package fail2ban provides a log/slog-backed implementation of LoggerInterface.
-// It replaces the former logrus adapter so f2b depends only on the standard
-// library for logging while keeping the fluent WithField/WithError/Warnf API the
-// rest of the codebase already uses.
+// A log/slog-backed implementation of LoggerEntry, so f2b depends only on the
+// standard library for logging while keeping the fluent
+// WithField/WithError/Warnf API the rest of the codebase uses.
+
 package fail2ban
 
 import (
@@ -12,6 +12,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 // syncWriter is a concurrency-safe, swappable io.Writer. slog binds a writer at
@@ -51,10 +52,12 @@ const (
 	SlogJSON
 )
 
-// SlogLogger adapts log/slog to LoggerInterface. Entries produced by With* share
+// SlogLogger adapts log/slog to LoggerEntry. Entries produced by With* share
 // the root's level and output, so SetLevel/SetOutput affect the whole tree.
+// The slog.Logger is held atomically so Reconfigure can swap the format and
+// default fields while other goroutines log.
 type SlogLogger struct {
-	logger *slog.Logger
+	logger atomic.Pointer[slog.Logger]
 	level  *slog.LevelVar
 	out    *syncWriter
 }
@@ -76,29 +79,41 @@ func logrusCompatKeys(_ []string, a slog.Attr) slog.Attr {
 	return a
 }
 
-// NewSlogLogger builds a SlogLogger writing to os.Stderr at info level.
-func NewSlogLogger(format SlogFormat) *SlogLogger {
-	out := &syncWriter{w: os.Stderr}
-	level := new(slog.LevelVar) // info by default
+// newSlogHandler builds the handler for format writing to out at level.
+func newSlogHandler(format SlogFormat, out io.Writer, level *slog.LevelVar) slog.Handler {
 	opts := &slog.HandlerOptions{Level: level}
-
-	var h slog.Handler
 	if format == SlogJSON {
 		opts.ReplaceAttr = logrusCompatKeys
-		h = slog.NewJSONHandler(out, opts)
-	} else {
-		h = slog.NewTextHandler(out, opts)
+		return slog.NewJSONHandler(out, opts)
 	}
-	return &SlogLogger{logger: slog.New(h), level: level, out: out}
+	return slog.NewTextHandler(out, opts)
+}
+
+// NewSlogLogger builds a SlogLogger writing to os.Stderr at info level.
+func NewSlogLogger(format SlogFormat) *SlogLogger {
+	l := &SlogLogger{level: new(slog.LevelVar), out: &syncWriter{w: os.Stderr}} // info by default
+	l.logger.Store(slog.New(newSlogHandler(format, l.out, l.level)))
+	return l
+}
+
+// Reconfigure switches this logger to format and replaces its default fields
+// with attrs (key/value pairs), keeping its level and output. It exists so the
+// CLI chooses one format for every logger sharing the sink, and stamps fields
+// such as the running command on every line. Entries derived earlier keep
+// their old handler.
+func (l *SlogLogger) Reconfigure(format SlogFormat, attrs ...any) {
+	l.logger.Store(slog.New(newSlogHandler(format, l.out, l.level)).With(attrs...))
 }
 
 func (l *SlogLogger) derive(sl *slog.Logger) *SlogLogger {
-	return &SlogLogger{logger: sl, level: l.level, out: l.out}
+	d := &SlogLogger{level: l.level, out: l.out}
+	d.logger.Store(sl)
+	return d
 }
 
 // WithField returns an entry with an added structured field.
 func (l *SlogLogger) WithField(key string, value any) LoggerEntry {
-	return l.derive(l.logger.With(key, value))
+	return l.derive(l.logger.Load().With(key, value))
 }
 
 // WithFields returns an entry with the given structured fields added.
@@ -107,7 +122,7 @@ func (l *SlogLogger) WithFields(fields Fields) LoggerEntry {
 	for k, v := range fields {
 		args = append(args, k, v)
 	}
-	return l.derive(l.logger.With(args...))
+	return l.derive(l.logger.Load().With(args...))
 }
 
 // WithError attaches the error's message under the "error" field. slog's JSON
@@ -116,15 +131,15 @@ func (l *SlogLogger) WithError(err error) LoggerEntry {
 	if err == nil {
 		return l
 	}
-	return l.derive(l.logger.With("error", err.Error()))
+	return l.derive(l.logger.Load().With("error", err.Error()))
 }
 
 func (l *SlogLogger) write(level slog.Level, args ...any) {
-	l.logger.Log(context.Background(), level, fmt.Sprint(args...))
+	l.logger.Load().Log(context.Background(), level, fmt.Sprint(args...))
 }
 
 func (l *SlogLogger) writef(level slog.Level, format string, args ...any) {
-	l.logger.Log(context.Background(), level, fmt.Sprintf(format, args...))
+	l.logger.Load().Log(context.Background(), level, fmt.Sprintf(format, args...))
 }
 
 // Debug logs at debug level.
@@ -163,7 +178,4 @@ func (l *SlogLogger) SetLevel(level slog.Level) { l.level.Set(level) }
 // GetLevel returns the current minimum level.
 func (l *SlogLogger) GetLevel() slog.Level { return l.level.Level() }
 
-var (
-	_ LoggerInterface = (*SlogLogger)(nil)
-	_ LoggerEntry     = (*SlogLogger)(nil)
-)
+var _ LoggerEntry = (*SlogLogger)(nil)

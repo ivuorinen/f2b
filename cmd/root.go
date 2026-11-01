@@ -94,30 +94,10 @@ func Execute(client fail2ban.Client, config Config) error {
 	defer cancel()
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	stopWatching := watchSignals(sigCh, cancel)
 	defer func() {
 		signal.Stop(sigCh)
-		// A signal delivered as the command completed may still sit in the
-		// buffer with its goroutine not yet scheduled — record it so main
-		// doesn't exit 0 on an interrupted run.
-		select {
-		case sig := <-sigCh:
-			if s, ok := sig.(syscall.Signal); ok {
-				interruptCode.Store(int32(128 + int(s))) // #nosec G115 -- signal numbers are tiny
-			}
-		default:
-		}
-		close(sigCh)
-	}()
-	go func() {
-		sig, ok := <-sigCh
-		if !ok {
-			return
-		}
-		if s, ok := sig.(syscall.Signal); ok {
-			interruptCode.Store(int32(128 + int(s))) // #nosec G115 -- signal numbers are tiny
-		}
-		signal.Stop(sigCh)
-		cancel()
+		stopWatching()
 	}()
 	// Re-register from scratch: cobra does not dedupe AddCommand, so a second
 	// Execute in the same process (tests, embedding) would otherwise dispatch
@@ -130,7 +110,7 @@ func Execute(client fail2ban.Client, config Config) error {
 	rootCmd.AddCommand(UnbanCmd(client, &cfg))
 	rootCmd.AddCommand(TestIPCmd(client, &cfg))
 	rootCmd.AddCommand(LogsCmd(client, &cfg))
-	rootCmd.AddCommand(LogsWatchCmd(ctx, client, &cfg))
+	rootCmd.AddCommand(LogsWatchCmd(client, &cfg))
 	rootCmd.AddCommand(ServiceCmd(&cfg))
 	rootCmd.AddCommand(VersionCmd(&cfg))
 	rootCmd.AddCommand(TestFilterCmd(client, &cfg))
@@ -138,10 +118,45 @@ func Execute(client fail2ban.Client, config Config) error {
 	return rootCmd.ExecuteContext(ctx)
 }
 
-func init() {
-	// Initialize logging configuration
-	initLogging()
+// watchSignals records the first signal from sigCh as the exit code, restores
+// default handling so a second Ctrl-C force-kills, and cancels the command.
+//
+// The returned stop joins the goroutine and then drains a signal still
+// buffered, so a signal that arrived as the command completed is recorded
+// before Execute returns and main reads SignalExitCode. sigCh is never closed:
+// os/signal may still send on it.
+func watchSignals(sigCh chan os.Signal, cancel context.CancelFunc) (stop func()) {
+	quit := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		select {
+		case sig := <-sigCh:
+			recordSignal(sig)
+			signal.Stop(sigCh)
+			cancel()
+		case <-quit:
+		}
+	}()
+	return func() {
+		close(quit)
+		<-done
+		select {
+		case sig := <-sigCh:
+			recordSignal(sig)
+		default:
+		}
+	}
+}
 
+// recordSignal stores the conventional 128+n exit code for sig.
+func recordSignal(sig os.Signal) {
+	if s, ok := sig.(syscall.Signal); ok {
+		interruptCode.Store(int32(128 + int(s))) // #nosec G115 -- signal numbers are tiny
+	}
+}
+
+func init() {
 	// Set defaults from env
 	cfg = NewConfigFromEnv()
 
@@ -164,7 +179,9 @@ func init() {
 	// Log file support
 	logFile := os.Getenv("F2B_LOG_FILE")
 	rootCmd.PersistentFlags().String(constants.FlagLogFile, logFile, "Path to log file for f2b logs (optional)")
-	rootCmd.PersistentFlags().String(constants.FlagLogLevel, logLevel, "Log level (debug, info, warn, error)")
+	rootCmd.PersistentFlags().String(
+		constants.FlagLogLevel, logLevel, "Log level (debug, info, warn|warning, error, fatal, panic)",
+	)
 
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
 		// Validate AFTER flag parsing so flag-provided values are covered too
@@ -180,48 +197,61 @@ func init() {
 		level, _ := cmd.Flags().GetString(constants.FlagLogLevel)
 		Logger.SetLevel(parseLogLevel(level))
 
+		// The one place the log format is chosen: JSON for a --log-file, text
+		// for the terminal. Logger and the contextual logger share this
+		// handler, so a sink never mixes formats, and every line carries the
+		// command path so a "Command failed" record says which one failed.
+		format := fail2ban.SlogText
 		logFileFlag, _ := cmd.Flags().GetString(constants.FlagLogFile)
-		if logFileFlag == "" {
-			syncContextualLogger()
-			return nil
-		}
+		if logFileFlag != "" {
+			cleanPath, err := resolveLogFilePath(logFileFlag)
+			if err != nil {
+				return err
+			}
 
-		// Validate log file path for security
-		cleanPath, err := filepath.Abs(filepath.Clean(logFileFlag))
-		if err != nil {
-			return fmt.Errorf("invalid log file path %s: %w", logFileFlag, err)
+			// #nosec G304 - resolveLogFilePath confines the file to the log allowlist.
+			f, err := os.OpenFile(cleanPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, constants.DefaultFilePermissions)
+			if err != nil {
+				return fmt.Errorf("failed to open log file %s: %w", cleanPath, err)
+			}
+			Logger.SetOutput(f)
+			// Register cleanup for graceful shutdown
+			registerLogFileCleanup(f)
+			format = fail2ban.SlogJSON
 		}
-
-		// #nosec G304 - Path is cleaned and made absolute above; filepath.Clean
-		// already normalizes any traversal sequences.
-		f, err := os.OpenFile(cleanPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, constants.DefaultFilePermissions)
-		if err != nil {
-			return fmt.Errorf("failed to open log file %s: %w", cleanPath, err)
-		}
-		Logger.SetOutput(f)
-		// Register cleanup for graceful shutdown
-		registerLogFileCleanup(f, cleanPath)
-		syncContextualLogger()
+		Logger.Reconfigure(format, logFieldCommandPath, cmd.CommandPath())
 		return nil
 	}
 }
 
-// syncContextualLogger propagates the configured level and output of the main
-// Logger to the structured operation logger, which was otherwise frozen at its
-// package-init values and ignored --log-level/--log-file.
-func syncContextualLogger() {
-	if cl := GetContextualLogger(); cl != nil {
-		cl.SetLevel(Logger.GetLevel())
-		cl.SetOutput(Logger.Output())
+// logFieldCommandPath is the log field naming the running command, e.g.
+// "f2b ban". It is not "command": the IP commands already log that key with
+// the bare command name.
+const logFieldCommandPath = "command_path"
+
+// resolveLogFilePath returns the absolute --log-file path after confining its
+// directory to the log allowlist. The file is created or appended for every
+// subcommand, so under `sudo f2b` an unchecked path let the caller create a
+// root-owned file anywhere (e.g. /etc/cron.d/x) or append log lines to one
+// (e.g. /root/.bashrc).
+func resolveLogFilePath(logFile string) (string, error) {
+	cleanPath, err := filepath.Abs(filepath.Clean(logFile))
+	if err != nil {
+		return "", fmt.Errorf("invalid log file path %s: %w", logFile, err)
 	}
+	dir, err := fail2ban.ValidatePathWithSecurity(filepath.Dir(cleanPath), fail2ban.CreateLogPathConfig())
+	if err != nil {
+		return "", fmt.Errorf("log file %s is outside the allowed log directories: %w", cleanPath, err)
+	}
+	return filepath.Join(dir, filepath.Base(cleanPath)), nil
 }
 
 // registerLogFileCleanup registers a log file so cleanupResources closes it
-// when Execute returns. Signal handling lives in Execute's NotifyContext: a
+// when Execute returns. Signal handling lives in Execute's watchSignals: a
 // signal cancels the command context, the command returns, and the deferred
 // cleanup runs — no competing handler that os.Exits mid-command and skips the
-// metrics/log-file defers.
-func registerLogFileCleanup(f *os.File, _ string) {
+// log-file defer.
+func registerLogFileCleanup(f *os.File) {
 	logFileMutex.Lock()
 	logFile = f
 	logFileMutex.Unlock()
@@ -304,19 +334,21 @@ PowerShell:
 		DisableFlagsInUseLine: true,
 		Args:                  cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
 		ValidArgs:             []string{"bash", "zsh", "fish", "powershell"},
-		Run: func(cmd *cobra.Command, args []string) {
+		// RunE so a failed write (e.g. redirecting into a full filesystem)
+		// fails the command instead of exiting 0 with a truncated script.
+		RunE: func(cmd *cobra.Command, args []string) error {
 			// Get the root command from the current command's parent hierarchy
 			root := cmd.Root()
 			// Note: Cobra's Args validation ensures we have exactly 1 valid argument
 			switch args[0] {
 			case "bash":
-				_ = root.GenBashCompletion(cmd.OutOrStdout())
+				return root.GenBashCompletion(cmd.OutOrStdout())
 			case "zsh":
-				_ = root.GenZshCompletion(cmd.OutOrStdout())
+				return root.GenZshCompletion(cmd.OutOrStdout())
 			case "fish":
-				_ = root.GenFishCompletion(cmd.OutOrStdout(), true)
-			case "powershell":
-				_ = root.GenPowerShellCompletionWithDesc(cmd.OutOrStdout())
+				return root.GenFishCompletion(cmd.OutOrStdout(), true)
+			default: // "powershell"
+				return root.GenPowerShellCompletionWithDesc(cmd.OutOrStdout())
 			}
 		},
 	}

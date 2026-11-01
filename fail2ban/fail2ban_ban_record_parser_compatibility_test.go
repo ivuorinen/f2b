@@ -1,8 +1,13 @@
 package fail2ban
 
 import (
+	"bytes"
+	"log/slog"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // compareParserResults compares results from two consecutive parser runs
@@ -98,19 +103,13 @@ func TestParserDeterminism(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Validates parser determinism by running twice with identical input
-			parser1, err := NewBanRecordParser()
-			if err != nil {
-				t.Fatal(err)
-			}
+			parser1 := NewBanRecordParser()
 
 			// First parse
 			firstRecords, firstErr := parser1.ParseBanRecords(tc.input, tc.jail)
 
 			// Second parse with fresh parser (should produce identical results)
-			parser2, err := NewBanRecordParser()
-			if err != nil {
-				t.Fatal(err)
-			}
+			parser2 := NewBanRecordParser()
 			secondRecords, secondErr := parser2.ParseBanRecords(tc.input, tc.jail)
 
 			compareParserResults(t, firstRecords, firstErr, secondRecords, secondErr)
@@ -202,19 +201,13 @@ func TestParserDeterminismLineByLine(t *testing.T) {
 	for _, tc := range testLines {
 		t.Run(tc.name, func(t *testing.T) {
 			// Validates parser determinism by running twice with identical input
-			parser1, err := NewBanRecordParser()
-			if err != nil {
-				t.Fatal(err)
-			}
+			parser1 := NewBanRecordParser()
 
 			// First parse
 			firstRecord, firstErr := parser1.ParseBanRecordLine(tc.line, tc.jail)
 
 			// Second parse with fresh parser (should produce identical results)
-			parser2, err := NewBanRecordParser()
-			if err != nil {
-				t.Fatal(err)
-			}
+			parser2 := NewBanRecordParser()
 			secondRecord, secondErr := parser2.ParseBanRecordLine(tc.line, tc.jail)
 
 			compareSingleRecords(t, firstRecord, firstErr, secondRecord, secondErr)
@@ -222,49 +215,68 @@ func TestParserDeterminismLineByLine(t *testing.T) {
 	}
 }
 
-// TestParserStatistics tests the statistics functionality
-func TestParserStatistics(t *testing.T) {
-	parser, err := NewBanRecordParser()
-	if err != nil {
-		t.Fatal(err)
-	}
+// captureFail2banLog routes the package logger to a buffer for the test.
+func captureFail2banLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	l := NewSlogLogger(SlogText)
+	l.SetOutput(&buf)
+	l.SetLevel(slog.LevelDebug)
+	previous := getLogger()
+	SetLogger(l)
+	t.Cleanup(func() { SetLogger(previous) })
+	return &buf
+}
 
-	// Initial stats should be zero
-	parseCount, errorCount := parser.GetStats()
-	if parseCount != 0 || errorCount != 0 {
-		t.Errorf("Initial stats should be zero: parseCount=%d, errorCount=%d", parseCount, errorCount)
-	}
+// TestParseBanRecordsWarnsOnSkippedLines pins that unparseable lines are
+// reported: a jail whose every record is rejected (e.g. ticket IDs instead of
+// IPs) must not look like a jail with no bans. Blank lines are not counted.
+func TestParseBanRecordsWarnsOnSkippedLines(t *testing.T) {
+	input := "192.168.1.100 2025-07-20 14:30:39 + 2025-07-20 14:40:39 remaining\n" +
+		"\n" +
+		"ticket-42 2025-07-20 14:36:59 + 2025-07-20 14:46:59 remaining\n" +
+		"not-an-ip\n"
 
-	// Parse some records
-	input := `192.168.1.100 2025-07-20 14:30:39 + 2025-07-20 14:40:39 remaining
+	t.Run("skipped lines are counted and logged", func(t *testing.T) {
+		buf := captureFail2banLog(t)
+		records, err := NewBanRecordParser().ParseBanRecords(input, "sshd")
+		require.NoError(t, err)
+		require.Len(t, records, 1)
+		assert.Contains(t, buf.String(), "Skipped unparseable ban record lines")
+		assert.Contains(t, buf.String(), "skipped=2")
+		assert.Contains(t, buf.String(), "jail=sshd")
+	})
 
-10.0.0.50 2025-07-20 14:36:59 + 2025-07-20 14:46:59 remaining`
+	t.Run("clean input logs no warning", func(t *testing.T) {
+		buf := captureFail2banLog(t)
+		records, err := NewBanRecordParser().ParseBanRecords(benchmarkBanRecordOutput, "sshd")
+		require.NoError(t, err)
+		require.Len(t, records, len(benchmarkBanRecordData))
+		assert.NotContains(t, buf.String(), "Skipped unparseable")
+	})
+}
 
-	records, err := parser.ParseBanRecords(input, "sshd")
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
+// TestParseWithLayoutKeysCacheByLayout pins that the time cache key includes
+// the layout: keyed by the string alone, a day-first parse returned the cached
+// month-first result.
+func TestParseWithLayoutKeysCacheByLayout(t *testing.T) {
+	cache, err := NewBoundedTimeCache(10)
+	require.NoError(t, err)
 
-	if len(records) != 2 {
-		t.Errorf("Expected 2 records, got %d", len(records))
-	}
+	monthFirst, err := cache.ParseWithLayout("01/02/2026 10:00", "01/02/2006 15:04")
+	require.NoError(t, err)
+	dayFirst, err := cache.ParseWithLayout("01/02/2026 10:00", "02/01/2006 15:04")
+	require.NoError(t, err)
 
-	// Check stats (empty lines are skipped, not counted as errors)
-	parseCount, errorCount = parser.GetStats()
-	if parseCount != 2 {
-		t.Errorf("Expected 2 successful parses, got %d", parseCount)
-	}
-	if errorCount != 0 {
-		t.Errorf("Expected 0 errors, got %d", errorCount)
-	}
+	assert.Equal(t, time.January, monthFirst.Month())
+	assert.Equal(t, 2, monthFirst.Day())
+	assert.Equal(t, time.February, dayFirst.Month())
+	assert.Equal(t, 1, dayFirst.Day())
 }
 
 // TestTimeParsingOptimizations tests the optimized time parsing
 func TestTimeParsingOptimizations(t *testing.T) {
-	cache, err := NewFastTimeCache("2006-01-02 15:04:05")
-	if err != nil {
-		t.Fatal(err)
-	}
+	cache := NewFastTimeCache("2006-01-02 15:04:05")
 
 	testTimeStr := "2025-07-20 14:30:39"
 
@@ -288,41 +300,5 @@ func TestTimeParsingOptimizations(t *testing.T) {
 	expected := time.Date(2025, 7, 20, 14, 30, 39, 0, time.Local)
 	if time1.Unix() != expected.Unix() {
 		t.Errorf("Parsed time incorrect: got %v, expected %v", time1, expected)
-	}
-}
-
-// TestStringBuildingOptimizations tests the optimized string building
-func TestStringBuildingOptimizations(t *testing.T) {
-	cache, err := NewFastTimeCache("2006-01-02 15:04:05")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	dateStr := "2025-07-20"
-	timeStr := "14:30:39"
-	expected := "2025-07-20 14:30:39"
-
-	result := cache.BuildTimeStringOptimized(dateStr, timeStr)
-	if result != expected {
-		t.Errorf("String building failed: got %s, expected %s", result, expected)
-	}
-}
-
-// BenchmarkParserStatistics tests performance impact of statistics tracking
-func BenchmarkParserStatistics(b *testing.B) {
-	parser, err := NewBanRecordParser()
-	if err != nil {
-		b.Fatal(err)
-	}
-	testLine := "192.168.1.100 2025-07-20 14:30:39 + 2025-07-20 14:40:39 remaining"
-
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for b.Loop() {
-		_, err := parser.ParseBanRecordLine(testLine, "sshd")
-		if err != nil {
-			b.Fatal(err)
-		}
 	}
 }

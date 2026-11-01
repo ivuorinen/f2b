@@ -5,7 +5,7 @@
 f2b is designed as a modern, secure Go CLI tool for managing Fail2Ban with a focus on testability, security, and
 extensibility. The architecture follows clean code principles with dependency injection, interface-based design,
 comprehensive testing, and performance-conscious design. Built with context-aware operations, timeout handling,
-object pooling, and parallel processing capabilities for enterprise-grade reliability.
+and bounded parallel processing across jails.
 
 ## Core Components
 
@@ -13,7 +13,7 @@ object pooling, and parallel processing capabilities for enterprise-grade reliab
 
 - **Purpose**: Entry point and application bootstrap
 - **Responsibilities**:
-  - Initial sudo privilege checking
+  - Lazy client construction (sudo checks run on the first client operation)
   - Root command setup and execution
   - Global configuration initialization
   - Error handling and exit codes
@@ -51,7 +51,7 @@ object pooling, and parallel processing capabilities for enterprise-grade reliab
 - **Advanced Features**:
 
   - Context-aware operations with timeout and cancellation support
-  - Optimized ban record parsing with object pooling
+  - Ban record parsing with the standard library string functions
   - Bounded caching of parsed ban-record timestamps
   - Parallel processing support for multi-jail operations
 
@@ -80,7 +80,7 @@ object pooling, and parallel processing capabilities for enterprise-grade reliab
 
 ### Security-First Approach
 
-- Input validation before privilege escalation with caching
+- Input validation before privilege escalation
 - Secure command execution using argument arrays
 - No shell string concatenation
 - Comprehensive privilege checking
@@ -96,7 +96,6 @@ object pooling, and parallel processing capabilities for enterprise-grade reliab
 
 ### Performance-Optimized Design
 
-- Object pooling for memory-intensive operations
 - Bounded caching of parsed ban-record timestamps
 - Optimized parsing algorithms with minimal allocations
 - Parallel processing capabilities for multi-jail scenarios
@@ -150,24 +149,21 @@ fail2ban/client.go
 
 - **Language**: Go 1.26+
 - **CLI Framework**: [Cobra](https://github.com/spf13/cobra)
-- **Logging**: [Logrus](https://github.com/sirupsen/logrus) with structured output and contextual logging
+- **Logging**: `log/slog` via `fail2ban.SlogLogger`, with structured contextual logging
 - **Testing**: Go's built-in testing with comprehensive mocks and fluent testing framework
-- **Containerization**: Multi-architecture Docker support (amd64, arm64, armv7)
 
 ### Key Libraries
 
 - **cobra**: Command-line interface framework
-- **logrus**: Structured logging with context propagation
+- **log/slog**: Structured logging (standard library) with context propagation
 - **Standard library**: Extensive use of Go stdlib for reliability
-- **sync/atomic**: Thread-safe counters (parse statistics) and interrupt handling
+- **sync/atomic**: The signal exit code and the swappable package logger
 - **context**: Timeout and cancellation support throughout
 
 ### Performance Technologies
 
-- **Object Pooling**: Memory-efficient parsing with sync.Pool
 - **Bounded Time Cache**: Thread-safe caching of parsed ban-record timestamps
-- **Parallel Processing**: Worker pools for multi-jail operations
-- **Atomic Operations**: Lock-free counters (parse statistics, interrupt handling)
+- **Parallel Processing**: Multi-jail operations run concurrently, bounded to `runtime.NumCPU()` goroutines
 - **Context-Aware Operations**: Timeout handling and graceful cancellation
 
 ## Extension Points
@@ -252,8 +248,13 @@ fail2ban/client.go
 - `F2B_COMMAND_TIMEOUT`: Timeout for individual fail2ban commands (default `30s`)
 - `F2B_FILE_TIMEOUT`: Timeout for file operations (default `10s`)
 - `F2B_PARALLEL_TIMEOUT`: Timeout for parallel operations (default `60s`)
-- `F2B_TEST_SUDO`: Marks a test environment, so `CanUseSudo()` returns false and
-  no real sudo runs (presence-checked: any non-empty value enables, unset disables)
+- `F2B_TEST_SUDO`: Marks a test environment, so `CanUseSudo()` skips the `sudo -n true`
+  probe (presence-checked: any non-empty value enables, unset disables). It does NOT
+  prevent sudo: root and members of the `sudo`/`wheel`/`admin` groups still run
+  privileged commands through sudo. Tests must inject `MockSudoChecker` and `MockRunner`.
+- `F2B_TRUSTED_BIN_DIR`: One extra absolute, clean directory trusted to hold the
+  sudo-executed fail2ban binaries, for non-FHS installs; unset trusts only the FHS
+  directories
 - `F2B_VERBOSE_TESTS`: Force verbose logging in CI/tests (presence-checked)
 - `ALLOW_DEV_PATHS`: Allow /tmp paths, development only (presence-checked)
 
@@ -268,11 +269,9 @@ fail2ban/client.go
 
 ### Performance Features
 
-- **Object Pooling**: Memory-efficient parsing with sync.Pool for ban record processing
 - **Bounded Time Cache**: Thread-safe caching of parsed ban-record timestamps
-- **Parallel Processing**: Worker pools for multi-jail operations with optimal CPU utilization
-- **Optimized Parsing**: Ultra-fast ban record parsing with minimal allocations
-- **Atomic Counters**: Lock-free parse statistics using atomic operations
+- **Parallel Processing**: Multi-jail operations bounded to `runtime.NumCPU()` concurrent goroutines
+- **Newest-First Log Reads**: Log reads stop once the requested number of lines is collected
 
 ### Monitoring and Observability
 
@@ -282,18 +281,6 @@ fail2ban/client.go
 ### Scalability Design
 
 - **Context-Aware Operations**: All operations support timeout and cancellation
-- **Parallel Processing**: Automatic scaling for multi-jail operations
-- **Memory Optimization**: Object pooling and efficient memory management
+- **Parallel Processing**: Multi-jail operations scale up to `runtime.NumCPU()` goroutines
 - **Time-Parse Caching**: Bounded cache reduces repeated ban-record timestamp parsing
 - **Resource Management**: Proper cleanup and resource lifecycle management
-
-### Advanced Performance Features
-
-- **Ultra-Optimized Parsing**: Custom parsing algorithms with zero-allocation techniques
-- **Time Cache**: Bounded time-parsing cache reducing string-to-time conversions
-- **Fast String Operations**: Custom string operations avoiding standard library overhead
-- **Worker Pool Management**: Dynamic worker scaling based on operation load
-
-This architecture provides enterprise-grade performance, comprehensive monitoring, and scalable design while maintaining
-security, testability, and maintainability. The system is optimized for both single-operation efficiency and
-high-throughput parallel processing scenarios.

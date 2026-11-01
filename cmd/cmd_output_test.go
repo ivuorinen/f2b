@@ -2,12 +2,16 @@ package cmd
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/ivuorinen/f2b/fail2ban"
 )
 
 func TestPrintOutput(t *testing.T) {
@@ -59,7 +63,7 @@ func TestPrintOutput(t *testing.T) {
 			}
 			os.Stdout = w
 
-			PrintOutput(tt.data, tt.format)
+			printErr := PrintOutput(tt.data, tt.format)
 
 			if err := w.Close(); err != nil {
 				t.Fatalf("unexpected close error: %v", err)
@@ -72,6 +76,9 @@ func TestPrintOutput(t *testing.T) {
 			}
 			output := buf.String()
 
+			if printErr != nil {
+				t.Errorf("PrintOutput returned error: %v", printErr)
+			}
 			if output != tt.expected {
 				t.Errorf("expected %q, got %q", tt.expected, output)
 			}
@@ -109,7 +116,9 @@ func TestPrintOutputTo(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			PrintOutputTo(&buf, tt.data, tt.format)
+			if err := PrintOutputTo(&buf, tt.data, tt.format); err != nil {
+				t.Fatalf("PrintOutputTo returned error: %v", err)
+			}
 
 			output := buf.String()
 			if output != tt.expected {
@@ -119,23 +128,83 @@ func TestPrintOutputTo(t *testing.T) {
 	}
 }
 
+// TestPrintOutputTo_JSONError pins that an encode failure is returned (so the
+// command exits non-zero) and that nothing reaches the output stream.
 func TestPrintOutputTo_JSONError(t *testing.T) {
-	// Test with data that cannot be marshaled to JSON
 	var buf bytes.Buffer
 
-	// Capture log output
-	oldOutput := Logger.Output()
+	// Function type cannot be marshaled to JSON
+	err := PrintOutputTo(&buf, func() {}, JSONFormat)
+	if err == nil || !strings.Contains(err.Error(), "failed to encode JSON output") {
+		t.Fatalf("error = %v, want a JSON encoding error", err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("encode failure wrote %q to the output", buf.String())
+	}
+}
+
+// failingWriter fails every write, like a full disk or a closed pipe.
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("no space left on device") }
+
+// TestOutputWriteErrorFailsCommand pins that a failed stdout write is returned
+// as the command's error and so changes the exit status.
+func TestOutputWriteErrorFailsCommand(t *testing.T) {
+	for _, format := range []string{PlainFormat, JSONFormat} {
+		if err := PrintOutputTo(failingWriter{}, []string{"x"}, format); err == nil {
+			t.Errorf("PrintOutputTo(%s) to a failing writer returned nil", format)
+		}
+	}
+
+	mock := NewMockClient()
+	mock.LogLines = []string{"2024-01-01 12:00:00 [sshd] Ban 192.168.1.100"}
+	commands := map[string]*cobra.Command{
+		"version": VersionCmd(&Config{Format: PlainFormat}),
+		"logs":    LogsCmd(mock, &Config{Format: PlainFormat, FileTimeout: time.Second}),
+		"banned": BannedCmd(mock, &Config{
+			Format: JSONFormat, CommandTimeout: time.Second, ParallelTimeout: time.Second,
+		}),
+	}
+	for name, cmd := range commands {
+		cmd.SetOut(failingWriter{})
+		cmd.SetArgs(nil)
+		if err := cmd.Execute(); err == nil {
+			t.Errorf("%s exited successfully although its output write failed", name)
+		}
+	}
+}
+
+// TestCommandFailedLogCarriesCommandPath pins that the "Command failed" record
+// names the failing command: PersistentPreRunE stamps the command path on
+// every line of the shared logger.
+func TestCommandFailedLogCarriesCommandPath(t *testing.T) {
+	originalCfg := cfg
+	cfg = validTestConfig(PlainFormat)
+	oldOutput, oldLevel := Logger.Output(), Logger.GetLevel()
 	var logBuf bytes.Buffer
 	Logger.SetOutput(&logBuf)
-	defer Logger.SetOutput(oldOutput)
+	t.Cleanup(func() {
+		cfg = originalCfg
+		Logger.SetOutput(oldOutput)
+		Logger.SetLevel(oldLevel)
+		Logger.Reconfigure(fail2ban.SlogText)
+	})
 
-	// Function type cannot be marshaled to JSON
-	PrintOutputTo(&buf, func() {}, JSONFormat)
+	cmd := &cobra.Command{Use: "banned"}
+	cmd.Flags().String("log-file", "", "")
+	cmd.Flags().String("log-level", "error", "")
+	if err := rootCmd.PersistentPreRunE(cmd, nil); err != nil {
+		t.Fatalf("PersistentPreRunE: %v", err)
+	}
+	_, _ = captureStdoutStderr(func() error {
+		PrintError(errors.New("boom"))
+		return nil
+	})
 
-	// Should have logged an error
-	logOutput := logBuf.String()
-	if !strings.Contains(logOutput, "Failed to encode JSON output") {
-		t.Errorf("expected JSON encoding error to be logged, got: %s", logOutput)
+	if !strings.Contains(logBuf.String(), "Command failed") ||
+		!strings.Contains(logBuf.String(), "command_path=banned") {
+		t.Errorf("Command failed record lacks the command path: %q", logBuf.String())
 	}
 }
 
@@ -292,7 +361,7 @@ func BenchmarkPrintOutputPlain(b *testing.B) {
 	b.ResetTimer()
 	for b.Loop() {
 		buf.Reset()
-		PrintOutputTo(&buf, data, "plain")
+		_ = PrintOutputTo(&buf, data, "plain")
 	}
 }
 
@@ -303,7 +372,7 @@ func BenchmarkPrintOutputJSON(b *testing.B) {
 	b.ResetTimer()
 	for b.Loop() {
 		buf.Reset()
-		PrintOutputTo(&buf, data, JSONFormat)
+		_ = PrintOutputTo(&buf, data, JSONFormat)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,18 +24,16 @@ func setupTestLogger(t *testing.T) (*ContextualLogger, *bytes.Buffer) {
 	return &ContextualLogger{SlogLogger: logger}, &buf
 }
 
-// TestWithRequestID tests the WithRequestID function
-func TestWithRequestID(t *testing.T) {
-	ctx := context.Background()
-	requestID := "test-request-123"
-
-	// Add request ID to context
-	ctxWithID := WithRequestID(ctx, requestID)
-
-	// Verify request ID is in context
-	value := ctxWithID.Value(constants.ContextKeyRequestID)
-	require.NotNil(t, value)
-	assert.Equal(t, requestID, value)
+// SetContextualLogger replaces the global contextual logger. It is a test
+// seam only, so it lives in a test file instead of the cmd API.
+//
+// Not synchronized: call only before concurrent readers exist.
+func SetContextualLogger(logger *ContextualLogger) {
+	contextualLoggerOnce.Do(func() {
+		// Consume the once so the lazy initializer in GetContextualLogger
+		// never overwrites this explicitly-set logger.
+	})
+	contextualLogger = logger
 }
 
 // TestSetContextualLogger tests the SetContextualLogger function
@@ -60,14 +59,14 @@ func TestLogOperation(t *testing.T) {
 	tests := []struct {
 		name      string
 		operation string
-		fn        func() error
+		fn        func(context.Context) error
 		expectErr bool
 		contains  string
 	}{
 		{
 			name:      "successful operation",
 			operation: "test-operation",
-			fn: func() error {
+			fn: func(context.Context) error {
 				return nil
 			},
 			expectErr: false,
@@ -76,7 +75,7 @@ func TestLogOperation(t *testing.T) {
 		{
 			name:      "failed operation",
 			operation: "failing-operation",
-			fn: func() error {
+			fn: func(context.Context) error {
 				return errors.New("operation failed")
 			},
 			expectErr: true,
@@ -105,6 +104,28 @@ func TestLogOperation(t *testing.T) {
 			assert.Contains(t, output, tt.operation)
 			assert.Contains(t, output, "Operation started")
 		})
+	}
+}
+
+// TestLogOperationPassesEnrichedContext pins that the operation body receives
+// the context carrying request_id and operation, so nested log lines share
+// the start/finish lines' request_id.
+func TestLogOperationPassesEnrichedContext(t *testing.T) {
+	cl, buf := setupTestLogger(t)
+
+	var nestedID any
+	err := cl.LogOperation(context.Background(), "nested-op", func(ctx context.Context) error {
+		nestedID = ctx.Value(constants.ContextKeyRequestID)
+		cl.WithContext(ctx).Info("nested line")
+		return nil
+	})
+	require.NoError(t, err)
+	requestID, ok := nestedID.(string)
+	require.True(t, ok, "operation body context has no request_id")
+
+	for line := range strings.SplitSeq(strings.TrimSpace(buf.String()), "\n") {
+		assert.Contains(t, line, requestID, "log line without the operation's request_id: %s", line)
+		assert.Contains(t, line, `"operation":"nested-op"`)
 	}
 }
 

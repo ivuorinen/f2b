@@ -1,6 +1,6 @@
-// Package fail2ban provides context utility functions for structured logging and tracing.
-// This module handles context value management, logger creation with context fields,
-// and request ID generation for better traceability in fail2ban operations.
+// Context values for structured logging and tracing: request IDs, operation,
+// jail and IP fields, and loggers built from them.
+
 package fail2ban
 
 import (

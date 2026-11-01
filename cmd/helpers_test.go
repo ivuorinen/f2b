@@ -118,13 +118,11 @@ func TestFormatBannedResult(t *testing.T) {
 func TestCreateTimeoutContext(t *testing.T) {
 	tests := []struct {
 		name    string
-		nilBase bool
 		config  *Config
 		timeout time.Duration
 	}{
 		{
-			name:    "nil base and nil config use background and default timeout",
-			nilBase: true,
+			name:    "nil config uses the default timeout",
 			config:  nil,
 			timeout: constants.DefaultCommandTimeout,
 		},
@@ -142,12 +140,8 @@ func TestCreateTimeoutContext(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var base context.Context
-			if !tt.nilBase {
-				base = context.Background()
-			}
 			before := time.Now()
-			ctx, cancel := createTimeoutContext(base, tt.config)
+			ctx, cancel := createTimeoutContext(context.Background(), tt.config)
 			defer cancel()
 
 			if ctx == nil {

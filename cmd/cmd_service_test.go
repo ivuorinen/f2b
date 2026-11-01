@@ -2,6 +2,9 @@ package cmd
 
 import (
 	"bytes"
+	"context"
+	"errors"
+	"log/slog"
 	"os"
 	"strings"
 	"testing"
@@ -116,6 +119,83 @@ func TestServiceCmdErrorHandling(t *testing.T) {
 		}).
 		ExpectError().
 		Run()
+}
+
+// TestServiceCmdHonorsCommandContext pins that the privileged service call
+// runs under the command's context: the context-free runner ignored Ctrl-C.
+func TestServiceCmdHonorsCommandContext(t *testing.T) {
+	mock := fail2ban.MustMockRunner(t)
+	mock.SetResponse("sudo service fail2ban restart", []byte("restarted"))
+	before := len(mock.GetCalls())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	cmd := ServiceCmd(&Config{Format: PlainFormat})
+	cmd.SetArgs([]string{"restart"})
+	_, err := captureStdoutStderr(func() error { return cmd.ExecuteContext(ctx) })
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want context.Canceled", err)
+	}
+	if got := len(mock.GetCalls()); got != before {
+		t.Errorf("service command ran under a canceled context (%d new calls)", got-before)
+	}
+}
+
+// TestServiceCmdLogsAction pins the audit record for privileged service
+// actions: success and failure both log the action.
+func TestServiceCmdLogsAction(t *testing.T) {
+	var buf bytes.Buffer
+	originalOutput, originalLevel := Logger.Output(), Logger.GetLevel()
+	Logger.SetOutput(&buf)
+	Logger.SetLevel(slog.LevelInfo)
+	t.Cleanup(func() {
+		Logger.SetOutput(originalOutput)
+		Logger.SetLevel(originalLevel)
+	})
+
+	mock := fail2ban.MustMockRunner(t)
+	mock.SetResponse("sudo service fail2ban stop", []byte("stopped"))
+	mock.SetError("sudo service fail2ban reload", &testServiceError{"reload failed"})
+
+	run := func(action string) error {
+		cmd := ServiceCmd(&Config{Format: PlainFormat})
+		cmd.SetArgs([]string{action})
+		_, err := captureStdoutStderr(cmd.Execute)
+		return err
+	}
+
+	if err := run("stop"); err != nil {
+		t.Fatalf("stop failed: %v", err)
+	}
+	if !strings.Contains(buf.String(), "Service action completed") || !strings.Contains(buf.String(), "action=stop") {
+		t.Errorf("no success audit line for stop in %q", buf.String())
+	}
+
+	buf.Reset()
+	if err := run("reload"); err == nil {
+		t.Fatal("reload succeeded despite the mocked error")
+	}
+	if !strings.Contains(buf.String(), "Service action failed") || !strings.Contains(buf.String(), "action=reload") {
+		t.Errorf("no failure audit line for reload in %q", buf.String())
+	}
+}
+
+// TestServiceActionsSingleSource pins that the usage text and validation are
+// built from the one serviceActions list.
+func TestServiceActionsSingleSource(t *testing.T) {
+	use := ServiceCmd(&Config{Format: PlainFormat}).Use
+	if want := "service [" + strings.Join(serviceActions, "|") + "]"; use != want {
+		t.Errorf("Use = %q, want %q", use, want)
+	}
+	for _, action := range serviceActions {
+		if err := ValidateServiceAction(action); err != nil {
+			t.Errorf("listed action %q rejected: %v", action, err)
+		}
+	}
+	err := ValidateServiceAction("explode")
+	if err == nil || !strings.Contains(err.Error(), strings.Join(serviceActions, ", ")) {
+		t.Errorf("invalid action error %v does not list the valid actions", err)
+	}
 }
 
 func TestServiceCmdValidActions(t *testing.T) {

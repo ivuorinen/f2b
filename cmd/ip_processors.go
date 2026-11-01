@@ -1,6 +1,6 @@
-// Package cmd provides the shared validate-then-execute helper for IP
-// operations (ban/unban). The per-command operation functions are wired
-// directly into IPCommandConfig; no processor abstraction is needed.
+// Shared validate-then-execute helper for IP operations (ban/unban). The
+// per-command operation functions are wired directly into IPCommandConfig.
+
 package cmd
 
 import (

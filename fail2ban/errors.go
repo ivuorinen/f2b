@@ -12,7 +12,6 @@ const (
 	ErrIPRequired        = "IP address required. Usage: f2b <command> <ip-address> [jail]"
 	ErrJailRequired      = "jail name required. Use 'f2b status' to list available jails"
 	ErrFilterRequired    = "filter name required. Usage: f2b test-filter <filter>"
-	ErrActionRequired    = "action required. Valid actions: start, stop, restart, status, reload, enable, disable"
 	ErrInvalidCommand    = "invalid command: %s. Use 'f2b --help' to see available commands"
 	ErrCommandNotAllowed = "command not allowed: %s. This command contains potentially dangerous characters"
 	ErrInvalidArgument   = "invalid argument: %s. Check command usage with 'f2b <command> --help'"
@@ -38,11 +37,6 @@ func NewInvalidFilterError(filter string) error {
 	return fmt.Errorf(ErrInvalidFilter, filter)
 }
 
-// NewFilterNotFoundError creates a formatted error for filter not found scenarios.
-func NewFilterNotFoundError(filter string) error {
-	return fmt.Errorf(ErrFilterNotFound, filter)
-}
-
 // NewInvalidCommandError creates a formatted error for invalid command scenarios.
 func NewInvalidCommandError(command string) error {
 	return fmt.Errorf(ErrInvalidCommand, command)
@@ -64,10 +58,7 @@ type ErrorCategory string
 // Error category constants for categorizing different types of errors
 const (
 	ErrorCategoryValidation ErrorCategory = "validation" // Input validation errors
-	ErrorCategoryNetwork    ErrorCategory = "network"    // Network-related errors
-	ErrorCategoryPermission ErrorCategory = "permission" // Permission/authentication errors
 	ErrorCategorySystem     ErrorCategory = "system"     // System-level errors
-	ErrorCategoryConfig     ErrorCategory = "config"     // Configuration errors
 )
 
 // ContextualError provides enhanced error information with category and remediation
@@ -117,15 +108,6 @@ func NewSystemError(message, remediation string, cause error) *ContextualError {
 	}
 }
 
-// NewPermissionError creates a permission error with remediation
-func NewPermissionError(message, remediation string) *ContextualError {
-	return &ContextualError{
-		Message:     message,
-		Category:    ErrorCategoryPermission,
-		Remediation: remediation,
-	}
-}
-
 // Common validation errors with enhanced context
 var (
 	ErrIPRequiredError = NewValidationError(
@@ -139,9 +121,5 @@ var (
 	ErrFilterRequiredError = NewValidationError(
 		ErrFilterRequired,
 		"Specify a filter name, e.g. 'f2b test-filter sshd'; filters live in the filter directory (filter.d)",
-	)
-	ErrActionRequiredError = NewValidationError(
-		ErrActionRequired,
-		"Choose from: start, stop, restart, status, reload, enable, disable",
 	)
 )

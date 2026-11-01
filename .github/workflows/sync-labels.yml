@@ -16,11 +16,18 @@ on:
 permissions:
   contents: read
 
+# Push, cron and dispatch triggers can overlap; label rewrites must not race.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 jobs:
   sync-labels:
+    name: Sync labels
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
-      issues: write
+      issues: write # create, update and delete repository labels
     steps:
-      - uses: ivuorinen/actions/sync-labels@7ade03bb39e406bc0876e000b08534418b6ca914 # v2026.08.28
+      - uses: ivuorinen/actions/sync-labels@9a311175b62e4871d83e682bf2e772d99e6d6f44 # v2026.10.23

@@ -6,18 +6,6 @@
 import "github.com/ivuorinen/f2b/cmd"
 ```
 
-Package cmd provides configuration management and validation utilities. This package handles CLI configuration parsing, validation, and security checks to ensure safe operation of f2b commands.
-
-Package cmd provides common helper functions and utilities for CLI commands. This package contains shared functionality used across multiple f2b commands, including argument validation, error handling, and output formatting helpers.
-
-Package cmd provides command pattern abstractions to reduce code duplication. This module handles common patterns for IP\-based operations \(ban/unban\) that share identical structure but different processing functions.
-
-Package cmd provides the shared validate\-then\-execute helper for IP operations \(ban/unban\). The per\-command operation functions are wired directly into IPCommandConfig; no processor abstraction is needed.
-
-Package cmd provides structured logging and contextual logging capabilities. This package implements context\-aware logging with request tracing and structured field support for better observability in f2b operations.
-
-Package cmd provides output formatting and display utilities for the f2b CLI. This package handles structured output in both plain text and JSON formats, supporting consistent CLI output patterns across all commands.
-
 Package cmd implements all CLI commands for the f2b tool, providing secure Fail2Ban management operations including jail monitoring, IP banning/unbanning, log analysis, and service management with comprehensive input validation.
 
 ## Index
@@ -34,45 +22,35 @@ Package cmd implements all CLI commands for the f2b tool, providing secure Fail2
 - [func GetCmdOutput\(cmd \*cobra.Command\) io.Writer](<#GetCmdOutput>)
 - [func GetJailsFromArgsWithContext\(ctx context.Context, client fail2ban.Client, args \[\]string, startIndex int\) \(\[\]string, error\)](<#GetJailsFromArgsWithContext>)
 - [func HandleClientError\(err error\) error](<#HandleClientError>)
-- [func HandlePermissionError\(err error\) error](<#HandlePermissionError>)
 - [func HandleSystemError\(err error\) error](<#HandleSystemError>)
 - [func HandleValidationError\(err error\) error](<#HandleValidationError>)
 - [func InterpretBanStatus\(code int, operation string\) string](<#InterpretBanStatus>)
-- [func IsCI\(\) bool](<#IsCI>)
 - [func IsEmptyString\(s string\) bool](<#IsEmptyString>)
 - [func IsPrinted\(err error\) bool](<#IsPrinted>)
-- [func IsTestEnvironment\(\) bool](<#IsTestEnvironment>)
 - [func ListJailsCmd\(client fail2ban.Client, config \*Config\) \*cobra.Command](<#ListJailsCmd>)
 - [func LogsCmd\(client fail2ban.Client, config \*Config\) \*cobra.Command](<#LogsCmd>)
-- [func LogsWatchCmd\(ctx context.Context, client fail2ban.Client, config \*Config\) \*cobra.Command](<#LogsWatchCmd>)
+- [func LogsWatchCmd\(client fail2ban.Client, config \*Config\) \*cobra.Command](<#LogsWatchCmd>)
 - [func NewCommand\(use, short string, aliases \[\]string, runE func\(\*cobra.Command, \[\]string\) error\) \*cobra.Command](<#NewCommand>)
 - [func NewIPCommand\(client fail2ban.Client, config \*Config, cmdConfig IPCommandConfig\) \*cobra.Command](<#NewIPCommand>)
 - [func NewLazyClient\(\) fail2ban.Client](<#NewLazyClient>)
-- [func OutputResults\(cmd \*cobra.Command, results any, config \*Config\)](<#OutputResults>)
 - [func ParseOptionalArgs\(args \[\]string, count int\) \[\]string](<#ParseOptionalArgs>)
 - [func PrintError\(err error\)](<#PrintError>)
-- [func PrintOutput\(data any, format string\)](<#PrintOutput>)
-- [func PrintOutputTo\(w io.Writer, data any, format string\)](<#PrintOutputTo>)
+- [func PrintOutput\(data any, format string\) error](<#PrintOutput>)
+- [func PrintOutputTo\(w io.Writer, data any, format string\) error](<#PrintOutputTo>)
 - [func RequireArguments\(args \[\]string, n int, errorMsg string\) error](<#RequireArguments>)
 - [func RequireNonEmptyArgument\(arg, name string\) error](<#RequireNonEmptyArgument>)
 - [func ServiceCmd\(config \*Config\) \*cobra.Command](<#ServiceCmd>)
-- [func SetContextualLogger\(logger \*ContextualLogger\)](<#SetContextualLogger>)
 - [func SignalExitCode\(\) int](<#SignalExitCode>)
 - [func StatusCmd\(client fail2ban.Client, config \*Config\) \*cobra.Command](<#StatusCmd>)
 - [func TestFilterCmd\(client fail2ban.Client, config \*Config\) \*cobra.Command](<#TestFilterCmd>)
 - [func TestIPCmd\(client interface \{
     BannedInWithContext\(context.Context, string\) \(\[\]string, error\)
 \}, config \*Config\) \*cobra.Command](<#TestIPCmd>)
-- [func TrimmedOutput\(output \[\]byte\) string](<#TrimmedOutput>)
 - [func UnbanCmd\(client fail2ban.Client, config \*Config\) \*cobra.Command](<#UnbanCmd>)
-- [func ValidateIPArgumentWithContext\(ctx context.Context, args \[\]string\) \(string, error\)](<#ValidateIPArgumentWithContext>)
+- [func ValidateIPArgument\(args \[\]string\) \(string, error\)](<#ValidateIPArgument>)
 - [func ValidateServiceAction\(action string\) error](<#ValidateServiceAction>)
 - [func VersionCmd\(config \*Config\) \*cobra.Command](<#VersionCmd>)
 - [func WithCommand\(ctx context.Context, command string\) context.Context](<#WithCommand>)
-- [func WithIP\(ctx context.Context, ip string\) context.Context](<#WithIP>)
-- [func WithJail\(ctx context.Context, jail string\) context.Context](<#WithJail>)
-- [func WithOperation\(ctx context.Context, operation string\) context.Context](<#WithOperation>)
-- [func WithRequestID\(ctx context.Context, requestID string\) context.Context](<#WithRequestID>)
 - [type Config](<#Config>)
   - [func EnvConfig\(\) Config](<#EnvConfig>)
   - [func NewConfigFromEnv\(\) Config](<#NewConfigFromEnv>)
@@ -81,18 +59,13 @@ Package cmd implements all CLI commands for the f2b tool, providing secure Fail2
   - [func GetContextualLogger\(\) \*ContextualLogger](<#GetContextualLogger>)
   - [func NewContextualLogger\(\) \*ContextualLogger](<#NewContextualLogger>)
   - [func \(cl \*ContextualLogger\) LogBanOperation\(ctx context.Context, operation, ip, jail string, success bool, duration time.Duration\)](<#ContextualLogger.LogBanOperation>)
-  - [func \(cl \*ContextualLogger\) LogOperation\(ctx context.Context, operation string, fn func\(\) error\) error](<#ContextualLogger.LogOperation>)
+  - [func \(cl \*ContextualLogger\) LogOperation\(ctx context.Context, operation string, fn func\(context.Context\) error\) error](<#ContextualLogger.LogOperation>)
   - [func \(cl \*ContextualLogger\) WithContext\(ctx context.Context\) fail2ban.LoggerEntry](<#ContextualLogger.WithContext>)
 - [type IPCommandConfig](<#IPCommandConfig>)
 - [type OperationResult](<#OperationResult>)
-  - [func ProcessBanOperation\(client fail2ban.Client, ip string, jails \[\]string\) \(\[\]OperationResult, error\)](<#ProcessBanOperation>)
-  - [func ProcessBanOperationParallel\(client fail2ban.Client, ip string, jails \[\]string\) \(\[\]OperationResult, error\)](<#ProcessBanOperationParallel>)
   - [func ProcessBanOperationParallelWithContext\(ctx context.Context, client fail2ban.Client, ip string, jails \[\]string\) \(\[\]OperationResult, error\)](<#ProcessBanOperationParallelWithContext>)
   - [func ProcessBanOperationWithContext\(ctx context.Context, client fail2ban.Client, ip string, jails \[\]string\) \(\[\]OperationResult, error\)](<#ProcessBanOperationWithContext>)
-  - [func ProcessOperation\(client fail2ban.Client, ip string, jails \[\]string, opType OperationType\) \(\[\]OperationResult, error\)](<#ProcessOperation>)
   - [func ProcessOperationWithContext\(ctx context.Context, client fail2ban.Client, ip string, jails \[\]string, opType OperationType\) \(\[\]OperationResult, error\)](<#ProcessOperationWithContext>)
-  - [func ProcessUnbanOperation\(client fail2ban.Client, ip string, jails \[\]string\) \(\[\]OperationResult, error\)](<#ProcessUnbanOperation>)
-  - [func ProcessUnbanOperationParallel\(client fail2ban.Client, ip string, jails \[\]string\) \(\[\]OperationResult, error\)](<#ProcessUnbanOperationParallel>)
   - [func ProcessUnbanOperationParallelWithContext\(ctx context.Context, client fail2ban.Client, ip string, jails \[\]string\) \(\[\]OperationResult, error\)](<#ProcessUnbanOperationParallelWithContext>)
   - [func ProcessUnbanOperationWithContext\(ctx context.Context, client fail2ban.Client, ip string, jails \[\]string\) \(\[\]OperationResult, error\)](<#ProcessUnbanOperationWithContext>)
 - [type OperationType](<#OperationType>)
@@ -117,18 +90,15 @@ const (
 
 ```go
 var BanOperationType = OperationType{
-    MetricsType: constants.MetricsBan,
-    Message:     constants.MsgBanResult,
-    Operation: func(c fail2ban.Client, ip, jail string) (int, error) {
-        return c.BanIP(ip, jail)
-    },
+    Operation: constants.OpBan,
+    Message:   constants.MsgBanResult,
     OperationCtx: func(ctx context.Context, c fail2ban.Client, ip, jail string) (int, error) {
         return c.BanIPWithContext(ctx, ip, jail)
     },
 }
 ```
 
-<a name="Logger"></a>Logger is the global logger for the CLI. It writes human\-readable text to os.Stderr and satisfies fail2ban.LoggerInterface, so the fail2ban package logs through it \(wired in main\).
+<a name="Logger"></a>Logger is the global logger for the CLI. It writes human\-readable text to os.Stderr until PersistentPreRunE chooses the format, and satisfies fail2ban.LoggerEntry, so the fail2ban package logs through it \(wired in main\).
 
 ```go
 var Logger = fail2ban.NewSlogLogger(fail2ban.SlogText)
@@ -138,11 +108,8 @@ var Logger = fail2ban.NewSlogLogger(fail2ban.SlogText)
 
 ```go
 var UnbanOperationType = OperationType{
-    MetricsType: constants.MetricsUnban,
-    Message:     constants.MsgUnbanResult,
-    Operation: func(c fail2ban.Client, ip, jail string) (int, error) {
-        return c.UnbanIP(ip, jail)
-    },
+    Operation: constants.OpUnban,
+    Message:   constants.MsgUnbanResult,
     OperationCtx: func(ctx context.Context, c fail2ban.Client, ip, jail string) (int, error) {
         return c.UnbanIPWithContext(ctx, ip, jail)
     },
@@ -156,7 +123,7 @@ var Version = "dev"
 ```
 
 <a name="AddLogFlags"></a>
-## func [AddLogFlags](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L63>)
+## func [AddLogFlags](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L50>)
 
 ```go
 func AddLogFlags(cmd *cobra.Command)
@@ -192,7 +159,7 @@ func Execute(client fail2ban.Client, config Config) error
 Execute runs the CLI application with the given client and configuration.
 
 <a name="ExecuteIPCommand"></a>
-## func [ExecuteIPCommand](<https://github.com/ivuorinen/f2b/blob/main/cmd/ip_command_pattern.go#L84-L88>)
+## func [ExecuteIPCommand](<https://github.com/ivuorinen/f2b/blob/main/cmd/ip_command_pattern.go#L81-L85>)
 
 ```go
 func ExecuteIPCommand(client fail2ban.Client, config *Config, cmdConfig IPCommandConfig) func(*cobra.Command, []string) error
@@ -201,7 +168,7 @@ func ExecuteIPCommand(client fail2ban.Client, config *Config, cmdConfig IPComman
 ExecuteIPCommand provides a unified execution pattern for IP\-based commands
 
 <a name="FormatBannedResult"></a>
-## func [FormatBannedResult](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L440>)
+## func [FormatBannedResult](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L346>)
 
 ```go
 func FormatBannedResult(ip string, jails []string) string
@@ -210,7 +177,7 @@ func FormatBannedResult(ip string, jails []string) string
 FormatBannedResult formats banned IP results for output
 
 <a name="FormatStatusResult"></a>
-## func [FormatStatusResult](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L448>)
+## func [FormatStatusResult](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L354>)
 
 ```go
 func FormatStatusResult(jail, status string) string
@@ -219,7 +186,7 @@ func FormatStatusResult(jail, status string) string
 FormatStatusResult formats status results for output
 
 <a name="GetCmdOutput"></a>
-## func [GetCmdOutput](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L126>)
+## func [GetCmdOutput](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L111>)
 
 ```go
 func GetCmdOutput(cmd *cobra.Command) io.Writer
@@ -228,7 +195,7 @@ func GetCmdOutput(cmd *cobra.Command) io.Writer
 GetCmdOutput returns the command's output writer if available, otherwise os.Stdout
 
 <a name="GetJailsFromArgsWithContext"></a>
-## func [GetJailsFromArgsWithContext](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L104-L109>)
+## func [GetJailsFromArgsWithContext](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L85-L90>)
 
 ```go
 func GetJailsFromArgsWithContext(ctx context.Context, client fail2ban.Client, args []string, startIndex int) ([]string, error)
@@ -237,7 +204,7 @@ func GetJailsFromArgsWithContext(ctx context.Context, client fail2ban.Client, ar
 GetJailsFromArgsWithContext gets jail list from arguments or client with timeout context
 
 <a name="HandleClientError"></a>
-## func [HandleClientError](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L134>)
+## func [HandleClientError](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L115>)
 
 ```go
 func HandleClientError(err error) error
@@ -245,17 +212,8 @@ func HandleClientError(err error) error
 
 HandleClientError handles client errors with consistent formatting
 
-<a name="HandlePermissionError"></a>
-## func [HandlePermissionError](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L198>)
-
-```go
-func HandlePermissionError(err error) error
-```
-
-HandlePermissionError specifically handles permission/sudo errors with helpful hints
-
 <a name="HandleSystemError"></a>
-## func [HandleSystemError](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L215>)
+## func [HandleSystemError](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L179>)
 
 ```go
 func HandleSystemError(err error) error
@@ -264,7 +222,7 @@ func HandleSystemError(err error) error
 HandleSystemError specifically handles system\-level errors with diagnostic hints
 
 <a name="HandleValidationError"></a>
-## func [HandleValidationError](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L181>)
+## func [HandleValidationError](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L162>)
 
 ```go
 func HandleValidationError(err error) error
@@ -273,7 +231,7 @@ func HandleValidationError(err error) error
 HandleValidationError specifically handles validation errors with clearer messaging
 
 <a name="InterpretBanStatus"></a>
-## func [InterpretBanStatus](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L247>)
+## func [InterpretBanStatus](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L200>)
 
 ```go
 func InterpretBanStatus(code int, operation string) string
@@ -281,17 +239,8 @@ func InterpretBanStatus(code int, operation string) string
 
 InterpretBanStatus interprets ban operation status codes
 
-<a name="IsCI"></a>
-## func [IsCI](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L36>)
-
-```go
-func IsCI() bool
-```
-
-IsCI detects if we're running in a CI environment
-
 <a name="IsEmptyString"></a>
-## func [IsEmptyString](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L458>)
+## func [IsEmptyString](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L364>)
 
 ```go
 func IsEmptyString(s string) bool
@@ -300,22 +249,13 @@ func IsEmptyString(s string) bool
 IsEmptyString checks if a string is empty after trimming whitespace
 
 <a name="IsPrinted"></a>
-## func [IsPrinted](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L97>)
+## func [IsPrinted](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L82>)
 
 ```go
 func IsPrinted(err error) bool
 ```
 
 IsPrinted reports whether err \(or an error it wraps\) was already reported to the user by an error handler. main prints unmarked errors before exiting so cobra/config failures aren't silent under SilenceErrors.
-
-<a name="IsTestEnvironment"></a>
-## func [IsTestEnvironment](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L41>)
-
-```go
-func IsTestEnvironment() bool
-```
-
-IsTestEnvironment detects if we're running in a test environment
 
 <a name="ListJailsCmd"></a>
 ## func [ListJailsCmd](<https://github.com/ivuorinen/f2b/blob/main/cmd/listjails.go#L14>)
@@ -327,7 +267,7 @@ func ListJailsCmd(client fail2ban.Client, config *Config) *cobra.Command
 ListJailsCmd returns the list\-jails command with injected client and config
 
 <a name="LogsCmd"></a>
-## func [LogsCmd](<https://github.com/ivuorinen/f2b/blob/main/cmd/logs.go#L13>)
+## func [LogsCmd](<https://github.com/ivuorinen/f2b/blob/main/cmd/logs.go#L14>)
 
 ```go
 func LogsCmd(client fail2ban.Client, config *Config) *cobra.Command
@@ -339,13 +279,13 @@ LogsCmd returns the logs command with injected client and config
 ## func [LogsWatchCmd](<https://github.com/ivuorinen/f2b/blob/main/cmd/logswatch.go#L18>)
 
 ```go
-func LogsWatchCmd(ctx context.Context, client fail2ban.Client, config *Config) *cobra.Command
+func LogsWatchCmd(client fail2ban.Client, config *Config) *cobra.Command
 ```
 
 LogsWatchCmd returns the logs\-watch command with injected client and config
 
 <a name="NewCommand"></a>
-## func [NewCommand](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L51>)
+## func [NewCommand](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L38>)
 
 ```go
 func NewCommand(use, short string, aliases []string, runE func(*cobra.Command, []string) error) *cobra.Command
@@ -354,7 +294,7 @@ func NewCommand(use, short string, aliases []string, runE func(*cobra.Command, [
 NewCommand creates a new cobra command with standard setup. SilenceErrors/SilenceUsage are set so a runtime failure \(e.g. fail2ban down\) is reported once by our own error handler instead of being reprinted by cobra and followed by a full usage dump as if it were a syntax error.
 
 <a name="NewIPCommand"></a>
-## func [NewIPCommand](<https://github.com/ivuorinen/f2b/blob/main/cmd/ip_command_pattern.go#L151>)
+## func [NewIPCommand](<https://github.com/ivuorinen/f2b/blob/main/cmd/ip_command_pattern.go#L155>)
 
 ```go
 func NewIPCommand(client fail2ban.Client, config *Config, cmdConfig IPCommandConfig) *cobra.Command
@@ -371,17 +311,8 @@ func NewLazyClient() fail2ban.Client
 
 NewLazyClient returns a fail2ban.Client that constructs the real client on first use, reading cfg.LogDir/cfg.FilterDir at that point.
 
-<a name="OutputResults"></a>
-## func [OutputResults](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L238>)
-
-```go
-func OutputResults(cmd *cobra.Command, results any, config *Config)
-```
-
-OutputResults outputs results in the specified format
-
 <a name="ParseOptionalArgs"></a>
-## func [ParseOptionalArgs](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L123>)
+## func [ParseOptionalArgs](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L104>)
 
 ```go
 func ParseOptionalArgs(args []string, count int) []string
@@ -390,7 +321,7 @@ func ParseOptionalArgs(args []string, count int) []string
 ParseOptionalArgs parses optional arguments up to a given count
 
 <a name="PrintError"></a>
-## func [PrintError](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L103>)
+## func [PrintError](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L88>)
 
 ```go
 func PrintError(err error)
@@ -402,22 +333,22 @@ PrintError logs and prints an error to stderr with enhanced context if available
 ## func [PrintOutput](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L48>)
 
 ```go
-func PrintOutput(data any, format string)
+func PrintOutput(data any, format string) error
 ```
 
 PrintOutput prints data to stdout in the specified format \(PlainFormat or JSONFormat\).
 
 <a name="PrintOutputTo"></a>
-## func [PrintOutputTo](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L67>)
+## func [PrintOutputTo](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L57>)
 
 ```go
-func PrintOutputTo(w io.Writer, data any, format string)
+func PrintOutputTo(w io.Writer, data any, format string) error
 ```
 
-PrintOutputTo prints data to the specified writer in the given format.
+PrintOutputTo writes data to w in the given format and returns any encode or write error. Commands return it, so a failed write \(full disk, closed pipe\) fails the command instead of exiting 0 with truncated output. Nothing is written to w on an encode error, so JSON consumers never see a partial document mixed with fallback text.
 
 <a name="RequireArguments"></a>
-## func [RequireArguments](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L422>)
+## func [RequireArguments](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L328>)
 
 ```go
 func RequireArguments(args []string, n int, errorMsg string) error
@@ -426,7 +357,7 @@ func RequireArguments(args []string, n int, errorMsg string) error
 RequireArguments checks that at least n arguments are provided
 
 <a name="RequireNonEmptyArgument"></a>
-## func [RequireNonEmptyArgument](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L430>)
+## func [RequireNonEmptyArgument](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L336>)
 
 ```go
 func RequireNonEmptyArgument(arg, name string) error
@@ -443,17 +374,6 @@ func ServiceCmd(config *Config) *cobra.Command
 
 ServiceCmd returns the service command with injected config
 
-<a name="SetContextualLogger"></a>
-## func [SetContextualLogger](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L183>)
-
-```go
-func SetContextualLogger(logger *ContextualLogger)
-```
-
-SetContextualLogger sets a new global contextual logger.
-
-Not synchronized: call only during startup or from tests before concurrent readers exist — a call while workers run is a data race by contract.
-
 <a name="SignalExitCode"></a>
 ## func [SignalExitCode](<https://github.com/ivuorinen/f2b/blob/main/cmd/root.go#L31>)
 
@@ -464,7 +384,7 @@ func SignalExitCode() int
 SignalExitCode returns the conventional exit code for a signal\-interrupted run \(130 for SIGINT, 143 for SIGTERM\), or 0 when no signal was received.
 
 <a name="StatusCmd"></a>
-## func [StatusCmd](<https://github.com/ivuorinen/f2b/blob/main/cmd/status.go#L14>)
+## func [StatusCmd](<https://github.com/ivuorinen/f2b/blob/main/cmd/status.go#L15>)
 
 ```go
 func StatusCmd(client fail2ban.Client, config *Config) *cobra.Command
@@ -492,15 +412,6 @@ func TestIPCmd(client interface {
 
 TestIPCmd returns the test command with injected client and config
 
-<a name="TrimmedOutput"></a>
-## func [TrimmedOutput](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L465>)
-
-```go
-func TrimmedOutput(output []byte) string
-```
-
-TrimmedOutput safely trims whitespace from command output bytes
-
 <a name="UnbanCmd"></a>
 ## func [UnbanCmd](<https://github.com/ivuorinen/f2b/blob/main/cmd/unban.go#L10>)
 
@@ -510,17 +421,17 @@ func UnbanCmd(client fail2ban.Client, config *Config) *cobra.Command
 
 UnbanCmd returns the unban command with injected client and config
 
-<a name="ValidateIPArgumentWithContext"></a>
-## func [ValidateIPArgumentWithContext](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L70>)
+<a name="ValidateIPArgument"></a>
+## func [ValidateIPArgument](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L59>)
 
 ```go
-func ValidateIPArgumentWithContext(ctx context.Context, args []string) (string, error)
+func ValidateIPArgument(args []string) (string, error)
 ```
 
-ValidateIPArgumentWithContext validates that an IP address is provided in args with context support
+ValidateIPArgument validates that a valid IP address is the first of args. It took a context it never used, so the "WithContext" name promised cancellation that never happened.
 
 <a name="ValidateServiceAction"></a>
-## func [ValidateServiceAction](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L83>)
+## func [ValidateServiceAction](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L77>)
 
 ```go
 func ValidateServiceAction(action string) error
@@ -538,49 +449,13 @@ func VersionCmd(config *Config) *cobra.Command
 VersionCmd returns the version command with output consistency
 
 <a name="WithCommand"></a>
-## func [WithCommand](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L96>)
+## func [WithCommand](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L74>)
 
 ```go
 func WithCommand(ctx context.Context, command string) context.Context
 ```
 
 WithCommand adds command context and returns a new context. This is cmd\-specific as fail2ban doesn't need command tracking. Empty commands are not stored in context.
-
-<a name="WithIP"></a>
-## func [WithIP](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L83>)
-
-```go
-func WithIP(ctx context.Context, ip string) context.Context
-```
-
-WithIP adds IP context and returns a new context. Delegates to fail2ban.WithIP for consistent IP validation.
-
-<a name="WithJail"></a>
-## func [WithJail](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L89>)
-
-```go
-func WithJail(ctx context.Context, jail string) context.Context
-```
-
-WithJail adds jail context and returns a new context. Delegates to fail2ban.WithJail for consistent jail name validation.
-
-<a name="WithOperation"></a>
-## func [WithOperation](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L77>)
-
-```go
-func WithOperation(ctx context.Context, operation string) context.Context
-```
-
-WithOperation adds operation context and returns a new context. Delegates to fail2ban.WithOperation for consistent validation.
-
-<a name="WithRequestID"></a>
-## func [WithRequestID](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L106>)
-
-```go
-func WithRequestID(ctx context.Context, requestID string) context.Context
-```
-
-WithRequestID adds request ID context and returns a new context. Delegates to fail2ban.WithRequestID for consistent validation.
 
 <a name="Config"></a>
 ## type [Config](<https://github.com/ivuorinen/f2b/blob/main/cmd/root.go#L43-L55>)
@@ -609,7 +484,7 @@ func EnvConfig() Config
 EnvConfig returns the package\-level config built from the environment at init time — the same instance the CLI flags are bound to. main uses it so the environment is read \(and warned about\) once per process.
 
 <a name="NewConfigFromEnv"></a>
-### func [NewConfigFromEnv](<https://github.com/ivuorinen/f2b/blob/main/cmd/config_utils.go#L213>)
+### func [NewConfigFromEnv](<https://github.com/ivuorinen/f2b/blob/main/cmd/config_utils.go#L72>)
 
 ```go
 func NewConfigFromEnv() Config
@@ -618,7 +493,7 @@ func NewConfigFromEnv() Config
 NewConfigFromEnv builds Config from environment variables with defaults and validation.
 
 <a name="Config.ValidateConfig"></a>
-### func \(\*Config\) [ValidateConfig](<https://github.com/ivuorinen/f2b/blob/main/cmd/config_utils.go#L289>)
+### func \(\*Config\) [ValidateConfig](<https://github.com/ivuorinen/f2b/blob/main/cmd/config_utils.go#L148>)
 
 ```go
 func (c *Config) ValidateConfig() error
@@ -627,7 +502,7 @@ func (c *Config) ValidateConfig() error
 ValidateConfig performs comprehensive validation of the Config struct
 
 <a name="ContextualLogger"></a>
-## type [ContextualLogger](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L17-L20>)
+## type [ContextualLogger](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L16-L19>)
 
 ContextualLogger provides structured logging with context propagation
 
@@ -639,7 +514,7 @@ type ContextualLogger struct {
 ```
 
 <a name="GetContextualLogger"></a>
-### func [GetContextualLogger](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L170>)
+### func [GetContextualLogger](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L145>)
 
 ```go
 func GetContextualLogger() *ContextualLogger
@@ -648,34 +523,34 @@ func GetContextualLogger() *ContextualLogger
 GetContextualLogger returns the global contextual logger
 
 <a name="NewContextualLogger"></a>
-### func [NewContextualLogger](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L23>)
+### func [NewContextualLogger](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L25>)
 
 ```go
 func NewContextualLogger() *ContextualLogger
 ```
 
-NewContextualLogger creates a new contextual logger using the centralized cmd.Logger
+NewContextualLogger creates a contextual logger over the centralized cmd.Logger itself. Sharing Logger keeps one format, level and output, chosen in PersistentPreRunE; a second logger on the same sink would interleave two formats in one stream.
 
 <a name="ContextualLogger.LogBanOperation"></a>
-### func \(\*ContextualLogger\) [LogBanOperation](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L139-L144>)
+### func \(\*ContextualLogger\) [LogBanOperation](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L114-L119>)
 
 ```go
 func (cl *ContextualLogger) LogBanOperation(ctx context.Context, operation, ip, jail string, success bool, duration time.Duration)
 ```
 
-LogBanOperation logs ban/unban operations with structured context and metrics
+LogBanOperation logs ban/unban operations with structured context and duration
 
 <a name="ContextualLogger.LogOperation"></a>
-### func \(\*ContextualLogger\) [LogOperation](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L111>)
+### func \(\*ContextualLogger\) [LogOperation](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L86>)
 
 ```go
-func (cl *ContextualLogger) LogOperation(ctx context.Context, operation string, fn func() error) error
+func (cl *ContextualLogger) LogOperation(ctx context.Context, operation string, fn func(context.Context) error) error
 ```
 
-LogOperation logs the start and end of an operation with timing and metrics
+LogOperation logs the start and end of an operation with its duration. fn receives the derived context carrying request\_id and operation, so the log lines fn emits correlate with the start/finish lines; a closure over the caller's context produced nested lines without the id.
 
 <a name="ContextualLogger.WithContext"></a>
-### func \(\*ContextualLogger\) [WithContext](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L62>)
+### func \(\*ContextualLogger\) [WithContext](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L58>)
 
 ```go
 func (cl *ContextualLogger) WithContext(ctx context.Context) fail2ban.LoggerEntry
@@ -703,7 +578,7 @@ type IPCommandConfig struct {
 ```
 
 <a name="OperationResult"></a>
-## type [OperationResult](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L267-L271>)
+## type [OperationResult](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L220-L224>)
 
 OperationResult represents the result of a jail operation
 
@@ -715,26 +590,8 @@ type OperationResult struct {
 }
 ```
 
-<a name="ProcessBanOperation"></a>
-### func [ProcessBanOperation](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L390>)
-
-```go
-func ProcessBanOperation(client fail2ban.Client, ip string, jails []string) ([]OperationResult, error)
-```
-
-ProcessBanOperation processes ban operations across multiple jails
-
-<a name="ProcessBanOperationParallel"></a>
-### func [ProcessBanOperationParallel](<https://github.com/ivuorinen/f2b/blob/main/cmd/parallel_operations.go#L14>)
-
-```go
-func ProcessBanOperationParallel(client fail2ban.Client, ip string, jails []string) ([]OperationResult, error)
-```
-
-ProcessBanOperationParallel bans ip across jails concurrently \(no caller context\).
-
 <a name="ProcessBanOperationParallelWithContext"></a>
-### func [ProcessBanOperationParallelWithContext](<https://github.com/ivuorinen/f2b/blob/main/cmd/parallel_operations.go#L19-L24>)
+### func [ProcessBanOperationParallelWithContext](<https://github.com/ivuorinen/f2b/blob/main/cmd/parallel_operations.go#L14-L19>)
 
 ```go
 func ProcessBanOperationParallelWithContext(ctx context.Context, client fail2ban.Client, ip string, jails []string) ([]OperationResult, error)
@@ -743,7 +600,7 @@ func ProcessBanOperationParallelWithContext(ctx context.Context, client fail2ban
 ProcessBanOperationParallelWithContext bans ip across multiple jails concurrently.
 
 <a name="ProcessBanOperationWithContext"></a>
-### func [ProcessBanOperationWithContext](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L395-L400>)
+### func [ProcessBanOperationWithContext](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L306-L311>)
 
 ```go
 func ProcessBanOperationWithContext(ctx context.Context, client fail2ban.Client, ip string, jails []string) ([]OperationResult, error)
@@ -751,44 +608,17 @@ func ProcessBanOperationWithContext(ctx context.Context, client fail2ban.Client,
 
 ProcessBanOperationWithContext processes ban operations across multiple jails with timeout context
 
-<a name="ProcessOperation"></a>
-### func [ProcessOperation](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L310-L315>)
-
-```go
-func ProcessOperation(client fail2ban.Client, ip string, jails []string, opType OperationType) ([]OperationResult, error)
-```
-
-ProcessOperation processes operations across multiple jails using the specified operation type
-
 <a name="ProcessOperationWithContext"></a>
-### func [ProcessOperationWithContext](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L342-L348>)
+### func [ProcessOperationWithContext](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L258-L264>)
 
 ```go
 func ProcessOperationWithContext(ctx context.Context, client fail2ban.Client, ip string, jails []string, opType OperationType) ([]OperationResult, error)
 ```
 
-ProcessOperationWithContext processes operations across multiple jails with timeout context
-
-<a name="ProcessUnbanOperation"></a>
-### func [ProcessUnbanOperation](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L405>)
-
-```go
-func ProcessUnbanOperation(client fail2ban.Client, ip string, jails []string) ([]OperationResult, error)
-```
-
-ProcessUnbanOperation processes unban operations across multiple jails
-
-<a name="ProcessUnbanOperationParallel"></a>
-### func [ProcessUnbanOperationParallel](<https://github.com/ivuorinen/f2b/blob/main/cmd/parallel_operations.go#L29>)
-
-```go
-func ProcessUnbanOperationParallel(client fail2ban.Client, ip string, jails []string) ([]OperationResult, error)
-```
-
-ProcessUnbanOperationParallel unbans ip across jails concurrently \(no caller context\).
+ProcessOperationWithContext processes operations across jails in order with timeout context. On a failing jail it returns the results gathered so far with the error: earlier jails were already banned/unbanned, and dropping their results hid that firewall state had changed.
 
 <a name="ProcessUnbanOperationParallelWithContext"></a>
-### func [ProcessUnbanOperationParallelWithContext](<https://github.com/ivuorinen/f2b/blob/main/cmd/parallel_operations.go#L34-L39>)
+### func [ProcessUnbanOperationParallelWithContext](<https://github.com/ivuorinen/f2b/blob/main/cmd/parallel_operations.go#L24-L29>)
 
 ```go
 func ProcessUnbanOperationParallelWithContext(ctx context.Context, client fail2ban.Client, ip string, jails []string) ([]OperationResult, error)
@@ -797,7 +627,7 @@ func ProcessUnbanOperationParallelWithContext(ctx context.Context, client fail2b
 ProcessUnbanOperationParallelWithContext unbans ip across multiple jails concurrently.
 
 <a name="ProcessUnbanOperationWithContext"></a>
-### func [ProcessUnbanOperationWithContext](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L410-L415>)
+### func [ProcessUnbanOperationWithContext](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L316-L321>)
 
 ```go
 func ProcessUnbanOperationWithContext(ctx context.Context, client fail2ban.Client, ip string, jails []string) ([]OperationResult, error)
@@ -806,18 +636,16 @@ func ProcessUnbanOperationWithContext(ctx context.Context, client fail2ban.Clien
 ProcessUnbanOperationWithContext processes unban operations across multiple jails with timeout context
 
 <a name="OperationType"></a>
-## type [OperationType](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L274-L283>)
+## type [OperationType](<https://github.com/ivuorinen/f2b/blob/main/cmd/helpers.go#L227-L234>)
 
 OperationType defines a ban or unban operation with its associated metadata
 
 ```go
 type OperationType struct {
-    // MetricsType is the metrics key for this operation (e.g., constants.MetricsBan)
-    MetricsType string
+    // Operation is the operation name used in logs and status text (e.g., constants.OpBan)
+    Operation string
     // Message is the log message for this operation (e.g., constants.MsgBanResult)
     Message string
-    // Operation is the function to execute without context
-    Operation func(client fail2ban.Client, ip, jail string) (int, error)
     // OperationCtx is the function to execute with context
     OperationCtx func(ctx context.Context, client fail2ban.Client, ip, jail string) (int, error)
 }

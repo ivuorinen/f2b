@@ -1,161 +1,42 @@
-// Package cmd provides configuration management and validation utilities.
-// This package handles CLI configuration parsing, validation, and security
-// checks to ensure safe operation of f2b commands.
+// CLI configuration parsing and validation.
+
 package cmd
 
 import (
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/ivuorinen/f2b/constants"
 	"github.com/ivuorinen/f2b/fail2ban"
 )
 
-// containsPathTraversal performs comprehensive path traversal detection
-// including various encoding techniques and bypass attempts
-func containsPathTraversal(path string) bool {
-	if path == "" {
-		return false
-	}
-
-	variations := createPathVariations(path)
-	return checkPathVariationsForTraversal(variations)
-}
-
-// createPathVariations generates different encoded variations of the path to check
-func createPathVariations(path string) []string {
-	variations := []string{path}
-
-	// URL decode the path (handle single and double encoding)
-	if decoded, err := url.QueryUnescape(path); err == nil && decoded != path {
-		variations = append(variations, decoded)
-		// Check for double encoding
-		if doubleDecoded, err := url.QueryUnescape(decoded); err == nil && doubleDecoded != decoded {
-			variations = append(variations, doubleDecoded)
-		}
-	}
-
-	return variations
-}
-
-// checkPathVariationsForTraversal checks all path variations against dangerous patterns
-func checkPathVariationsForTraversal(variations []string) bool {
-	allPatterns := getAllDangerousPatterns()
-
-	for _, variant := range variations {
-		if checkSingleVariantForTraversal(variant, allPatterns) {
-			return true
-		}
-	}
-
-	return false
-}
-
-// getAllDangerousPatterns returns all dangerous path traversal patterns
-func getAllDangerousPatterns() map[string][]string {
-	return map[string][]string{
-		"basic": {
-			"..", "../", "..\\", "..%2f", "..%2F", "..%5c", "..%5C",
-		},
-		"urlEncoded": {
-			"%2e%2e", "%2E%2E", "%2e%2E", "%2E%2e",
-			"%252e%252e", "%252E%252E", "%25252e%25252e",
-		},
-		"unicode": {
-			"\\u002e\\u002e", "\\u00002e\\u00002e", "..",
-		},
-		"mixed": {
-			"..%00", ".%2e", "%2e.", "...//", "..;/", "..%3b",
-		},
-	}
-}
-
-// checkSingleVariantForTraversal checks a single path variant against all patterns
-func checkSingleVariantForTraversal(variant string, patterns map[string][]string) bool {
-	lowerVariant := strings.ToLower(variant)
-
-	// Check all pattern categories
-	for _, patternList := range patterns {
-		for _, pattern := range patternList {
-			if containsPattern(variant, lowerVariant, pattern) {
-				return true
-			}
-		}
-	}
-
-	// Check for null byte injection combined with path traversal
-	if containsNullByteInjection(variant, lowerVariant) {
-		return true
-	}
-
-	// Check for invalid UTF-8 sequences. This already rejects every genuine
-	// overlong UTF-8 encoding (they decode to U+FFFD and are not valid UTF-8);
-	// a byte-pattern regex over a Go string matches decoded runes, not raw
-	// bytes, so it never caught real overlong input and false-positived on
-	// legitimate accented text.
-	if !utf8.ValidString(variant) {
-		return true
-	}
-
-	return false
-}
-
-// containsPattern checks if a variant contains a dangerous pattern
-func containsPattern(variant, lowerVariant, pattern string) bool {
-	// For Unicode patterns, check both original and lowercase
-	if strings.Contains(pattern, "\\u") || strings.Contains(pattern, "\\x") {
-		return strings.Contains(variant, pattern) || strings.Contains(lowerVariant, strings.ToLower(pattern))
-	}
-	// For other patterns, use case-insensitive check
-	return strings.Contains(lowerVariant, strings.ToLower(pattern))
-}
-
-// containsNullByteInjection checks for null byte injection with path traversal
-func containsNullByteInjection(variant, lowerVariant string) bool {
-	return strings.Contains(variant, "\x00") &&
-		(strings.Contains(variant, "..") || strings.Contains(lowerVariant, "%2e"))
-}
-
-// validateConfigPath validates directory paths from configuration
+// validateConfigPath validates a configured log or filter directory with the
+// same fail2ban path policy the client applies at construction. cmd used to
+// keep its own traversal detectors and a strings.HasPrefix allowlist check
+// with no separator boundary, so /var/logx passed here and failed later in
+// the client; one policy owner keeps the two from disagreeing.
 func validateConfigPath(path, pathType string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("%s path cannot be empty", pathType)
 	}
-
-	// Comprehensive path traversal detection
-	if containsPathTraversal(path) {
-		return "", fmt.Errorf("%s path contains path traversal: %s", pathType, path)
+	var validate func(string) (string, error)
+	switch pathType {
+	case constants.PathTypeLog:
+		validate = fail2ban.ValidateClientLogPath
+	case constants.PathTypeFilter:
+		validate = fail2ban.ValidateClientFilterPath
+	default:
+		return "", fmt.Errorf("unknown path type %q", pathType)
 	}
-
-	// Check for null bytes
-	if strings.Contains(path, "\x00") {
-		return "", fmt.Errorf("%s path contains null byte: %s", pathType, path)
-	}
-
-	// Resolve to absolute path
-	absPath, err := filepath.Abs(filepath.Clean(path))
+	validated, err := validate(path)
 	if err != nil {
-		return "", fmt.Errorf("invalid %s path: %w", pathType, err)
+		return "", fmt.Errorf("invalid %s path %s: %w", pathType, path, err)
 	}
-
-	// Check path length (reasonable limit)
-	if len(absPath) > 4096 {
-		return "", fmt.Errorf("%s path too long: %d characters", pathType, len(absPath))
-	}
-
-	// Validate that it's a reasonable system path
-	if !isReasonableSystemPath(absPath, pathType) {
-		return "", fmt.Errorf("%s path not in expected system location: %s", pathType, absPath)
-	}
-
-	return absPath, nil
+	return validated, nil
 }
 
 // validateConfigPathWithFallback validates a config path and returns the fallback if validation fails.
@@ -185,28 +66,6 @@ func resolveDirFromEnv(envVar, defaultDir, pathType string, cfgErr *error) strin
 		return defaultDir
 	}
 	return validated
-}
-
-// isReasonableSystemPath checks if a path is in a reasonable system location
-func isReasonableSystemPath(path, pathType string) bool {
-	// Allow common system directories based on path type
-	var allowedPrefixes []string
-	switch pathType {
-	case constants.PathTypeLog:
-		allowedPrefixes = fail2ban.GetLogAllowedPaths()
-	case constants.PathTypeFilter:
-		allowedPrefixes = fail2ban.GetFilterAllowedPaths()
-	default:
-		return false
-	}
-
-	for _, prefix := range allowedPrefixes {
-		if strings.HasPrefix(path, prefix) {
-			return true
-		}
-	}
-
-	return false
 }
 
 // NewConfigFromEnv builds Config from environment variables with defaults and validation.

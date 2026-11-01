@@ -25,7 +25,7 @@ See the README for full instructions. In short:
 ```bash
 git clone https://github.com/ivuorinen/f2b.git
 cd f2b
-go build -ldflags "-X github.com/ivuorinen/f2b/cmd.version=1.2.3" -o f2b .
+go build -ldflags "-X github.com/ivuorinen/f2b/cmd.Version=1.2.3" -o f2b .
 ```
 
 Or install globally:
@@ -145,9 +145,10 @@ you can follow in real time:
 f2b logs-watch all 192.168.1.100
 ```
 
-Each command run emits structured logs carrying a shared `request_id` for
-correlation, so a single operation can be traced end to end in your log
-aggregator.
+`ban` and `unban` emit structured logs carrying a shared `request_id` (start,
+per-jail result, completion), so one operation can be traced end to end in your
+log aggregator. Logs go to stderr as text; with `--log-file` they are written to
+that file as JSON, one object per line.
 
 ### How do I configure timeouts?
 
@@ -185,7 +186,7 @@ ______________________________________________________________________
 
 This means you need elevated privileges for the operation you're trying to perform:
 
-1. **Check your privileges:** Run `f2b --log-level=debug version` to see your privilege status
+1. **Check your privileges:** Run `id -nG` (look for `sudo`, `wheel` or `admin`) and `sudo -n -l fail2ban-client`
 1. **Add sudo:** Try `sudo f2b [command]`
 1. **Join sudo group:** Ask your admin to add you to the sudo group
 1. **Test sudo access:** Run `sudo -n true` to check if you can use sudo

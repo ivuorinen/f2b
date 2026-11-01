@@ -11,6 +11,12 @@ import (
 	"github.com/ivuorinen/f2b/constants"
 )
 
+// Gzip-aware log file access. These are plain functions because they hold no
+// state.
+//
+// SECURITY: callers must validate and sanitize path (ValidateLogPath) before
+// calling any of them; they open whatever path they are given.
+
 // safeCloseFile closes a file and logs any error.
 // This helper consolidates the duplicate close-and-log pattern.
 func safeCloseFile(f *os.File, path string) {
@@ -37,28 +43,20 @@ func safeCloseReader(r io.ReadCloser, path string) {
 	}
 }
 
-// GzipDetector provides utilities for detecting and handling gzip-compressed files
-type GzipDetector struct{}
-
-// NewGzipDetector creates a new gzip detector instance
-func NewGzipDetector() *GzipDetector {
-	return &GzipDetector{}
-}
-
-// IsGzipFile checks if a file is gzip compressed by examining the file extension first,
+// isGzipFile checks if a file is gzip compressed by examining the file extension first,
 // then falling back to magic byte detection for better performance
-func (gd *GzipDetector) IsGzipFile(path string) (bool, error) {
+func isGzipFile(path string) (bool, error) {
 	// Fast path: check file extension first
 	if strings.HasSuffix(strings.ToLower(path), constants.GzipExtension) {
 		return true, nil
 	}
 
 	// Fallback: check magic bytes for files without .gz extension
-	return gd.hasGzipMagicBytes(path)
+	return hasGzipMagicBytes(path)
 }
 
 // hasGzipMagicBytes checks if a file has gzip magic bytes (0x1f, 0x8b)
-func (gd *GzipDetector) hasGzipMagicBytes(path string) (bool, error) {
+func hasGzipMagicBytes(path string) (bool, error) {
 	// #nosec G304 - Path is validated by caller, this is a legitimate file operation
 	f, err := os.Open(path)
 	if err != nil {
@@ -76,19 +74,18 @@ func (gd *GzipDetector) hasGzipMagicBytes(path string) (bool, error) {
 	if n < 2 {
 		return false, nil
 	}
-	// #nosec G602 - Length check above guarantees slice has at least 2 elements
 	return magic[0] == 0x1f && magic[1] == 0x8b, nil
 }
 
-// OpenGzipAwareReader opens a file and returns appropriate reader (gzip or regular)
-func (gd *GzipDetector) OpenGzipAwareReader(path string) (io.ReadCloser, error) {
+// openGzipAwareReader opens a file and returns appropriate reader (gzip or regular)
+func openGzipAwareReader(path string) (io.ReadCloser, error) {
 	// #nosec G304 - Path is validated by caller, this is a legitimate file operation
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 
-	isGzip, err := gd.IsGzipFile(path)
+	isGzip, err := isGzipFile(path)
 	if err != nil {
 		safeCloseFile(f, path)
 		return nil, err
@@ -122,14 +119,11 @@ func (gd *GzipDetector) OpenGzipAwareReader(path string) (io.ReadCloser, error) 
 	return f, nil
 }
 
-// CreateGzipAwareScanner creates a scanner for the file, handling gzip compression automatically
-func (gd *GzipDetector) CreateGzipAwareScanner(path string) (*bufio.Scanner, func(), error) {
-	return gd.CreateGzipAwareScannerWithBuffer(path, 0)
-}
-
-// CreateGzipAwareScannerWithBuffer creates a scanner with custom buffer size
-func (gd *GzipDetector) CreateGzipAwareScannerWithBuffer(path string, maxLineSize int) (*bufio.Scanner, func(), error) {
-	reader, err := gd.OpenGzipAwareReader(path)
+// createGzipAwareScanner creates a line scanner over the (possibly gzip
+// compressed) file. maxLineSize > 0 caps the scan buffer; 0 keeps bufio's
+// default.
+func createGzipAwareScanner(path string, maxLineSize int) (*bufio.Scanner, func(), error) {
+	reader, err := openGzipAwareReader(path)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -191,35 +185,4 @@ func (gfr *gzipFileReader) Close() error {
 		return gzErr
 	}
 	return fileErr
-}
-
-// Global detector instance for convenience
-var defaultGzipDetector = NewGzipDetector()
-
-// IsGzipFile checks if a file is gzip compressed using the default detector.
-// SECURITY: The caller must validate and sanitize the path argument to prevent
-// path traversal attacks and ensure the file is within allowed directories.
-func IsGzipFile(path string) (bool, error) {
-	return defaultGzipDetector.IsGzipFile(path)
-}
-
-// OpenGzipAwareReader opens a file with automatic gzip detection using the default detector.
-// SECURITY: The caller must validate and sanitize the path argument to prevent
-// path traversal attacks and ensure the file is within allowed directories.
-func OpenGzipAwareReader(path string) (io.ReadCloser, error) {
-	return defaultGzipDetector.OpenGzipAwareReader(path)
-}
-
-// CreateGzipAwareScanner creates a scanner with automatic gzip detection using the default detector.
-// SECURITY: The caller must validate and sanitize the path argument to prevent
-// path traversal attacks and ensure the file is within allowed directories.
-func CreateGzipAwareScanner(path string) (*bufio.Scanner, func(), error) {
-	return defaultGzipDetector.CreateGzipAwareScanner(path)
-}
-
-// CreateGzipAwareScannerWithBuffer creates a scanner with custom buffer size using the default detector.
-// SECURITY: The caller must validate and sanitize the path argument to prevent
-// path traversal attacks and ensure the file is within allowed directories.
-func CreateGzipAwareScannerWithBuffer(path string, maxLineSize int) (*bufio.Scanner, func(), error) {
-	return defaultGzipDetector.CreateGzipAwareScannerWithBuffer(path, maxLineSize)
 }
