@@ -27,22 +27,29 @@ func NewMockRunner() *MockRunner {
 	}
 }
 
-// CombinedOutput returns a mocked response or error for a command.
-func (m *MockRunner) CombinedOutput(name string, args ...string) ([]byte, error) {
-	// Mirror OSRunner's input validation so tests exercise the same trust
-	// boundary as production: a fixture passing an invalid command or
-	// argument must fail here too, not only outside tests. Production only
-	// ever prepends "sudo" after validating the inner command, so an explicit
-	// sudo prefix validates the inner command the same way.
+// validateInvocation mirrors OSRunner's input validation so tests exercise the
+// same trust boundary as production: a fixture passing an invalid command or
+// argument must fail here too, not only outside tests. Production only ever
+// prepends "sudo" after validating the inner command, so an explicit sudo
+// prefix validates the inner command the same way.
+func validateInvocation(name string, args []string) error {
 	inner, innerArgs := name, args
 	if name == constants.SudoCommand && len(args) > 0 {
 		inner, innerArgs = args[0], args[1:]
 	}
 	if err := fail2ban.ValidateCommand(inner); err != nil {
-		return nil, fmt.Errorf(constants.ErrCommandValidationFailed, err)
+		return fmt.Errorf(constants.ErrCommandValidationFailed, err)
 	}
 	if err := fail2ban.ValidateArguments(innerArgs); err != nil {
-		return nil, fmt.Errorf(constants.ErrArgumentValidationFailed, err)
+		return fmt.Errorf(constants.ErrArgumentValidationFailed, err)
+	}
+	return nil
+}
+
+// CombinedOutput returns a mocked response or error for a command.
+func (m *MockRunner) CombinedOutput(name string, args ...string) ([]byte, error) {
+	if err := validateInvocation(name, args); err != nil {
+		return nil, err
 	}
 
 	key := name + " " + strings.Join(args, " ")
@@ -79,8 +86,13 @@ func (m *MockRunner) CombinedOutput(name string, args ...string) ([]byte, error)
 	return nil, fmt.Errorf("unexpected command: %s", key)
 }
 
-// CombinedOutputWithSudo returns a mocked response for sudo commands.
+// CombinedOutputWithSudo returns a mocked response for sudo commands. It
+// validates before looking up a sudo-keyed response, as OSRunner validates
+// before running anything.
 func (m *MockRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte, error) {
+	if err := validateInvocation(name, args); err != nil {
+		return nil, err
+	}
 	checker := fail2ban.GetSudoChecker()
 
 	// If mock checker says we're root, don't use sudo
