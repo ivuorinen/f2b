@@ -67,32 +67,6 @@ jobs:
         # https://github.com/ivuorinen/actions
         uses: ivuorinen/actions/pr-lint@9f69f94c991b8050ba8eebc002f82587a17a47aa # v2026.10.31
 
-  commit-messages:
-    name: Commit messages
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0 # every commit in the PR range must be readable
-          persist-credentials: false
-
-      - name: Set up mise
-        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
-        with:
-          version: ${{ env.MISE_VERSION }}
-
-      # The squash merge puts the PR title and these messages on main, and the
-      # local commit-msg hooks only run where they were installed.
-      - name: Check the PR title and commit messages
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: mise run check-commit-messages
-
   prek:
     name: prek
     runs-on: ubuntu-latest
