@@ -330,8 +330,11 @@ func containsCommandInjectionPatterns(input string) bool {
 //   - IPv4: exactly four dot-separated groups of 1-3 decimal digits
 //     (so "999.1.1.1" is still IP-shaped and rejected by net.ParseIP)
 //   - IPv6: contains "::" or at least two colons
+//
+// An argument starting with "/" is a path, never an address or range, even
+// when it holds colons like a log named after a timestamp.
 func isLikelyIPArgument(arg string) bool {
-	if arg == "" {
+	if arg == "" || strings.HasPrefix(arg, "/") {
 		return false
 	}
 	// IPv6 shape: "::" or two-plus colons (jail names cannot contain colons).
