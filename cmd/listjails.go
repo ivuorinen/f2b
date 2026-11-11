@@ -12,7 +12,7 @@ import (
 
 // ListJailsCmd returns the list-jails command with injected client and config
 func ListJailsCmd(client fail2ban.Client, config *Config) *cobra.Command {
-	return NewCommand(
+	return withArgs(cobra.NoArgs, NewCommand(
 		constants.CLICmdListJails,
 		"List all jails",
 		[]string{"ls-jails", "jails"},
@@ -33,5 +33,5 @@ func ListJailsCmd(client fail2ban.Client, config *Config) *cobra.Command {
 				return err
 			}
 			return nil
-		})
+		}))
 }

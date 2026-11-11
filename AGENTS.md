@@ -2,12 +2,19 @@
 
 Use this guide to contribute effectively to f2b, the Go-based CLI for managing Fail2Ban jails.
 
+## Hard Rules
+
+- Never write `func(_ *testing.T)` (a prek hook rejects it) or discard a result with `_ = err`.
+  An exception needs the maintainer's explicit approval in the pull request.
+- Do not add `*_coverage_test.go` or `*_additional_test.go` files written to raise coverage.
+
 ## Project Structure & Module Organization
 
 - `main.go` wires logging and the lazy client (sudo checks run on the first client operation).
 - `cmd/` contains Cobra commands and fluent command tests.
   Mirror changes under `cmd/*_test.go` when adding scenarios.
-- `fail2ban/` hosts the client interfaces, runners, and mocks used across commands.
+- `fail2ban/` hosts the client interfaces and runners used across commands.
+  Its test doubles live in `fail2ban/fail2bantest`, which only tests import.
 - `constants/` holds shared constants (`package constants`) used across `cmd` and `fail2ban`.
 - `docs/` centralizes architecture, testing, and security references; keep updates in sync with code changes.
 
@@ -34,15 +41,12 @@ Use this guide to contribute effectively to f2b, the Go-based CLI for managing F
 
 - Use the fluent helpers such as `NewCommandTest` and `NewMockClientBuilder` for CLI coverage.
 - Co-locate unit tests with their packages and create `*_integration_test.go` only for integration scenarios.
-- Mock sudo interactions with the provided `MockRunner` and `MockSudoChecker`; never issue real sudo.
+- Mock sudo interactions with `fail2bantest.MockRunner` and `fail2bantest.MockSudoChecker`; never issue real sudo.
   `F2B_TEST_SUDO` only skips the sudo probe; it does not mock sudo.
   An exception needs the maintainer's explicit approval in the pull request.
 - Ensure security cases include path traversal, privilege errors, and context timeouts.
 - Every test and subtest uses its `t` and asserts an outcome.
-- Never write `func(_ *testing.T)` (a prek hook rejects it) or discard a result with `_ = err`.
-  An exception needs the maintainer's explicit approval in the pull request.
 - Name test files after the behavior under test.
-- Do not add `*_coverage_test.go` or `*_additional_test.go` files written to raise coverage.
 
 ## Commit & Pull Request Guidelines
 
@@ -75,4 +79,3 @@ Use this guide to contribute effectively to f2b, the Go-based CLI for managing F
 - Validate all user inputs, especially jail names and filesystem paths, before invoking runners.
 - Respect privilege boundaries: prefer dependency injection so tests and CLI paths use mocks by default.
 - Configure logging through the `F2B_LOG_LEVEL` environment variable.
-  Use `F2B_VERBOSE_TESTS` to enable verbose test output.

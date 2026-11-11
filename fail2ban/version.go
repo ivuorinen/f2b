@@ -94,9 +94,6 @@ func parseVersion(v string) (parts []int, prerelease string, ok bool) {
 		prerelease = v[dash+1:]
 		v = v[:dash]
 	}
-	if v == "" {
-		return nil, "", false
-	}
 	for f := range strings.SplitSeq(v, ".") {
 		n, err := strconv.Atoi(f)
 		if err != nil {

@@ -1,4 +1,4 @@
-package fail2ban
+package fail2bantest
 
 import (
 	"context"
@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/ivuorinen/f2b/constants"
+	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/fail2ban/internal/query"
 )
 
 // setNestedMapValue sets a value in a nested map[string]map[string]T structure with mutex protection.
@@ -35,7 +37,7 @@ type MockClient struct {
 	// Enhanced features for advanced testing
 	StatusAllData  string
 	StatusJailData map[string]string
-	BanRecords     []BanRecord
+	BanRecords     []fail2ban.BanRecord
 	BanResults     map[string]map[string]int   // jail -> ip -> result code
 	BanErrors      map[string]map[string]error // jail -> ip -> error
 	UnbanResults   map[string]map[string]int   // jail -> ip -> result code
@@ -60,7 +62,7 @@ func NewMockClient() *MockClient {
 		FilterRuns:     make(map[string]string),
 		StatusAllData:  "Mock status for all jails",
 		StatusJailData: make(map[string]string),
-		BanRecords:     []BanRecord{},
+		BanRecords:     []fail2ban.BanRecord{},
 		BanResults:     make(map[string]map[string]int),
 		BanErrors:      make(map[string]map[string]error),
 		UnbanResults:   make(map[string]map[string]int),
@@ -105,7 +107,7 @@ func (m *MockClient) StatusJailWithContext(ctx context.Context, jail string) (st
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.Jails[jail]; !ok {
-		return "", NewJailNotFoundError(jail)
+		return "", fail2ban.NewJailNotFoundError(jail)
 	}
 	if status, ok := m.StatusJailData[jail]; ok {
 		return status, nil
@@ -136,7 +138,7 @@ func (m *MockClient) BanIPWithContext(ctx context.Context, ip, jail string) (int
 	}
 
 	if _, ok := m.Jails[jail]; !ok {
-		return 0, NewJailNotFoundError(jail)
+		return 0, fail2ban.NewJailNotFoundError(jail)
 	}
 	if m.Banned[jail] == nil {
 		m.Banned[jail] = make(map[string]time.Time)
@@ -175,7 +177,7 @@ func (m *MockClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (i
 	}
 
 	if _, ok := m.Jails[jail]; !ok {
-		return 0, NewJailNotFoundError(jail)
+		return 0, fail2ban.NewJailNotFoundError(jail)
 	}
 	if m.Banned[jail] == nil || m.Banned[jail][ip].IsZero() {
 		return 1, nil // Already unbanned
@@ -205,7 +207,7 @@ func (m *MockClient) BannedInWithContext(ctx context.Context, ip string) ([]stri
 }
 
 // GetBanRecordsWithContext returns ban records for the specified jails.
-func (m *MockClient) GetBanRecordsWithContext(ctx context.Context, jails []string) ([]BanRecord, error) {
+func (m *MockClient) GetBanRecordsWithContext(ctx context.Context, jails []string) ([]fail2ban.BanRecord, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -220,7 +222,7 @@ func (m *MockClient) GetBanRecordsWithContext(ctx context.Context, jails []strin
 
 	// Mirror the real client: an empty list or any ""/"all" element queries
 	// every jail instead of returning nothing.
-	if requestsAllJails(jails) {
+	if query.RequestsAllJails(jails) {
 		jails = make([]string, 0, len(m.Banned))
 		for jail := range m.Banned {
 			jails = append(jails, jail)
@@ -228,10 +230,10 @@ func (m *MockClient) GetBanRecordsWithContext(ctx context.Context, jails []strin
 		sort.Strings(jails)
 	}
 
-	var recs []BanRecord
+	var recs []fail2ban.BanRecord
 	for _, jail := range jails {
 		for ip, t := range m.Banned[jail] {
-			recs = append(recs, BanRecord{
+			recs = append(recs, fail2ban.BanRecord{
 				Jail:      jail,
 				IP:        ip,
 				BannedAt:  t,
@@ -260,18 +262,17 @@ func (m *MockClient) GetLogLinesWithLimitContext(ctx context.Context, jail, ip s
 	m.LastLogQuery = [2]string{jail, ip}
 	m.LastLogLimit = maxLines
 
-	// Filter with the same semantics as the real client (passesFilters +
-	// canonical IP token matching) so tests can't pass against substring
-	// behavior the production path doesn't have (e.g. "10.0.0.1" matching
-	// inside "10.0.0.100").
-	cfg := prepareLogFilters(LogReadConfig{JailFilter: jail, IPFilter: ip})
+	// Filter with the real client's filter (bracketed jail, canonical IP token
+	// matching) so tests can't pass against substring behavior the production
+	// path doesn't have (e.g. "10.0.0.1" matching inside "10.0.0.100").
+	filter := query.NewLogFilter(jail, ip)
 	source := m.LogLines
 	if len(source) == 0 {
 		source = m.Logs
 	}
 	lines := []string{} // never nil, like the real client
 	for _, l := range source {
-		if passesFilters(l, cfg) {
+		if filter.Matches(l) {
 			lines = append(lines, l)
 		}
 	}
@@ -295,7 +296,7 @@ func (m *MockClient) ListFiltersWithContext(ctx context.Context) ([]string, erro
 }
 
 // TestFilterWithContext simulates running fail2ban-regex for the given filter.
-func (m *MockClient) TestFilterWithContext(ctx context.Context, filter string) (string, error) {
+func (m *MockClient) TestFilterWithContext(ctx context.Context, filter, _ string) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -308,7 +309,7 @@ func (m *MockClient) TestFilterWithContext(ctx context.Context, filter string) (
 	if result, ok := m.FilterRuns[filter]; ok {
 		return result, nil
 	}
-	return "", fmt.Errorf(ErrFilterNotFound, filter)
+	return "", fmt.Errorf(fail2ban.ErrFilterNotFound, filter)
 }
 
 // Reset clears all bans and logs in the mock (for test isolation).

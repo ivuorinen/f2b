@@ -4,18 +4,20 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/fail2ban/fail2bantest"
 )
 
+// testLogDir is the directory these tests point log reads at.
+var testLogDir string
+
 // readLogs reads through RealClient, the single production log-read entry
-// point, from the global log directory these tests point at.
+// point, from testLogDir.
 func readLogs(ctx context.Context, jail, ip string) ([]string, error) {
-	return (&fail2ban.RealClient{LogDir: fail2ban.GetLogDir()}).GetLogLinesWithContext(ctx, jail, ip)
+	return (&fail2ban.RealClient{LogDir: testLogDir}).GetLogLinesWithContext(ctx, jail, ip)
 }
 
 // testIPValidation tests IP address validation security
@@ -168,7 +170,6 @@ func testCommandValidation(t *testing.T) {
 	legitimateCommands := []string{
 		"fail2ban-client",
 		"fail2ban-regex",
-		"fail2ban-server",
 	}
 
 	for _, cmd := range legitimateCommands {
@@ -190,9 +191,9 @@ func TestSecurityAudit_InputValidation(t *testing.T) {
 // TestSecurityAudit_PathSecurity performs comprehensive path security testing
 func TestSecurityAudit_PathSecurity(t *testing.T) {
 	tempDir := t.TempDir()
-	originalLogDir := fail2ban.GetLogDir()
-	fail2ban.SetLogDir(tempDir)
-	defer fail2ban.SetLogDir(originalLogDir)
+	originalLogDir := testLogDir
+	testLogDir = tempDir
+	defer func() { testLogDir = originalLogDir }()
 
 	t.Run("PathTraversalProtection", func(t *testing.T) {
 		assertPathTraversalRejected(t, tempDir)
@@ -231,9 +232,10 @@ func assertPathTraversalRejected(t *testing.T, tempDir string) {
 
 	// End-to-end: with a traversal-named file planted next to the real log, a
 	// full read must return only the legitimate log content.
-	testFile := filepath.Join(tempDir, "test.log")
-	if err := os.WriteFile(testFile, []byte("legit"), 0600); err != nil {
-		t.Fatalf("writing fixture: %v", err)
+	for _, name := range []string{"test.log", "fail2ban.log"} {
+		if err := os.WriteFile(filepath.Join(tempDir, name), []byte("legit"), 0600); err != nil {
+			t.Fatalf("writing fixture: %v", err)
+		}
 	}
 	lines, err := readLogs(context.Background(), "all", "all")
 	if err != nil {
@@ -377,11 +379,11 @@ func assertErrorMessageNoLeak(
 func TestSecurityAudit_PrivilegeEscalation(t *testing.T) {
 	t.Run("SudoValidation", func(t *testing.T) {
 		// Test with unprivileged user
-		_, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, false)
+		_, cleanup := fail2bantest.SetupMockEnvironmentWithSudo(t, false)
 		defer cleanup()
 
 		// Get the mock runner set up by the environment
-		mockRunner := fail2ban.MustMockRunner(t)
+		mockRunner := fail2bantest.MustMockRunner(t)
 
 		// Test that sudo-requiring operations are properly gated
 		testCases := []string{
@@ -412,39 +414,12 @@ func TestSecurityAudit_PrivilegeEscalation(t *testing.T) {
 
 	t.Run("RootPrivilegeDetection", func(t *testing.T) {
 		// Test with root privileges
-		_, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, true)
+		_, cleanup := fail2bantest.SetupMockEnvironmentWithSudo(t, true)
 		defer cleanup()
 		checker := fail2ban.GetSudoChecker()
 
 		if !checker.HasSudoPrivileges() {
 			t.Error("Mock sudo checker should report having privileges")
-		}
-	})
-}
-
-// TestSecurityAudit_ConcurrentSafety tests for concurrent safety vulnerabilities
-func TestSecurityAudit_ConcurrentSafety(t *testing.T) {
-	t.Run("GlobalStateRaceConditions", func(t *testing.T) {
-		// Test that global state modifications are safe. The race detector
-		// (go test -race, run by `mise run test-race` and CI) is the real oracle for
-		// the interleaving; the assertion below catches torn/aggregate-state
-		// corruption even without it.
-		originalLogDir := fail2ban.GetLogDir()
-		defer fail2ban.SetLogDir(originalLogDir)
-
-		var wg sync.WaitGroup
-		for i := range 10 {
-			wg.Go(func() {
-				fail2ban.SetLogDir("/tmp/test-" + strconv.Itoa(i))
-				fail2ban.GetLogDir()
-			})
-		}
-		wg.Wait()
-
-		// The final value must be exactly one of the written values.
-		final := fail2ban.GetLogDir()
-		if !strings.HasPrefix(final, "/tmp/test-") {
-			t.Fatalf("global log dir corrupted after concurrent writes: %q", final)
 		}
 	})
 }
@@ -498,9 +473,9 @@ func assertChainIPValidation(t *testing.T, ip string, shouldPass bool) {
 // TestSecurityAudit_Integration performs integration-level security testing
 func TestSecurityAudit_Integration(t *testing.T) {
 	tempDir := t.TempDir()
-	originalLogDir := fail2ban.GetLogDir()
-	fail2ban.SetLogDir(tempDir)
-	defer fail2ban.SetLogDir(originalLogDir)
+	originalLogDir := testLogDir
+	testLogDir = tempDir
+	defer func() { testLogDir = originalLogDir }()
 
 	t.Run("EndToEndSecurityChain", func(t *testing.T) {
 		// Create test log file

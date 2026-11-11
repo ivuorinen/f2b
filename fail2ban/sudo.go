@@ -28,6 +28,11 @@ type RealSudoChecker struct {
 	// the sudo/wheel/admin match is checkable without the host group
 	// database; nil means currentGroupNames.
 	groupNames func() ([]string, error)
+
+	// A process runs one command, so one probe answers for every
+	// fail2ban-client call it makes.
+	probeOnce sync.Once
+	probeOK   bool
 }
 
 var (
@@ -96,12 +101,16 @@ func currentGroupNames() ([]string, error) {
 
 // defaultSudoProbe runs the non-interactive sudo probes against the real sudo binary.
 func defaultSudoProbe(ctx context.Context) error {
+	sudoPath, err := resolveTrustedCommand(constants.SudoCommand)
+	if err != nil {
+		return err
+	}
 	return probeSudo(ctx, func(ctx context.Context, args ...string) error {
-		// #nosec G204 -- constants.SudoCommand is the compile-time constant "sudo"
-		// and args are probeSudo's fixed literals. Opengrep cannot resolve a
-		// constant from another package, hence the nosemgrep below.
+		// #nosec G204 -- sudoPath is pinned to a trusted directory and args are
+		// probeSudo's fixed literals. Opengrep cannot see either, hence the
+		// nosemgrep below.
 		// nosemgrep: go.lang.security.audit.dangerous-exec-command.dangerous-exec-command, go_subproc_rule-subproc
-		return exec.CommandContext(ctx, constants.SudoCommand, args...).Run()
+		return exec.CommandContext(ctx, sudoPath, args...).Run()
 	})
 }
 
@@ -119,8 +128,16 @@ func probeSudo(ctx context.Context, run func(ctx context.Context, args ...string
 	return run(ctx, "-n", "-l", constants.Fail2BanClientCommand)
 }
 
-// CanUseSudo returns true if the current user can use sudo
+// CanUseSudo returns true if the current user can use sudo. The answer is
+// cached: probing per call spawned up to two sudo processes for every
+// fail2ban-client invocation of a least-privilege user.
 func (r *RealSudoChecker) CanUseSudo() bool {
+	r.probeOnce.Do(func() { r.probeOK = r.probeCanUseSudo() })
+	return r.probeOK
+}
+
+// probeCanUseSudo runs the sudo probe once.
+func (r *RealSudoChecker) probeCanUseSudo() bool {
 	probe := r.runSudoProbe
 	if probe == nil {
 		// In test environment, never execute the real sudo binary

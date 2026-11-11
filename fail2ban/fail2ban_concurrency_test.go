@@ -1,4 +1,4 @@
-package fail2ban
+package fail2ban_test
 
 import (
 	"context"
@@ -6,12 +6,15 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/fail2ban/fail2bantest"
 )
 
 // TestRunnerConcurrentAccess tests that concurrent access to the runner
 // is safe and doesn't cause race conditions.
 func TestRunnerConcurrentAccess(t *testing.T) {
-	restoreRunner := WithTestRunner(t, GetRunner())
+	restoreRunner := fail2bantest.WithTestRunner(t, fail2ban.GetRunner())
 	defer restoreRunner()
 
 	const numGoroutines = 100
@@ -28,15 +31,15 @@ func TestRunnerConcurrentAccess(t *testing.T) {
 			for j := range numOperations {
 				// Alternate between different mock runners
 				if (id+j)%2 == 0 {
-					mockRunner := NewMockRunner()
+					mockRunner := fail2bantest.NewMockRunner()
 					mockRunner.SetResponse("test", []byte("response"))
-					SetRunner(mockRunner)
+					fail2ban.SetRunner(mockRunner)
 				} else {
-					SetRunner(&OSRunner{})
+					fail2ban.SetRunner(&fail2ban.OSRunner{})
 				}
 
 				// Get runner and verify it's not nil
-				runner := GetRunner()
+				runner := fail2ban.GetRunner()
 				if runner == nil {
 					t.Errorf("GetRunner() returned nil")
 					return
@@ -55,11 +58,11 @@ func TestRunnerConcurrentAccess(t *testing.T) {
 // RunnerCombinedOutputWithSudoContext.
 func TestRunnerCombinedOutputWithSudoConcurrency(t *testing.T) {
 	// Set up mock environment with root privileges to avoid sudo prefix
-	_, cleanup := SetupMockEnvironment(t)
+	_, cleanup := fail2bantest.SetupMockEnvironment(t)
 	defer cleanup()
 
 	// Get the mock runner and configure additional responses
-	mockRunner := MustMockRunner(t)
+	mockRunner := fail2bantest.MustMockRunner(t)
 	mockRunner.SetResponse("fail2ban-client status", []byte("status output"))
 
 	const numGoroutines = 50
@@ -67,7 +70,8 @@ func TestRunnerCombinedOutputWithSudoConcurrency(t *testing.T) {
 
 	for range numGoroutines {
 		wg.Go(func() {
-			output, err := RunnerCombinedOutputWithSudoContext(context.Background(), "fail2ban-client", "status")
+			output, err := fail2ban.GetRunner().
+				CombinedOutputWithSudoContext(context.Background(), "fail2ban-client", "status")
 			if err != nil {
 				t.Errorf("RunnerCombinedOutputWithSudoContext failed: %v", err)
 				return
@@ -87,8 +91,8 @@ func TestRunnerCombinedOutputWithSudoConcurrency(t *testing.T) {
 func TestMixedConcurrentOperations(t *testing.T) {
 	// Set up a single shared MockRunner with all required responses
 	// This avoids race conditions from multiple goroutines setting different runners
-	sharedMockRunner := NewMockRunner()
-	restoreRunner := WithTestRunner(t, sharedMockRunner)
+	sharedMockRunner := fail2bantest.NewMockRunner()
+	restoreRunner := fail2bantest.WithTestRunner(t, sharedMockRunner)
 	defer restoreRunner()
 
 	// Set up responses for valid fail2ban commands to avoid validation errors
@@ -125,12 +129,12 @@ func TestMixedConcurrentOperations(t *testing.T) {
 func mixedConcurrentSetRunnerWorker() {
 	for range 20 {
 		// Create a new runner with the same responses to test concurrent setting
-		mockRunner := NewMockRunner()
+		mockRunner := fail2bantest.NewMockRunner()
 		mockRunner.SetResponse("fail2ban-client status", []byte("Status: OK"))
 		mockRunner.SetResponse("fail2ban-client -V", []byte("Version: 1.0.0"))
 		mockRunner.SetResponse("sudo fail2ban-client status", []byte("Status: OK"))
 		mockRunner.SetResponse("sudo fail2ban-client -V", []byte("Version: 1.0.0"))
-		SetRunner(mockRunner)
+		fail2ban.SetRunner(mockRunner)
 		time.Sleep(time.Millisecond)
 	}
 }
@@ -140,7 +144,8 @@ func mixedConcurrentSetRunnerWorker() {
 func mixedConcurrentRegularWorker(t *testing.T) {
 	t.Helper()
 	for range 20 {
-		output, err := GetRunner().CombinedOutputWithContext(context.Background(), "fail2ban-client", "status")
+		output, err := fail2ban.GetRunner().
+			CombinedOutputWithSudoContext(context.Background(), "fail2ban-client", "status")
 		if err != nil {
 			t.Errorf("CombinedOutputWithContext failed: %v", err)
 		}
@@ -156,7 +161,7 @@ func mixedConcurrentRegularWorker(t *testing.T) {
 func mixedConcurrentSudoWorker(t *testing.T) {
 	t.Helper()
 	for range 20 {
-		output, err := RunnerCombinedOutputWithSudoContext(context.Background(), "fail2ban-client", "-V")
+		output, err := fail2ban.GetRunner().CombinedOutputWithSudoContext(context.Background(), "fail2ban-client", "-V")
 		if err != nil {
 			t.Errorf("RunnerCombinedOutputWithSudoContext failed: %v", err)
 		}
@@ -170,7 +175,7 @@ func mixedConcurrentSudoWorker(t *testing.T) {
 // TestRunnerManagerLockOrdering verifies there are no deadlocks in the
 // runner manager's lock ordering.
 func TestRunnerManagerLockOrdering(t *testing.T) {
-	restoreRunner := WithTestRunner(t, GetRunner())
+	restoreRunner := fail2bantest.WithTestRunner(t, fail2ban.GetRunner())
 	defer restoreRunner()
 
 	// This test specifically looks for deadlocks by creating scenarios
@@ -187,9 +192,9 @@ func TestRunnerManagerLockOrdering(t *testing.T) {
 		for range 20 {
 			wg.Go(func() {
 				for range 100 {
-					SetRunner(NewMockRunner())
-					GetRunner()
-					_, _ = RunnerCombinedOutputWithSudoContext(context.Background(), "test")
+					fail2ban.SetRunner(fail2bantest.NewMockRunner())
+					fail2ban.GetRunner()
+					_, _ = fail2ban.GetRunner().CombinedOutputWithSudoContext(context.Background(), "test")
 				}
 			})
 		}
@@ -210,9 +215,9 @@ func TestRunnerManagerLockOrdering(t *testing.T) {
 // consistent across concurrent operations.
 func TestRunnerStateConsistency(t *testing.T) {
 	// Set initial state
-	initialRunner := NewMockRunner()
+	initialRunner := fail2bantest.NewMockRunner()
 	initialRunner.SetResponse("initial", []byte("initial response"))
-	restoreRunner := WithTestRunner(t, initialRunner)
+	restoreRunner := fail2bantest.WithTestRunner(t, initialRunner)
 	defer restoreRunner()
 
 	const numReaders = 50
@@ -223,7 +228,7 @@ func TestRunnerStateConsistency(t *testing.T) {
 	for range numReaders {
 		wg.Go(func() {
 			for range 100 {
-				runner := GetRunner()
+				runner := fail2ban.GetRunner()
 				if runner == nil {
 					t.Errorf("GetRunner() returned nil")
 					return
@@ -237,11 +242,11 @@ func TestRunnerStateConsistency(t *testing.T) {
 	for range numWriters {
 		wg.Go(func() {
 			for range 10 {
-				mockRunner := NewMockRunner()
+				mockRunner := fail2bantest.NewMockRunner()
 				mockRunner.SetResponse("test", []byte("test response"))
 				mockRunner.SetResponse("echo test", []byte("test response"))
 				mockRunner.SetResponse("fail2ban-client status", []byte("test response"))
-				SetRunner(mockRunner)
+				fail2ban.SetRunner(mockRunner)
 				time.Sleep(time.Microsecond)
 			}
 		})
@@ -250,7 +255,7 @@ func TestRunnerStateConsistency(t *testing.T) {
 	wg.Wait()
 
 	// Verify final state is consistent
-	finalRunner := GetRunner()
+	finalRunner := fail2ban.GetRunner()
 	if finalRunner == nil {
 		t.Fatal("Final runner state is nil")
 	}

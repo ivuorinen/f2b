@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/fail2ban/fail2bantest"
 )
 
 func TestServiceCmd(t *testing.T) {
@@ -75,7 +76,7 @@ func assertServiceCmdCase(t *testing.T, args []string, mockResponse string,
 	t.Helper()
 	builder := NewCommandTest(t, "service").
 		WithArgs(args...).
-		WithServiceSetup(func(mock *fail2ban.MockRunner) {
+		WithServiceSetup(func(mock *fail2bantest.MockRunner) {
 			if mockResponse != "" {
 				command := "sudo service fail2ban " + strings.Join(args, " ")
 				mock.SetResponse(command, []byte(mockResponse))
@@ -103,7 +104,7 @@ func TestServiceCmdWithJSONFormat(t *testing.T) {
 	NewCommandTest(t, "service").
 		WithArgs("status").
 		WithJSONFormat().
-		WithServiceSetup(func(mock *fail2ban.MockRunner) {
+		WithServiceSetup(func(mock *fail2bantest.MockRunner) {
 			mock.SetResponse("sudo service fail2ban status", []byte("fail2ban is running"))
 		}).
 		ExpectSuccess().
@@ -114,7 +115,7 @@ func TestServiceCmdWithJSONFormat(t *testing.T) {
 func TestServiceCmdErrorHandling(t *testing.T) {
 	NewCommandTest(t, "service").
 		WithArgs("status").
-		WithServiceSetup(func(mock *fail2ban.MockRunner) {
+		WithServiceSetup(func(mock *fail2bantest.MockRunner) {
 			mock.SetError("sudo service fail2ban status", &testServiceError{"service failed"})
 		}).
 		ExpectError().
@@ -124,13 +125,13 @@ func TestServiceCmdErrorHandling(t *testing.T) {
 // TestServiceCmdHonorsCommandContext pins that the privileged service call
 // runs under the command's context: the context-free runner ignored Ctrl-C.
 func TestServiceCmdHonorsCommandContext(t *testing.T) {
-	mock := fail2ban.MustMockRunner(t)
+	mock := fail2bantest.MustMockRunner(t)
 	mock.SetResponse("sudo service fail2ban restart", []byte("restarted"))
 	before := len(mock.GetCalls())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	cmd := ServiceCmd(&Config{Format: PlainFormat})
+	cmd := ServiceCmd(fail2ban.GetRunner(), &Config{Format: PlainFormat})
 	cmd.SetArgs([]string{"restart"})
 	_, err := captureStdoutStderr(func() error { return cmd.ExecuteContext(ctx) })
 	if !errors.Is(err, context.Canceled) {
@@ -153,12 +154,12 @@ func TestServiceCmdLogsAction(t *testing.T) {
 		Logger.SetLevel(originalLevel)
 	})
 
-	mock := fail2ban.MustMockRunner(t)
+	mock := fail2bantest.MustMockRunner(t)
 	mock.SetResponse("sudo service fail2ban stop", []byte("stopped"))
 	mock.SetError("sudo service fail2ban reload", &testServiceError{"reload failed"})
 
 	run := func(action string) error {
-		cmd := ServiceCmd(&Config{Format: PlainFormat})
+		cmd := ServiceCmd(fail2ban.GetRunner(), &Config{Format: PlainFormat})
 		cmd.SetArgs([]string{action})
 		_, err := captureStdoutStderr(cmd.Execute)
 		return err
@@ -183,7 +184,7 @@ func TestServiceCmdLogsAction(t *testing.T) {
 // TestServiceActionsSingleSource pins that the usage text and validation are
 // built from the one serviceActions list.
 func TestServiceActionsSingleSource(t *testing.T) {
-	use := ServiceCmd(&Config{Format: PlainFormat}).Use
+	use := ServiceCmd(fail2ban.GetRunner(), &Config{Format: PlainFormat}).Use
 	if want := "service [" + strings.Join(serviceActions, "|") + "]"; use != want {
 		t.Errorf("Use = %q, want %q", use, want)
 	}
@@ -206,7 +207,7 @@ func TestServiceCmdValidActions(t *testing.T) {
 			wantOutput := "Action " + action + " completed"
 			NewCommandTest(t, "service").
 				WithArgs(action).
-				WithServiceSetup(func(mock *fail2ban.MockRunner) {
+				WithServiceSetup(func(mock *fail2bantest.MockRunner) {
 					// enable/disable route through systemctl; everything else
 					// through service(8).
 					command := "sudo service fail2ban " + action
@@ -222,15 +223,12 @@ func TestServiceCmdValidActions(t *testing.T) {
 	}
 }
 
-func TestServiceCmdMultipleArgs(t *testing.T) {
-	// Test that service command only uses first arg:
+func TestServiceCmdRejectsSurplusArguments(t *testing.T) {
+	// A surplus argument is refused, not ignored: nothing may be started.
 	NewCommandTest(t, "service").
 		WithArgs("start", "extra").
-		WithServiceSetup(func(mock *fail2ban.MockRunner) {
-			mock.SetResponse("sudo service fail2ban start", []byte("Starting fail2ban service"))
-		}).
-		ExpectSuccess().
-		ExpectOutput("Starting fail2ban service").
+		WithServiceSetup(func(*fail2bantest.MockRunner) {}).
+		ExpectError().
 		Run()
 }
 
@@ -238,7 +236,7 @@ func TestServiceCmdEmptyResponse(t *testing.T) {
 	// Test that empty response is handled gracefully:
 	NewCommandTest(t, "service").
 		WithArgs("status").
-		WithServiceSetup(func(mock *fail2ban.MockRunner) {
+		WithServiceSetup(func(mock *fail2bantest.MockRunner) {
 			mock.SetResponse("sudo service fail2ban status", []byte(""))
 		}).
 		ExpectSuccess().
@@ -276,7 +274,7 @@ func TestServiceCmdSecurityValidation(t *testing.T) {
 			// Test that malicious actions are rejected:
 			result := NewCommandTest(t, "service").
 				WithArgs(maliciousAction).
-				WithServiceSetup(func(_ *fail2ban.MockRunner) {
+				WithServiceSetup(func(_ *fail2bantest.MockRunner) {
 					// No responses needed - command should be rejected before execution
 				}).
 				ExpectError(). // Command should return error for malicious actions
@@ -305,7 +303,7 @@ func TestServiceCmdValidActionsOnly(t *testing.T) {
 			wantOutput := "Action " + action + " completed"
 			NewCommandTest(t, "service").
 				WithArgs(action).
-				WithServiceSetup(func(mock *fail2ban.MockRunner) {
+				WithServiceSetup(func(mock *fail2bantest.MockRunner) {
 					// enable/disable route through systemctl; everything else
 					// through service(8).
 					command := "sudo service fail2ban " + action
@@ -325,7 +323,7 @@ func TestServiceCmdValidActionsOnly(t *testing.T) {
 		t.Run("invalid_action_"+action, func(t *testing.T) {
 			result := NewCommandTest(t, "service").
 				WithArgs(action).
-				WithServiceSetup(func(_ *fail2ban.MockRunner) {
+				WithServiceSetup(func(_ *fail2bantest.MockRunner) {
 					// No responses needed for invalid actions
 				}).
 				ExpectError(). // Command should return error for invalid actions
@@ -342,11 +340,11 @@ func TestServiceCmdValidActionsOnly(t *testing.T) {
 // BenchmarkServiceCmd benchmarks the service command execution
 func BenchmarkServiceCmd(b *testing.B) {
 	// Set up mock environment once
-	_, cleanup := fail2ban.SetupMockEnvironment(b)
+	_, cleanup := fail2bantest.SetupMockEnvironment(b)
 	defer cleanup()
 
 	// Get the mock runner and configure it
-	mock := fail2ban.MustMockRunner(b)
+	mock := fail2bantest.MustMockRunner(b)
 	mock.SetResponse("sudo service fail2ban status", []byte("fail2ban is running"))
 
 	// Framework could be used here but benchmark needs manual approach for performance:
@@ -354,7 +352,7 @@ func BenchmarkServiceCmd(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		cmd := ServiceCmd(config)
+		cmd := ServiceCmd(fail2ban.GetRunner(), config)
 		oldStdout := os.Stdout
 		r, w, err := os.Pipe()
 		if err != nil {

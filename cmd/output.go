@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -27,22 +26,6 @@ const (
 // os.Stderr until PersistentPreRunE chooses the format, and satisfies
 // fail2ban.LoggerEntry, so the fail2ban package logs through it (wired in main).
 var Logger = fail2ban.NewSlogLogger(fail2ban.SlogText)
-
-func init() {
-	// Reduce log verbosity in CI/test environments. The logger already writes
-	// text to os.Stderr by construction.
-	configureCIFriendlyLogging()
-}
-
-// configureCIFriendlyLogging sets appropriate log levels for CI/test environments
-func configureCIFriendlyLogging() {
-	// Detect CI environments by checking common CI environment variables
-	// If in CI or test environment, reduce logging noise unless explicitly overridden
-	if (fail2ban.IsCI() || fail2ban.IsTestEnvironment()) &&
-		os.Getenv("F2B_LOG_LEVEL") == "" && os.Getenv("F2B_VERBOSE_TESTS") == "" {
-		Logger.SetLevel(slog.LevelError)
-	}
-}
 
 // PrintOutput prints data to stdout in the specified format (PlainFormat or JSONFormat).
 func PrintOutput(data any, format string) error {
@@ -90,20 +73,23 @@ func PrintError(err error) {
 		return
 	}
 
-	// Check if error provides enhanced context
-	if contextErr, ok := errors.AsType[*fail2ban.ContextualError](err); ok {
-		Logger.WithFields(map[string]any{
-			"error":    err.Error(),
-			"category": string(contextErr.GetCategory()),
-		}).Error(constants.MsgCommandFailed)
+	contextErr, hasContext := errors.AsType[*fail2ban.ContextualError](err)
 
-		fmt.Fprintln(os.Stderr, constants.ErrorPrefix, err)
+	// With logs on stderr the record would only repeat the Error: line below;
+	// with a --log-file it is the copy that outlives the run.
+	if Logger.Output() != io.Writer(os.Stderr) {
+		entry := Logger.WithError(err)
+		if hasContext {
+			entry = entry.WithField("category", string(contextErr.GetCategory()))
+		}
+		entry.Error(constants.MsgCommandFailed)
+	}
+
+	fmt.Fprintln(os.Stderr, constants.ErrorPrefix, err)
+	if hasContext {
 		if remediation := contextErr.GetRemediation(); remediation != "" {
 			fmt.Fprintln(os.Stderr, "Hint:", remediation)
 		}
-	} else {
-		Logger.WithError(err).Error(constants.MsgCommandFailed)
-		fmt.Fprintln(os.Stderr, constants.ErrorPrefix, err)
 	}
 }
 

@@ -191,25 +191,6 @@ func TestShouldSkipFile(t *testing.T) {
 	}
 }
 
-// TestResolveBaseDir tests the resolveBaseDir function
-func TestResolveBaseDir(t *testing.T) {
-	t.Run("from config with absolute path", func(t *testing.T) {
-		config := LogReadConfig{
-			BaseDir: "/var/log/fail2ban",
-		}
-		result := resolveBaseDir(config)
-		assert.Equal(t, "/var/log/fail2ban", result)
-	})
-
-	t.Run("from config with empty path uses GetLogDir", func(t *testing.T) {
-		config := LogReadConfig{
-			BaseDir: "",
-		}
-		result := resolveBaseDir(config)
-		assert.Equal(t, GetLogDir(), result)
-	})
-}
-
 // writeLogLines writes n numbered lines tagged with name to dir/name.
 func writeLogLines(t *testing.T, dir, name string, n int) []string {
 	t.Helper()

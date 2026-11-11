@@ -161,16 +161,9 @@ func TestValidateCommandSecurityPatterns(t *testing.T) {
 	}
 }
 
-// TestDangerousCommandSentinelsAreTestFixtures pins that the DANGEROUS_*
-// placeholders stay test data: production patterns carry no sentinel, and
-// every sentinel command is still rejected (by the allowlist, not by a
-// test-only pattern compiled into the binary).
-func TestDangerousCommandSentinelsAreTestFixtures(t *testing.T) {
-	for _, pattern := range GetDangerousCommandPatterns() {
-		if strings.HasPrefix(pattern, "DANGEROUS_") {
-			t.Errorf("production pattern list contains test sentinel %q", pattern)
-		}
-	}
+// TestDangerousCommandSentinelsAreRejectedByTheAllowlist pins that a name off
+// the allowlist is refused without any deny-list being consulted.
+func TestDangerousCommandSentinelsAreRejectedByTheAllowlist(t *testing.T) {
 	for _, sentinel := range dangerousCommandSentinels {
 		err := ValidateCommand(sentinel)
 		if err == nil {

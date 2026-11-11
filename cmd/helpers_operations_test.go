@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/ivuorinen/f2b/constants"
-	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/fail2ban/fail2bantest"
 )
 
 // TestGetJailsFromArgs tests jail extraction from arguments
@@ -45,7 +45,7 @@ func TestGetJailsFromArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockClient := fail2ban.NewMockClient()
+			mockClient := fail2bantest.NewMockClient()
 			jails, err := GetJailsFromArgsWithContext(context.Background(), mockClient, tt.args, tt.startIndex)
 
 			if tt.expectError {
@@ -64,7 +64,7 @@ func TestProcessUnbanOperation(t *testing.T) {
 		name        string
 		ip          string
 		jails       []string
-		setupMock   func(*fail2ban.MockClient)
+		setupMock   func(*fail2bantest.MockClient)
 		expectError bool
 		expectCount int
 	}{
@@ -72,7 +72,7 @@ func TestProcessUnbanOperation(t *testing.T) {
 			name:  "successful unban single jail",
 			ip:    "192.168.1.1",
 			jails: []string{"sshd"},
-			setupMock: func(_ *fail2ban.MockClient) {
+			setupMock: func(_ *fail2bantest.MockClient) {
 				// MockClient returns 0 by default (successful unban)
 			},
 			expectError: false,
@@ -82,7 +82,7 @@ func TestProcessUnbanOperation(t *testing.T) {
 			name:  "successful unban multiple jails",
 			ip:    "192.168.1.1",
 			jails: []string{"sshd", "apache"},
-			setupMock: func(_ *fail2ban.MockClient) {
+			setupMock: func(_ *fail2bantest.MockClient) {
 				// MockClient handles both jails
 			},
 			expectError: false,
@@ -92,7 +92,7 @@ func TestProcessUnbanOperation(t *testing.T) {
 			name:  "unban returns already unbanned status",
 			ip:    "192.168.1.1",
 			jails: []string{"sshd"},
-			setupMock: func(m *fail2ban.MockClient) {
+			setupMock: func(m *fail2bantest.MockClient) {
 				// Configure mock to return code 1 (already unbanned)
 				m.UnbanResults = map[string]map[string]int{
 					"sshd": {"192.168.1.1": 1},
@@ -105,7 +105,7 @@ func TestProcessUnbanOperation(t *testing.T) {
 			name:  "unban fails with error",
 			ip:    "192.168.1.1",
 			jails: []string{"sshd"},
-			setupMock: func(m *fail2ban.MockClient) {
+			setupMock: func(m *fail2bantest.MockClient) {
 				// Configure mock to return an error
 				m.UnbanErrors = map[string]map[string]error{
 					"sshd": {"192.168.1.1": errors.New("unban failed")},
@@ -118,7 +118,7 @@ func TestProcessUnbanOperation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockClient := fail2ban.NewMockClient()
+			mockClient := fail2bantest.NewMockClient()
 			tt.setupMock(mockClient)
 
 			results, err := ProcessUnbanOperationWithContext(context.Background(), mockClient, tt.ip, tt.jails)

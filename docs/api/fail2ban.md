@@ -12,17 +12,13 @@ Package fail2ban provides comprehensive functionality for managing fail2ban jail
 
 - [Constants](<#constants>)
 - [Variables](<#variables>)
-- [func AssertError\(t TestingInterface, err error, expectError bool, testName string\)](<#AssertError>)
 - [func CheckSudoRequirements\(\) error](<#CheckSudoRequirements>)
 - [func CompareVersions\(v1, v2 string\) int](<#CompareVersions>)
 - [func ContainsPathTraversal\(input string\) bool](<#ContainsPathTraversal>)
 - [func ExtractFail2BanVersion\(output string\) \(string, error\)](<#ExtractFail2BanVersion>)
 - [func GenerateRequestID\(\) string](<#GenerateRequestID>)
-- [func GetDangerousCommandPatterns\(\) \[\]string](<#GetDangerousCommandPatterns>)
 - [func GetFilterAllowedPaths\(\) \[\]string](<#GetFilterAllowedPaths>)
 - [func GetLogAllowedPaths\(\) \[\]string](<#GetLogAllowedPaths>)
-- [func GetLogDir\(\) string](<#GetLogDir>)
-- [func IsCI\(\) bool](<#IsCI>)
 - [func IsGoTestBinary\(\) bool](<#IsGoTestBinary>)
 - [func IsTestEnvironment\(\) bool](<#IsTestEnvironment>)
 - [func NewCommandNotAllowedError\(command string\) error](<#NewCommandNotAllowedError>)
@@ -35,13 +31,11 @@ Package fail2ban provides comprehensive functionality for managing fail2ban jail
 - [func ParseBracketedList\(output string\) \[\]string](<#ParseBracketedList>)
 - [func ParseJailList\(output string\) \(\[\]string, error\)](<#ParseJailList>)
 - [func RequiresSudo\(command string, args ...string\) bool](<#RequiresSudo>)
-- [func RunnerCombinedOutputWithSudoContext\(ctx context.Context, name string, args ...string\) \(\[\]byte, error\)](<#RunnerCombinedOutputWithSudoContext>)
-- [func SetLogDir\(dir string\)](<#SetLogDir>)
 - [func SetLogger\(l LoggerEntry\)](<#SetLogger>)
 - [func SetRunner\(r Runner\)](<#SetRunner>)
 - [func SetSudoChecker\(checker SudoChecker\)](<#SetSudoChecker>)
-- [func StandardMockSetup\(mockRunner \*MockRunner\)](<#StandardMockSetup>)
 - [func ValidateArguments\(args \[\]string\) error](<#ValidateArguments>)
+- [func ValidateBanTarget\(target string\) error](<#ValidateBanTarget>)
 - [func ValidateClientFilterPath\(filterDir string\) \(string, error\)](<#ValidateClientFilterPath>)
 - [func ValidateClientLogPath\(logDir string\) \(string, error\)](<#ValidateClientLogPath>)
 - [func ValidateCommand\(command string\) error](<#ValidateCommand>)
@@ -54,19 +48,9 @@ Package fail2ban provides comprehensive functionality for managing fail2ban jail
 - [func WithJail\(ctx context.Context, jail string\) context.Context](<#WithJail>)
 - [func WithOperation\(ctx context.Context, operation string\) context.Context](<#WithOperation>)
 - [func WithRequestID\(ctx context.Context, requestID string\) context.Context](<#WithRequestID>)
-- [func WithTestRunner\(t TestingInterface, runner Runner\) func\(\)](<#WithTestRunner>)
 - [type BanRecord](<#BanRecord>)
   - [func ParseBanRecords\(output, jail string\) \(\[\]BanRecord, error\)](<#ParseBanRecords>)
   - [func ProcessJailsParallel\(ctx context.Context, jails \[\]string, workFunc func\(ctx context.Context, jail string\) \(\[\]BanRecord, error\)\) \(\[\]BanRecord, error\)](<#ProcessJailsParallel>)
-- [type BanRecordParser](<#BanRecordParser>)
-  - [func NewBanRecordParser\(\) \*BanRecordParser](<#NewBanRecordParser>)
-  - [func \(brp \*BanRecordParser\) ParseBanRecordLine\(line, jail string\) \(\*BanRecord, error\)](<#BanRecordParser.ParseBanRecordLine>)
-  - [func \(brp \*BanRecordParser\) ParseBanRecords\(output string, jail string\) \(\[\]BanRecord, error\)](<#BanRecordParser.ParseBanRecords>)
-- [type BoundedTimeCache](<#BoundedTimeCache>)
-  - [func NewBoundedTimeCache\(maxSize int\) \(\*BoundedTimeCache, error\)](<#NewBoundedTimeCache>)
-  - [func \(btc \*BoundedTimeCache\) Load\(key string\) \(time.Time, bool\)](<#BoundedTimeCache.Load>)
-  - [func \(btc \*BoundedTimeCache\) ParseWithLayout\(timeStr, layout string\) \(time.Time, error\)](<#BoundedTimeCache.ParseWithLayout>)
-  - [func \(btc \*BoundedTimeCache\) Store\(key string, value time.Time\)](<#BoundedTimeCache.Store>)
 - [type Client](<#Client>)
 - [type ContextualError](<#ContextualError>)
   - [func NewSystemError\(message, remediation string, cause error\) \*ContextualError](<#NewSystemError>)
@@ -76,56 +60,11 @@ Package fail2ban provides comprehensive functionality for managing fail2ban jail
   - [func \(e \*ContextualError\) GetRemediation\(\) string](<#ContextualError.GetRemediation>)
   - [func \(e \*ContextualError\) Unwrap\(\) error](<#ContextualError.Unwrap>)
 - [type ErrorCategory](<#ErrorCategory>)
-- [type FastTimeCache](<#FastTimeCache>)
-  - [func NewFastTimeCache\(layout string\) \*FastTimeCache](<#NewFastTimeCache>)
-  - [func \(ftc \*FastTimeCache\) ParseTimeOptimized\(timeStr string\) \(time.Time, error\)](<#FastTimeCache.ParseTimeOptimized>)
 - [type Fields](<#Fields>)
 - [type LogReadConfig](<#LogReadConfig>)
 - [type LoggerEntry](<#LoggerEntry>)
   - [func LoggerFromContext\(ctx context.Context\) LoggerEntry](<#LoggerFromContext>)
-- [type MockClient](<#MockClient>)
-  - [func NewMockClient\(\) \*MockClient](<#NewMockClient>)
-  - [func SetupMockEnvironment\(t TestingInterface\) \(client \*MockClient, cleanup func\(\)\)](<#SetupMockEnvironment>)
-  - [func SetupMockEnvironmentWithStandardResponses\(t TestingInterface\) \(client \*MockClient, cleanup func\(\)\)](<#SetupMockEnvironmentWithStandardResponses>)
-  - [func SetupMockEnvironmentWithSudo\(t TestingInterface, hasSudo bool\) \(client \*MockClient, cleanup func\(\)\)](<#SetupMockEnvironmentWithSudo>)
-  - [func \(m \*MockClient\) BanIPWithContext\(ctx context.Context, ip, jail string\) \(int, error\)](<#MockClient.BanIPWithContext>)
-  - [func \(m \*MockClient\) BannedInWithContext\(ctx context.Context, ip string\) \(\[\]string, error\)](<#MockClient.BannedInWithContext>)
-  - [func \(m \*MockClient\) GetBanRecordsWithContext\(ctx context.Context, jails \[\]string\) \(\[\]BanRecord, error\)](<#MockClient.GetBanRecordsWithContext>)
-  - [func \(m \*MockClient\) GetLogLinesWithContext\(ctx context.Context, jail, ip string\) \(\[\]string, error\)](<#MockClient.GetLogLinesWithContext>)
-  - [func \(m \*MockClient\) GetLogLinesWithLimitContext\(ctx context.Context, jail, ip string, maxLines int\) \(\[\]string, error\)](<#MockClient.GetLogLinesWithLimitContext>)
-  - [func \(m \*MockClient\) ListFiltersWithContext\(ctx context.Context\) \(\[\]string, error\)](<#MockClient.ListFiltersWithContext>)
-  - [func \(m \*MockClient\) ListJailsWithContext\(ctx context.Context\) \(\[\]string, error\)](<#MockClient.ListJailsWithContext>)
-  - [func \(m \*MockClient\) Reset\(\)](<#MockClient.Reset>)
-  - [func \(m \*MockClient\) SetBanError\(jail, ip string, err error\)](<#MockClient.SetBanError>)
-  - [func \(m \*MockClient\) SetBanResult\(jail, ip string, result int\)](<#MockClient.SetBanResult>)
-  - [func \(m \*MockClient\) SetFilterTest\(filter, result string\)](<#MockClient.SetFilterTest>)
-  - [func \(m \*MockClient\) SetStatusJailData\(jail, status string\)](<#MockClient.SetStatusJailData>)
-  - [func \(m \*MockClient\) SetUnbanError\(jail, ip string, err error\)](<#MockClient.SetUnbanError>)
-  - [func \(m \*MockClient\) SetUnbanResult\(jail, ip string, result int\)](<#MockClient.SetUnbanResult>)
-  - [func \(m \*MockClient\) StatusAllWithContext\(ctx context.Context\) \(string, error\)](<#MockClient.StatusAllWithContext>)
-  - [func \(m \*MockClient\) StatusJailWithContext\(ctx context.Context, jail string\) \(string, error\)](<#MockClient.StatusJailWithContext>)
-  - [func \(m \*MockClient\) TestFilterWithContext\(ctx context.Context, filter string\) \(string, error\)](<#MockClient.TestFilterWithContext>)
-  - [func \(m \*MockClient\) UnbanIPWithContext\(ctx context.Context, ip, jail string\) \(int, error\)](<#MockClient.UnbanIPWithContext>)
-- [type MockRunner](<#MockRunner>)
-  - [func MustMockRunner\(t TestingInterface\) \*MockRunner](<#MustMockRunner>)
-  - [func NewMockRunner\(\) \*MockRunner](<#NewMockRunner>)
-  - [func \(m \*MockRunner\) CombinedOutput\(name string, args ...string\) \(\[\]byte, error\)](<#MockRunner.CombinedOutput>)
-  - [func \(m \*MockRunner\) CombinedOutputWithContext\(ctx context.Context, name string, args ...string\) \(\[\]byte, error\)](<#MockRunner.CombinedOutputWithContext>)
-  - [func \(m \*MockRunner\) CombinedOutputWithSudo\(name string, args ...string\) \(\[\]byte, error\)](<#MockRunner.CombinedOutputWithSudo>)
-  - [func \(m \*MockRunner\) CombinedOutputWithSudoContext\(ctx context.Context, name string, args ...string\) \(\[\]byte, error\)](<#MockRunner.CombinedOutputWithSudoContext>)
-  - [func \(m \*MockRunner\) GetCalls\(\) \[\]string](<#MockRunner.GetCalls>)
-  - [func \(m \*MockRunner\) SetError\(cmd string, err error\)](<#MockRunner.SetError>)
-  - [func \(m \*MockRunner\) SetResponse\(cmd string, response \[\]byte\)](<#MockRunner.SetResponse>)
-- [type MockSudoChecker](<#MockSudoChecker>)
-  - [func MustMockSudoChecker\(t TestingInterface\) \*MockSudoChecker](<#MustMockSudoChecker>)
-  - [func \(m \*MockSudoChecker\) CanUseSudo\(\) bool](<#MockSudoChecker.CanUseSudo>)
-  - [func \(m \*MockSudoChecker\) HasSudoPrivileges\(\) bool](<#MockSudoChecker.HasSudoPrivileges>)
-  - [func \(m \*MockSudoChecker\) InSudoGroup\(\) bool](<#MockSudoChecker.InSudoGroup>)
-  - [func \(m \*MockSudoChecker\) IsRoot\(\) bool](<#MockSudoChecker.IsRoot>)
 - [type OSRunner](<#OSRunner>)
-  - [func \(r \*OSRunner\) CombinedOutput\(name string, args ...string\) \(\[\]byte, error\)](<#OSRunner.CombinedOutput>)
-  - [func \(r \*OSRunner\) CombinedOutputWithContext\(ctx context.Context, name string, args ...string\) \(\[\]byte, error\)](<#OSRunner.CombinedOutputWithContext>)
-  - [func \(r \*OSRunner\) CombinedOutputWithSudo\(name string, args ...string\) \(\[\]byte, error\)](<#OSRunner.CombinedOutputWithSudo>)
   - [func \(r \*OSRunner\) CombinedOutputWithSudoContext\(ctx context.Context, name string, args ...string\) \(\[\]byte, error\)](<#OSRunner.CombinedOutputWithSudoContext>)
 - [type PathSecurityConfig](<#PathSecurityConfig>)
   - [func CreateFilterPathConfig\(\) PathSecurityConfig](<#CreateFilterPathConfig>)
@@ -143,7 +82,7 @@ Package fail2ban provides comprehensive functionality for managing fail2ban jail
   - [func \(c \*RealClient\) ListJailsWithContext\(ctx context.Context\) \(\[\]string, error\)](<#RealClient.ListJailsWithContext>)
   - [func \(c \*RealClient\) StatusAllWithContext\(ctx context.Context\) \(string, error\)](<#RealClient.StatusAllWithContext>)
   - [func \(c \*RealClient\) StatusJailWithContext\(ctx context.Context, jail string\) \(string, error\)](<#RealClient.StatusJailWithContext>)
-  - [func \(c \*RealClient\) TestFilterWithContext\(ctx context.Context, filter string\) \(string, error\)](<#RealClient.TestFilterWithContext>)
+  - [func \(c \*RealClient\) TestFilterWithContext\(ctx context.Context, filter, logFile string\) \(string, error\)](<#RealClient.TestFilterWithContext>)
   - [func \(c \*RealClient\) UnbanIPWithContext\(ctx context.Context, ip, jail string\) \(int, error\)](<#RealClient.UnbanIPWithContext>)
 - [type RealSudoChecker](<#RealSudoChecker>)
   - [func \(r \*RealSudoChecker\) CanUseSudo\(\) bool](<#RealSudoChecker.CanUseSudo>)
@@ -173,7 +112,6 @@ Package fail2ban provides comprehensive functionality for managing fail2ban jail
   - [func \(l \*SlogLogger\) WithFields\(fields Fields\) LoggerEntry](<#SlogLogger.WithFields>)
 - [type SudoChecker](<#SudoChecker>)
   - [func GetSudoChecker\(\) SudoChecker](<#GetSudoChecker>)
-- [type TestingInterface](<#TestingInterface>)
 - [type TimedOperation](<#TimedOperation>)
   - [func NewTimedOperation\(name, command string, args ...string\) \*TimedOperation](<#NewTimedOperation>)
   - [func \(t \*TimedOperation\) FinishWithContext\(ctx context.Context, err error\)](<#TimedOperation.FinishWithContext>)
@@ -192,7 +130,7 @@ const (
     ErrFilterNotFound    = "filter %s not found. Check the filter directory (filter.d) for available filters"
     ErrIPRequired        = "IP address required. Usage: f2b <command> <ip-address> [jail]"
     ErrJailRequired      = "jail name required. Use 'f2b status' to list available jails"
-    ErrFilterRequired    = "filter name required. Usage: f2b test-filter <filter>"
+    ErrFilterRequired    = "filter name required. Usage: f2b test-filter <filter> [logfile]"
     ErrInvalidCommand    = "invalid command: %s. Use 'f2b --help' to see available commands"
     ErrCommandNotAllowed = "command not allowed: %s. This command contains potentially dangerous characters"
     ErrInvalidArgument   = "invalid argument: %s. Check command usage with 'f2b <command> --help'"
@@ -238,17 +176,8 @@ var (
 )
 ```
 
-<a name="AssertError"></a>
-## func [AssertError](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/test_helpers.go#L97>)
-
-```go
-func AssertError(t TestingInterface, err error, expectError bool, testName string)
-```
-
-AssertError provides standardized error checking for tests
-
 <a name="CheckSudoRequirements"></a>
-## func [CheckSudoRequirements](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L197>)
+## func [CheckSudoRequirements](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L214>)
 
 ```go
 func CheckSudoRequirements() error
@@ -266,7 +195,7 @@ func CompareVersions(v1, v2 string) int
 CompareVersions compares two dotted\-numeric version strings, returning \-1, 0, or 1. fail2ban versions are simple \(e.g. 0.11.2, 1.0.1\), so a small SemVer comparator replaces the go\-version dependency: numeric components are compared left to right \(missing trailing parts count as 0\), a prerelease sorts before its release, and build metadata is ignored. Unparseable input falls back to lexical comparison.
 
 <a name="ContainsPathTraversal"></a>
-## func [ContainsPathTraversal](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/security_utils.go#L13>)
+## func [ContainsPathTraversal](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/security_utils.go#L12>)
 
 ```go
 func ContainsPathTraversal(input string) bool
@@ -275,7 +204,7 @@ func ContainsPathTraversal(input string) bool
 ContainsPathTraversal validates paths using stdlib filepath canonicalization. Returns true if the path contains traversal attempts \(e.g., .., absolute paths, encoded traversals, etc.\)
 
 <a name="ExtractFail2BanVersion"></a>
-## func [ExtractFail2BanVersion](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/version.go#L111>)
+## func [ExtractFail2BanVersion](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/version.go#L108>)
 
 ```go
 func ExtractFail2BanVersion(output string) (string, error)
@@ -284,7 +213,7 @@ func ExtractFail2BanVersion(output string) (string, error)
 ExtractFail2BanVersion extracts the semantic version from fail2ban\-client \-V output
 
 <a name="GenerateRequestID"></a>
-## func [GenerateRequestID](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_context.go#L89>)
+## func [GenerateRequestID](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_context.go#L87>)
 
 ```go
 func GenerateRequestID() string
@@ -292,19 +221,8 @@ func GenerateRequestID() string
 
 GenerateRequestID generates a random request ID for tracing. 16 random bytes \(128 bits\) of hex is ample uniqueness for a correlation ID without pulling in a UUID dependency.
 
-<a name="GetDangerousCommandPatterns"></a>
-## func [GetDangerousCommandPatterns](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/security_utils.go#L55>)
-
-```go
-func GetDangerousCommandPatterns() []string
-```
-
-GetDangerousCommandPatterns returns the attack signatures ValidateCommand rejects before a command name reaches the allowlist check.
-
-Only real signatures belong here. The DANGEROUS\_\* placeholder names the injection tests use are test fixtures and live in the test files: shipping them made production validation depend on test data.
-
 <a name="GetFilterAllowedPaths"></a>
-## func [GetFilterAllowedPaths](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/pathsecurity.go#L36>)
+## func [GetFilterAllowedPaths](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/pathsecurity.go#L38>)
 
 ```go
 func GetFilterAllowedPaths() []string
@@ -313,7 +231,7 @@ func GetFilterAllowedPaths() []string
 GetFilterAllowedPaths returns allowed paths for filter directories: the fail2ban configuration locations only, never a user\-writable tree such as /home, because a filter file names the logpath root reads.
 
 <a name="GetLogAllowedPaths"></a>
-## func [GetLogAllowedPaths](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/pathsecurity.go#L27>)
+## func [GetLogAllowedPaths](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/pathsecurity.go#L29>)
 
 ```go
 func GetLogAllowedPaths() []string
@@ -323,26 +241,8 @@ GetLogAllowedPaths returns allowed paths for log directories.
 
 Only /var/log: test\-filter hands the filter's logpath to sudo fail2ban\-regex, which prints the file's lines, so every allowed tree is a tree root can be made to read. Whole subtrees such as /home, /opt and /usr/local exposed other users' keys and secrets under \`sudo f2b\`.
 
-<a name="GetLogDir"></a>
-## func [GetLogDir](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L39>)
-
-```go
-func GetLogDir() string
-```
-
-GetLogDir returns the current log directory path.
-
-<a name="IsCI"></a>
-## func [IsCI](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_env.go#L45>)
-
-```go
-func IsCI() bool
-```
-
-IsCI detects if we're running in a CI environment
-
 <a name="IsGoTestBinary"></a>
-## func [IsGoTestBinary](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_env.go#L109>)
+## func [IsGoTestBinary](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_env.go#L94>)
 
 ```go
 func IsGoTestBinary() bool
@@ -353,7 +253,7 @@ IsGoTestBinary reports whether this process is a \`go test\` binary, using only 
 Deliberately narrower than IsTestEnvironment, which also honors the GO\_TEST/F2B\_TEST/F2B\_TEST\_SUDO opt\-in. Those variables are settable in any shell, so they must never gate anything that weakens command resolution: leaving fail2ban\-client as a bare name defers the lookup to exec's own PATH search, which skips the trusted\-directory pinning resolveCommandName applies to absolute paths — the pinning that stops a hostile PATH from steering a sudo\-executed binary. Skipping sudo probing tolerates the env\-var opt\-in; path resolution does not.
 
 <a name="IsTestEnvironment"></a>
-## func [IsTestEnvironment](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_env.go#L67>)
+## func [IsTestEnvironment](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_env.go#L52>)
 
 ```go
 func IsTestEnvironment() bool
@@ -427,7 +327,7 @@ func NewJailNotFoundError(jail string) error
 NewJailNotFoundError creates a formatted error for jail not found scenarios.
 
 <a name="ParseBracketedList"></a>
-## func [ParseBracketedList](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/helpers.go#L49>)
+## func [ParseBracketedList](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/helpers.go#L44>)
 
 ```go
 func ParseBracketedList(output string) []string
@@ -445,7 +345,7 @@ func ParseJailList(output string) ([]string, error)
 ParseJailList parses the jail list output from fail2ban\-client status
 
 <a name="RequiresSudo"></a>
-## func [RequiresSudo](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L155>)
+## func [RequiresSudo](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L172>)
 
 ```go
 func RequiresSudo(command string, args ...string) bool
@@ -454,24 +354,6 @@ func RequiresSudo(command string, args ...string) bool
 RequiresSudo returns true if the given command typically requires sudo privileges.
 
 command may be a bare name or an absolute path: production passes the exec.LookPath result \(/usr/bin/fail2ban\-client\) while tests pass the bare name, and matching only the bare name made every non\-root fail2ban\-client call skip sudo and fail on the root\-only socket. The absolute path was already pinned to a trusted directory by validateCommandExecution, so only its base name decides here.
-
-<a name="RunnerCombinedOutputWithSudoContext"></a>
-## func [RunnerCombinedOutputWithSudoContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L162>)
-
-```go
-func RunnerCombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error)
-```
-
-RunnerCombinedOutputWithSudoContext executes a command with sudo privileges and context using the global runner, logging its duration. It is the only global\-runner entry point: its context\-free and non\-sudo twins had no production caller, and the context\-free one let the service command ignore Ctrl\-C.
-
-<a name="SetLogDir"></a>
-## func [SetLogDir](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L32>)
-
-```go
-func SetLogDir(dir string)
-```
-
-SetLogDir sets the directory path for log files. Log\-reading functions read this global via GetLogDir, so tests use it to point log reads at a temp dir.
 
 <a name="SetLogger"></a>
 ## func [SetLogger](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_env.go#L27>)
@@ -483,7 +365,7 @@ func SetLogger(l LoggerEntry)
 SetLogger allows the cmd package to set the logger instance \(thread\-safe\)
 
 <a name="SetRunner"></a>
-## func [SetRunner](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L144>)
+## func [SetRunner](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L117>)
 
 ```go
 func SetRunner(r Runner)
@@ -492,7 +374,7 @@ func SetRunner(r Runner)
 SetRunner injects a custom runner \(for tests or alternate backends\).
 
 <a name="SetSudoChecker"></a>
-## func [SetSudoChecker](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L39>)
+## func [SetSudoChecker](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L44>)
 
 ```go
 func SetSudoChecker(checker SudoChecker)
@@ -500,17 +382,8 @@ func SetSudoChecker(checker SudoChecker)
 
 SetSudoChecker allows injecting a mock sudo checker for testing
 
-<a name="StandardMockSetup"></a>
-## func [StandardMockSetup](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/test_helpers.go#L141>)
-
-```go
-func StandardMockSetup(mockRunner *MockRunner)
-```
-
-StandardMockSetup configures comprehensive standard responses for MockRunner This eliminates the need for repetitive SetResponse calls in individual tests
-
 <a name="ValidateArguments"></a>
-## func [ValidateArguments](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/validation.go#L217>)
+## func [ValidateArguments](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/validation.go#L249>)
 
 ```go
 func ValidateArguments(args []string) error
@@ -518,8 +391,17 @@ func ValidateArguments(args []string) error
 
 ValidateArguments validates command arguments for security. It is the one argument validator: its WithContext twin took a context it never used, so the name promised cancellation that never happened.
 
+<a name="ValidateBanTarget"></a>
+## func [ValidateBanTarget](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/validation.go#L35>)
+
+```go
+func ValidateBanTarget(target string) error
+```
+
+ValidateBanTarget validates what ban and unban act on: an IP address or a CIDR range. fail2ban bans a range as one entry, and unbanning a range also removes every banned address inside it.
+
 <a name="ValidateClientFilterPath"></a>
-## func [ValidateClientFilterPath](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/pathsecurity.go#L356>)
+## func [ValidateClientFilterPath](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/pathsecurity.go#L341>)
 
 ```go
 func ValidateClientFilterPath(filterDir string) (string, error)
@@ -528,7 +410,7 @@ func ValidateClientFilterPath(filterDir string) (string, error)
 ValidateClientFilterPath validates a filter directory against the filter allowlist.
 
 <a name="ValidateClientLogPath"></a>
-## func [ValidateClientLogPath](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/pathsecurity.go#L351>)
+## func [ValidateClientLogPath](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/pathsecurity.go#L336>)
 
 ```go
 func ValidateClientLogPath(logDir string) (string, error)
@@ -537,7 +419,7 @@ func ValidateClientLogPath(logDir string) (string, error)
 ValidateClientLogPath validates a log directory against the log allowlist.
 
 <a name="ValidateCommand"></a>
-## func [ValidateCommand](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/validation.go#L134>)
+## func [ValidateCommand](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/validation.go#L148>)
 
 ```go
 func ValidateCommand(command string) error
@@ -546,7 +428,7 @@ func ValidateCommand(command string) error
 ValidateCommand validates that a command is in the allowlist for security
 
 <a name="ValidateFilter"></a>
-## func [ValidateFilter](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/validation.go#L64>)
+## func [ValidateFilter](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/validation.go#L75>)
 
 ```go
 func ValidateFilter(filter string) error
@@ -555,7 +437,7 @@ func ValidateFilter(filter string) error
 ValidateFilter validates a filter name and returns an error if invalid
 
 <a name="ValidateIP"></a>
-## func [ValidateIP](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/validation.go#L15>)
+## func [ValidateIP](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/validation.go#L16>)
 
 ```go
 func ValidateIP(ip string) error
@@ -564,7 +446,7 @@ func ValidateIP(ip string) error
 ValidateIP validates an IP address string and returns an error if invalid
 
 <a name="ValidateJail"></a>
-## func [ValidateJail](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/validation.go#L32>)
+## func [ValidateJail](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/validation.go#L43>)
 
 ```go
 func ValidateJail(jail string) error
@@ -573,7 +455,7 @@ func ValidateJail(jail string) error
 ValidateJail validates a jail name and returns an error if invalid
 
 <a name="ValidateLogPath"></a>
-## func [ValidateLogPath](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/pathsecurity.go#L346>)
+## func [ValidateLogPath](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/pathsecurity.go#L331>)
 
 ```go
 func ValidateLogPath(path, logDir string) (string, error)
@@ -582,7 +464,7 @@ func ValidateLogPath(path, logDir string) (string, error)
 ValidateLogPath validates and sanitizes a log file path, confined to logDir.
 
 <a name="ValidatePathWithSecurity"></a>
-## func [ValidatePathWithSecurity](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/pathsecurity.go#L116>)
+## func [ValidatePathWithSecurity](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/pathsecurity.go#L117>)
 
 ```go
 func ValidatePathWithSecurity(path string, config PathSecurityConfig) (string, error)
@@ -591,16 +473,16 @@ func ValidatePathWithSecurity(path string, config PathSecurityConfig) (string, e
 ValidatePathWithSecurity performs comprehensive path security validation.
 
 <a name="WithIP"></a>
-## func [WithIP](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_context.go#L51>)
+## func [WithIP](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_context.go#L50>)
 
 ```go
 func WithIP(ctx context.Context, ip string) context.Context
 ```
 
-WithIP adds a validated IP address to the context
+WithIP adds a validated IP address or CIDR range to the context
 
 <a name="WithJail"></a>
-## func [WithJail](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_context.go#L37>)
+## func [WithJail](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_context.go#L36>)
 
 ```go
 func WithJail(ctx context.Context, jail string) context.Context
@@ -609,7 +491,7 @@ func WithJail(ctx context.Context, jail string) context.Context
 WithJail adds a validated jail name to the context
 
 <a name="WithOperation"></a>
-## func [WithOperation](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_context.go#L27>)
+## func [WithOperation](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_context.go#L26>)
 
 ```go
 func WithOperation(ctx context.Context, operation string) context.Context
@@ -618,22 +500,13 @@ func WithOperation(ctx context.Context, operation string) context.Context
 WithOperation adds an operation name to the context
 
 <a name="WithRequestID"></a>
-## func [WithRequestID](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_context.go#L17>)
+## func [WithRequestID](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_context.go#L16>)
 
 ```go
 func WithRequestID(ctx context.Context, requestID string) context.Context
 ```
 
 WithRequestID adds a request ID to the context
-
-<a name="WithTestRunner"></a>
-## func [WithTestRunner](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/test_helpers.go#L109>)
-
-```go
-func WithTestRunner(t TestingInterface, runner Runner) func()
-```
-
-WithTestRunner sets a test runner and returns a cleanup function. Usage: defer fail2ban.WithTestRunner\(t, mockRunner\)\(\)
 
 <a name="BanRecord"></a>
 ## type [BanRecord](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/types.go#L11-L16>)
@@ -650,13 +523,13 @@ type BanRecord struct {
 ```
 
 <a name="ParseBanRecords"></a>
-### func [ParseBanRecords](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L265>)
+### func [ParseBanRecords](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L132>)
 
 ```go
 func ParseBanRecords(output, jail string) ([]BanRecord, error)
 ```
 
-ParseBanRecords parses multiple ban records using the shared default parser.
+ParseBanRecords parses \`fail2ban\-client get \<jail\> banip \-\-with\-time\` output. Lines that fail to parse are skipped and counted in a warning, so the bans that can be read are still listed. When fail2ban lists bans and none can be read, it returns an error: an empty result would report a jail with active bans as having none.
 
 <a name="ProcessJailsParallel"></a>
 ### func [ProcessJailsParallel](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/parallel_processing.go#L20-L24>)
@@ -669,95 +542,8 @@ ProcessJailsParallel retrieves ban records for multiple jails concurrently, boun
 
 Error handling: a canceled run surfaces the context error rather than a silently truncated result set. If every jail fails, the joined per\-jail error is returned instead of an empty slice with nil error \(which is indistinguishable from "no bans"\). A mix of successes and failures is a valid partial result: the records are returned and the failures are logged so they are not silently dropped.
 
-<a name="BanRecordParser"></a>
-## type [BanRecordParser](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L105-L107>)
-
-BanRecordParser parses \`fail2ban\-client get \<jail\> banip \-\-with\-time\` output. It is safe for concurrent use: its only state is the mutex\-guarded time cache.
-
-```go
-type BanRecordParser struct {
-    // contains filtered or unexported fields
-}
-```
-
-<a name="NewBanRecordParser"></a>
-### func [NewBanRecordParser](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L117>)
-
-```go
-func NewBanRecordParser() *BanRecordParser
-```
-
-NewBanRecordParser creates a ban record parser. It cannot fail, so it returns no error for callers to handle.
-
-<a name="BanRecordParser.ParseBanRecordLine"></a>
-### func \(\*BanRecordParser\) [ParseBanRecordLine](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L140>)
-
-```go
-func (brp *BanRecordParser) ParseBanRecordLine(line, jail string) (*BanRecord, error)
-```
-
-ParseBanRecordLine parses a single ban record line.
-
-<a name="BanRecordParser.ParseBanRecords"></a>
-### func \(\*BanRecordParser\) [ParseBanRecords](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L228>)
-
-```go
-func (brp *BanRecordParser) ParseBanRecords(output string, jail string) ([]BanRecord, error)
-```
-
-ParseBanRecords parses multiple records. Lines that fail to parse are skipped, and the count of skipped lines is logged as a warning: dropping them silently made a jail whose bans fail2ban reports in an unexpected shape \(e.g. ticket IDs instead of IPs\) look like a jail with no bans.
-
-<a name="BoundedTimeCache"></a>
-## type [BoundedTimeCache](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L21-L25>)
-
-BoundedTimeCache provides a concurrent\-safe bounded cache for parsed times
-
-```go
-type BoundedTimeCache struct {
-    // contains filtered or unexported fields
-}
-```
-
-<a name="NewBoundedTimeCache"></a>
-### func [NewBoundedTimeCache](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L28>)
-
-```go
-func NewBoundedTimeCache(maxSize int) (*BoundedTimeCache, error)
-```
-
-NewBoundedTimeCache creates a new bounded time cache
-
-<a name="BoundedTimeCache.Load"></a>
-### func \(\*BoundedTimeCache\) [Load](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L39>)
-
-```go
-func (btc *BoundedTimeCache) Load(key string) (time.Time, bool)
-```
-
-Load retrieves a cached time value
-
-<a name="BoundedTimeCache.ParseWithLayout"></a>
-### func \(\*BoundedTimeCache\) [ParseWithLayout](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L85>)
-
-```go
-func (btc *BoundedTimeCache) ParseWithLayout(timeStr, layout string) (time.Time, error)
-```
-
-ParseWithLayout parses a time string using the specified layout with caching.
-
-The cache key includes the layout: the parsed time depends on it, and a key of timeStr alone returned the first layout's result for every later layout \(e.g. "01/02/2026" as Jan 2 under both month\-first and day\-first layouts\).
-
-<a name="BoundedTimeCache.Store"></a>
-### func \(\*BoundedTimeCache\) [Store](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L47>)
-
-```go
-func (btc *BoundedTimeCache) Store(key string, value time.Time)
-```
-
-Store caches a time value with automatic eviction when threshold is reached
-
 <a name="Client"></a>
-## type [Client](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/interfaces.go#L14-L41>)
+## type [Client](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/interfaces.go#L14-L42>)
 
 Client defines the interface for interacting with Fail2Ban.
 
@@ -789,8 +575,9 @@ type Client interface {
     GetLogLinesWithLimitContext(ctx context.Context, jail, ip string, maxLines int) ([]string, error)
     // ListFiltersWithContext returns the available Fail2Ban filters.
     ListFiltersWithContext(ctx context.Context) ([]string, error)
-    // TestFilterWithContext runs fail2ban-regex for the given filter.
-    TestFilterWithContext(ctx context.Context, filter string) (string, error)
+    // TestFilterWithContext runs fail2ban-regex for filter against logFile, or
+    // against the logpath the filter declares when logFile is empty.
+    TestFilterWithContext(ctx context.Context, filter, logFile string) (string, error)
 }
 ```
 
@@ -880,35 +667,6 @@ const (
 )
 ```
 
-<a name="FastTimeCache"></a>
-## type [FastTimeCache](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L110-L113>)
-
-FastTimeCache parses timestamps of one fixed layout through a bounded cache.
-
-```go
-type FastTimeCache struct {
-    // contains filtered or unexported fields
-}
-```
-
-<a name="NewFastTimeCache"></a>
-### func [NewFastTimeCache](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L124>)
-
-```go
-func NewFastTimeCache(layout string) *FastTimeCache
-```
-
-NewFastTimeCache creates a time cache for layout, bounded to constants.CacheMaxSize entries. The size is a positive constant, so unlike NewBoundedTimeCache it has no failure to report.
-
-<a name="FastTimeCache.ParseTimeOptimized"></a>
-### func \(\*FastTimeCache\) [ParseTimeOptimized](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L135>)
-
-```go
-func (ftc *FastTimeCache) ParseTimeOptimized(timeStr string) (time.Time, error)
-```
-
-ParseTimeOptimized parses timeStr with the cache's layout, reusing cached results.
-
 <a name="Fields"></a>
 ## type [Fields](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/types.go#L19>)
 
@@ -919,17 +677,18 @@ type Fields map[string]any
 ```
 
 <a name="LogReadConfig"></a>
-## type [LogReadConfig](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L237-L252>)
+## type [LogReadConfig](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L231-L247>)
 
 LogReadConfig holds configuration for streaming log reading
 
 ```go
 type LogReadConfig struct {
     MaxLines    int    // Maximum number of lines to read (0 = unlimited)
+    TailLines   int    // Keep only the newest N matching lines (0 = keep all)
     MaxFileSize int64  // Maximum file size to process in bytes (0 = unlimited)
     JailFilter  string // Filter by jail name (empty = no filter)
     IPFilter    string // Filter by IP address (empty = no filter)
-    BaseDir     string // Base directory for log validation
+    BaseDir     string // Base directory the log file must stay inside
     // TailOversized reads the newest MaxFileSize bytes of an oversized file
     // instead of skipping it. Set only for the active (plain-text) log: it is
     // the file most likely to exceed the cap, and skipping it would drop the
@@ -961,7 +720,7 @@ type LoggerEntry interface {
 ```
 
 <a name="LoggerFromContext"></a>
-### func [LoggerFromContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_context.go#L64>)
+### func [LoggerFromContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logging_context.go#L62>)
 
 ```go
 func LoggerFromContext(ctx context.Context) LoggerEntry
@@ -969,395 +728,8 @@ func LoggerFromContext(ctx context.Context) LoggerEntry
 
 LoggerFromContext creates a logger entry with fields from context
 
-<a name="MockClient"></a>
-## type [MockClient](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock.go#L28-L51>)
-
-MockClient is a stateful, thread\-safe mock implementation of the Client interface for testing.
-
-Every method checks ctx first, like the real client, so tests exercise cancellation instead of receiving canned data from a canceled context.
-
-```go
-type MockClient struct {
-    Jails      map[string]struct{}
-    Banned     map[string]map[string]time.Time // jail -> ip -> ban time
-    Logs       []string
-    Filters    []string
-    FilterRuns map[string]string
-    // Enhanced features for advanced testing
-    StatusAllData  string
-    StatusJailData map[string]string
-    BanRecords     []BanRecord
-    BanResults     map[string]map[string]int   // jail -> ip -> result code
-    BanErrors      map[string]map[string]error // jail -> ip -> error
-    UnbanResults   map[string]map[string]int   // jail -> ip -> result code
-    UnbanErrors    map[string]map[string]error // jail -> ip -> error
-    BannedIPs      map[string][]string         // jail -> list of banned IPs
-    LogLines       []string                    // configurable log lines
-    FilterTests    map[string]string           // filter -> test result
-    // Recorded query arguments so tests can assert that jail/ip flags actually
-    // reach the client (configured LogLines/BanRecords are returned verbatim).
-    LastLogQuery        [2]string // last (jail, ip) passed to a log read
-    LastLogLimit        int       // last maxLines passed to a log read
-    LastBanRecordsJails []string  // last jails passed to GetBanRecordsWithContext
-    // contains filtered or unexported fields
-}
-```
-
-<a name="NewMockClient"></a>
-### func [NewMockClient](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock.go#L54>)
-
-```go
-func NewMockClient() *MockClient
-```
-
-NewMockClient creates a new MockClient with default jails and filters.
-
-<a name="SetupMockEnvironment"></a>
-### func [SetupMockEnvironment](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/test_helpers.go#L22>)
-
-```go
-func SetupMockEnvironment(t TestingInterface) (client *MockClient, cleanup func())
-```
-
-SetupMockEnvironment sets up complete mock environment with client, runner, and sudo checker
-
-<a name="SetupMockEnvironmentWithStandardResponses"></a>
-### func [SetupMockEnvironmentWithStandardResponses](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/test_helpers.go#L196>)
-
-```go
-func SetupMockEnvironmentWithStandardResponses(t TestingInterface) (client *MockClient, cleanup func())
-```
-
-SetupMockEnvironmentWithStandardResponses combines mock environment setup with standard responses This is a convenience function for tests that need comprehensive mock responses
-
-<a name="SetupMockEnvironmentWithSudo"></a>
-### func [SetupMockEnvironmentWithSudo](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/test_helpers.go#L63>)
-
-```go
-func SetupMockEnvironmentWithSudo(t TestingInterface, hasSudo bool) (client *MockClient, cleanup func())
-```
-
-SetupMockEnvironmentWithSudo sets up mock environment with specific sudo privileges
-
-<a name="MockClient.BanIPWithContext"></a>
-### func \(\*MockClient\) [BanIPWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock.go#L117>)
-
-```go
-func (m *MockClient) BanIPWithContext(ctx context.Context, ip, jail string) (int, error)
-```
-
-BanIPWithContext bans the given IP in the specified jail. Returns 0 if banned, 1 if already banned.
-
-<a name="MockClient.BannedInWithContext"></a>
-### func \(\*MockClient\) [BannedInWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock.go#L190>)
-
-```go
-func (m *MockClient) BannedInWithContext(ctx context.Context, ip string) ([]string, error)
-```
-
-BannedInWithContext returns the sorted list of jails in which the IP is currently banned.
-
-<a name="MockClient.GetBanRecordsWithContext"></a>
-### func \(\*MockClient\) [GetBanRecordsWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock.go#L208>)
-
-```go
-func (m *MockClient) GetBanRecordsWithContext(ctx context.Context, jails []string) ([]BanRecord, error)
-```
-
-GetBanRecordsWithContext returns ban records for the specified jails.
-
-<a name="MockClient.GetLogLinesWithContext"></a>
-### func \(\*MockClient\) [GetLogLinesWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock.go#L247>)
-
-```go
-func (m *MockClient) GetLogLinesWithContext(ctx context.Context, jail, ip string) ([]string, error)
-```
-
-GetLogLinesWithContext returns the newest DefaultLogLinesLimit log lines filtered by jail and/or IP, like the real client.
-
-<a name="MockClient.GetLogLinesWithLimitContext"></a>
-### func \(\*MockClient\) [GetLogLinesWithLimitContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock.go#L254>)
-
-```go
-func (m *MockClient) GetLogLinesWithLimitContext(ctx context.Context, jail, ip string, maxLines int) ([]string, error)
-```
-
-GetLogLinesWithLimitContext returns the newest maxLines log lines filtered by jail and/or IP, recording the query and limit so tests can assert that the command forwarded them.
-
-<a name="MockClient.ListFiltersWithContext"></a>
-### func \(\*MockClient\) [ListFiltersWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock.go#L285>)
-
-```go
-func (m *MockClient) ListFiltersWithContext(ctx context.Context) ([]string, error)
-```
-
-ListFiltersWithContext returns the available Fail2Ban filters.
-
-<a name="MockClient.ListJailsWithContext"></a>
-### func \(\*MockClient\) [ListJailsWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock.go#L75>)
-
-```go
-func (m *MockClient) ListJailsWithContext(ctx context.Context) ([]string, error)
-```
-
-ListJailsWithContext returns the sorted list of available jails.
-
-<a name="MockClient.Reset"></a>
-### func \(\*MockClient\) [Reset](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock.go#L315>)
-
-```go
-func (m *MockClient) Reset()
-```
-
-Reset clears all bans and logs in the mock \(for test isolation\).
-
-<a name="MockClient.SetBanError"></a>
-### func \(\*MockClient\) [SetBanError](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock.go#L325>)
-
-```go
-func (m *MockClient) SetBanError(jail, ip string, err error)
-```
-
-SetBanError configures an error to return for BanIPWithContext\(ip, jail\).
-
-<a name="MockClient.SetBanResult"></a>
-### func \(\*MockClient\) [SetBanResult](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock.go#L330>)
-
-```go
-func (m *MockClient) SetBanResult(jail, ip string, result int)
-```
-
-SetBanResult configures a result code to return for BanIPWithContext\(ip, jail\).
-
-<a name="MockClient.SetFilterTest"></a>
-### func \(\*MockClient\) [SetFilterTest](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock.go#L352>)
-
-```go
-func (m *MockClient) SetFilterTest(filter, result string)
-```
-
-SetFilterTest configures the test result for a filter.
-
-<a name="MockClient.SetStatusJailData"></a>
-### func \(\*MockClient\) [SetStatusJailData](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock.go#L345>)
-
-```go
-func (m *MockClient) SetStatusJailData(jail, status string)
-```
-
-SetStatusJailData configures the status data for a specific jail.
-
-<a name="MockClient.SetUnbanError"></a>
-### func \(\*MockClient\) [SetUnbanError](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock.go#L335>)
-
-```go
-func (m *MockClient) SetUnbanError(jail, ip string, err error)
-```
-
-SetUnbanError configures an error to return for UnbanIPWithContext\(ip, jail\).
-
-<a name="MockClient.SetUnbanResult"></a>
-### func \(\*MockClient\) [SetUnbanResult](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock.go#L340>)
-
-```go
-func (m *MockClient) SetUnbanResult(jail, ip string, result int)
-```
-
-SetUnbanResult configures a result code to return for UnbanIPWithContext\(ip, jail\).
-
-<a name="MockClient.StatusAllWithContext"></a>
-### func \(\*MockClient\) [StatusAllWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock.go#L91>)
-
-```go
-func (m *MockClient) StatusAllWithContext(ctx context.Context) (string, error)
-```
-
-StatusAllWithContext returns a mock status for all jails.
-
-<a name="MockClient.StatusJailWithContext"></a>
-### func \(\*MockClient\) [StatusJailWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock.go#L101>)
-
-```go
-func (m *MockClient) StatusJailWithContext(ctx context.Context, jail string) (string, error)
-```
-
-StatusJailWithContext returns a mock status for a specific jail.
-
-<a name="MockClient.TestFilterWithContext"></a>
-### func \(\*MockClient\) [TestFilterWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock.go#L298>)
-
-```go
-func (m *MockClient) TestFilterWithContext(ctx context.Context, filter string) (string, error)
-```
-
-TestFilterWithContext simulates running fail2ban\-regex for the given filter.
-
-<a name="MockClient.UnbanIPWithContext"></a>
-### func \(\*MockClient\) [UnbanIPWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock.go#L156>)
-
-```go
-func (m *MockClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (int, error)
-```
-
-UnbanIPWithContext unbans the given IP in the specified jail. Returns 0 if unbanned, 1 if already unbanned.
-
-<a name="MockRunner"></a>
-## type [MockRunner](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L17-L22>)
-
-MockRunner is a simple mock for Runner, used in unit tests.
-
-```go
-type MockRunner struct {
-    Responses map[string][]byte
-    Errors    map[string]error
-    CallLog   []string
-    // contains filtered or unexported fields
-}
-```
-
-<a name="MustMockRunner"></a>
-### func [MustMockRunner](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/test_helpers.go#L119>)
-
-```go
-func MustMockRunner(t TestingInterface) *MockRunner
-```
-
-MustMockRunner returns the current global runner as a \*MockRunner, failing the test when the global runner is anything else \(e.g. a prior test leaked a different runner\).
-
-<a name="NewMockRunner"></a>
-### func [NewMockRunner](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L25>)
-
-```go
-func NewMockRunner() *MockRunner
-```
-
-NewMockRunner creates a new mock runner instance for testing.
-
-<a name="MockRunner.CombinedOutput"></a>
-### func \(\*MockRunner\) [CombinedOutput](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L34>)
-
-```go
-func (m *MockRunner) CombinedOutput(name string, args ...string) ([]byte, error)
-```
-
-CombinedOutput returns a mocked response or error for a command.
-
-<a name="MockRunner.CombinedOutputWithContext"></a>
-### func \(\*MockRunner\) [CombinedOutputWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L154>)
-
-```go
-func (m *MockRunner) CombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error)
-```
-
-CombinedOutputWithContext returns a mocked response or error for a command with context support.
-
-<a name="MockRunner.CombinedOutputWithSudo"></a>
-### func \(\*MockRunner\) [CombinedOutputWithSudo](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L83>)
-
-```go
-func (m *MockRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte, error)
-```
-
-CombinedOutputWithSudo returns a mocked response for sudo commands.
-
-<a name="MockRunner.CombinedOutputWithSudoContext"></a>
-### func \(\*MockRunner\) [CombinedOutputWithSudoContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L161>)
-
-```go
-func (m *MockRunner) CombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error)
-```
-
-CombinedOutputWithSudoContext returns a mocked response for sudo commands with context support.
-
-<a name="MockRunner.GetCalls"></a>
-### func \(\*MockRunner\) [GetCalls](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L144>)
-
-```go
-func (m *MockRunner) GetCalls() []string
-```
-
-GetCalls returns the log of commands called.
-
-<a name="MockRunner.SetError"></a>
-### func \(\*MockRunner\) [SetError](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L137>)
-
-```go
-func (m *MockRunner) SetError(cmd string, err error)
-```
-
-SetError sets an error for a command.
-
-<a name="MockRunner.SetResponse"></a>
-### func \(\*MockRunner\) [SetResponse](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_runner.go#L130>)
-
-```go
-func (m *MockRunner) SetResponse(cmd string, response []byte)
-```
-
-SetResponse sets a response for a command.
-
-<a name="MockSudoChecker"></a>
-## type [MockSudoChecker](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_sudo.go#L7-L13>)
-
-MockSudoChecker is a test double for the SudoChecker interface. It was extracted from sudo.go to keep test\-only code out of the production sudo implementation; it lives in package fail2ban so it can reach package internals when needed.
-
-```go
-type MockSudoChecker struct {
-    MockIsRoot            bool
-    MockInSudoGroup       bool
-    MockCanUseSudo        bool
-    MockHasPrivileges     bool
-    ExplicitPrivilegesSet bool // Track if MockHasPrivileges was explicitly set
-}
-```
-
-<a name="MustMockSudoChecker"></a>
-### func [MustMockSudoChecker](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/test_helpers.go#L130>)
-
-```go
-func MustMockSudoChecker(t TestingInterface) *MockSudoChecker
-```
-
-MustMockSudoChecker returns the current sudo checker as a \*MockSudoChecker, failing the test when it is anything else.
-
-<a name="MockSudoChecker.CanUseSudo"></a>
-### func \(\*MockSudoChecker\) [CanUseSudo](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_sudo.go#L26>)
-
-```go
-func (m *MockSudoChecker) CanUseSudo() bool
-```
-
-CanUseSudo returns the mocked sudo capability status
-
-<a name="MockSudoChecker.HasSudoPrivileges"></a>
-### func \(\*MockSudoChecker\) [HasSudoPrivileges](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_sudo.go#L31>)
-
-```go
-func (m *MockSudoChecker) HasSudoPrivileges() bool
-```
-
-HasSudoPrivileges returns the mocked sudo privileges status
-
-<a name="MockSudoChecker.InSudoGroup"></a>
-### func \(\*MockSudoChecker\) [InSudoGroup](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_sudo.go#L21>)
-
-```go
-func (m *MockSudoChecker) InSudoGroup() bool
-```
-
-InSudoGroup returns the mocked sudo group status
-
-<a name="MockSudoChecker.IsRoot"></a>
-### func \(\*MockSudoChecker\) [IsRoot](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/mock_sudo.go#L16>)
-
-```go
-func (m *MockSudoChecker) IsRoot() bool
-```
-
-IsRoot returns the mocked root status
-
 <a name="OSRunner"></a>
-## type [OSRunner](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L46>)
+## type [OSRunner](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L29>)
 
 OSRunner runs commands locally.
 
@@ -1365,35 +737,8 @@ OSRunner runs commands locally.
 type OSRunner struct{}
 ```
 
-<a name="OSRunner.CombinedOutput"></a>
-### func \(\*OSRunner\) [CombinedOutput](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L91>)
-
-```go
-func (r *OSRunner) CombinedOutput(name string, args ...string) ([]byte, error)
-```
-
-CombinedOutput executes a command without sudo.
-
-<a name="OSRunner.CombinedOutputWithContext"></a>
-### func \(\*OSRunner\) [CombinedOutputWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L96>)
-
-```go
-func (r *OSRunner) CombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error)
-```
-
-CombinedOutputWithContext executes a command without sudo with context support.
-
-<a name="OSRunner.CombinedOutputWithSudo"></a>
-### func \(\*OSRunner\) [CombinedOutputWithSudo](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L104>)
-
-```go
-func (r *OSRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte, error)
-```
-
-CombinedOutputWithSudo executes a command with sudo if needed.
-
 <a name="OSRunner.CombinedOutputWithSudoContext"></a>
-### func \(\*OSRunner\) [CombinedOutputWithSudoContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L109>)
+### func \(\*OSRunner\) [CombinedOutputWithSudoContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L74>)
 
 ```go
 func (r *OSRunner) CombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error)
@@ -1402,21 +747,20 @@ func (r *OSRunner) CombinedOutputWithSudoContext(ctx context.Context, name strin
 CombinedOutputWithSudoContext executes a command with sudo if needed, with context support.
 
 <a name="PathSecurityConfig"></a>
-## type [PathSecurityConfig](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/pathsecurity.go#L14-L19>)
+## type [PathSecurityConfig](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/pathsecurity.go#L17-L21>)
 
-PathSecurityConfig holds configuration for path security validation
+PathSecurityConfig holds configuration for path security validation. Symlinks are always resolved before the base check: a path is judged by where it leads.
 
 ```go
 type PathSecurityConfig struct {
     AllowedBasePaths []string // List of allowed base directories
     MaxPathLength    int      // Maximum allowed path length (0 = unlimited)
     AllowSymlinks    bool     // Whether to allow symlinks
-    ResolveSymlinks  bool     // Whether to resolve symlinks before validation
 }
 ```
 
 <a name="CreateFilterPathConfig"></a>
-### func [CreateFilterPathConfig](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/pathsecurity.go#L83>)
+### func [CreateFilterPathConfig](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/pathsecurity.go#L86>)
 
 ```go
 func CreateFilterPathConfig() PathSecurityConfig
@@ -1425,7 +769,7 @@ func CreateFilterPathConfig() PathSecurityConfig
 CreateFilterPathConfig creates a standard PathSecurityConfig for filter directories
 
 <a name="CreateLogPathConfig"></a>
-### func [CreateLogPathConfig](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/pathsecurity.go#L73>)
+### func [CreateLogPathConfig](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/pathsecurity.go#L77>)
 
 ```go
 func CreateLogPathConfig() PathSecurityConfig
@@ -1434,7 +778,7 @@ func CreateLogPathConfig() PathSecurityConfig
 CreateLogPathConfig creates a standard PathSecurityConfig for log directories
 
 <a name="CreateSingleDirPathConfig"></a>
-### func [CreateSingleDirPathConfig](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/pathsecurity.go#L93>)
+### func [CreateSingleDirPathConfig](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/pathsecurity.go#L95>)
 
 ```go
 func CreateSingleDirPathConfig(baseDir string) PathSecurityConfig
@@ -1476,7 +820,7 @@ func NewClientWithContext(ctx context.Context, logDir, filterDir string) (*RealC
 NewClientWithContext initializes a RealClient with context support for timeout and cancellation. It checks for fail2ban\-client in PATH, ensures the service is running, checks sudo privileges, and loads available jails. Returns an error if fail2ban is not available, not running, or user lacks sudo privileges.
 
 <a name="RealClient.BanIPWithContext"></a>
-### func \(\*RealClient\) [BanIPWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L353>)
+### func \(\*RealClient\) [BanIPWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L298>)
 
 ```go
 func (c *RealClient) BanIPWithContext(ctx context.Context, ip, jail string) (int, error)
@@ -1485,7 +829,7 @@ func (c *RealClient) BanIPWithContext(ctx context.Context, ip, jail string) (int
 BanIPWithContext bans an IP address in the specified jail with context support.
 
 <a name="RealClient.BannedInWithContext"></a>
-### func \(\*RealClient\) [BannedInWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L363>)
+### func \(\*RealClient\) [BannedInWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L308>)
 
 ```go
 func (c *RealClient) BannedInWithContext(ctx context.Context, ip string) ([]string, error)
@@ -1494,7 +838,7 @@ func (c *RealClient) BannedInWithContext(ctx context.Context, ip string) ([]stri
 BannedInWithContext returns a list of jails where the specified IP address is currently banned with context support.
 
 <a name="RealClient.GetBanRecordsWithContext"></a>
-### func \(\*RealClient\) [GetBanRecordsWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L378>)
+### func \(\*RealClient\) [GetBanRecordsWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L323>)
 
 ```go
 func (c *RealClient) GetBanRecordsWithContext(ctx context.Context, jails []string) ([]BanRecord, error)
@@ -1503,7 +847,7 @@ func (c *RealClient) GetBanRecordsWithContext(ctx context.Context, jails []strin
 GetBanRecordsWithContext retrieves ban records for the specified jails with context support.
 
 <a name="RealClient.GetLogLinesWithContext"></a>
-### func \(\*RealClient\) [GetLogLinesWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L385>)
+### func \(\*RealClient\) [GetLogLinesWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L330>)
 
 ```go
 func (c *RealClient) GetLogLinesWithContext(ctx context.Context, jail, ip string) ([]string, error)
@@ -1512,7 +856,7 @@ func (c *RealClient) GetLogLinesWithContext(ctx context.Context, jail, ip string
 GetLogLinesWithContext returns the newest DefaultLogLinesLimit matching log lines. It delegates to GetLogLinesWithLimitContext; its former standalone implementation skipped the jail/IP filter validation.
 
 <a name="RealClient.GetLogLinesWithLimitContext"></a>
-### func \(\*RealClient\) [GetLogLinesWithLimitContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L261>)
+### func \(\*RealClient\) [GetLogLinesWithLimitContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L206>)
 
 ```go
 func (c *RealClient) GetLogLinesWithLimitContext(ctx context.Context, jail, ip string, maxLines int) ([]string, error)
@@ -1521,7 +865,7 @@ func (c *RealClient) GetLogLinesWithLimitContext(ctx context.Context, jail, ip s
 GetLogLinesWithLimitContext returns the newest maxLines log lines matching jail and ip. It is the single log\-read entry point: every other read delegates here, so the limit bounds and the jail/IP validation \(an invalid filter must error, not silently match nothing\) cannot be skipped.
 
 <a name="RealClient.ListFiltersWithContext"></a>
-### func \(\*RealClient\) [ListFiltersWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L290>)
+### func \(\*RealClient\) [ListFiltersWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L235>)
 
 ```go
 func (c *RealClient) ListFiltersWithContext(ctx context.Context) ([]string, error)
@@ -1539,7 +883,7 @@ func (c *RealClient) ListJailsWithContext(ctx context.Context) ([]string, error)
 ListJailsWithContext returns the jails loaded when the client was built. It honors cancellation so a canceled command does not report a stale success.
 
 <a name="RealClient.StatusAllWithContext"></a>
-### func \(\*RealClient\) [StatusAllWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L309>)
+### func \(\*RealClient\) [StatusAllWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L254>)
 
 ```go
 func (c *RealClient) StatusAllWithContext(ctx context.Context) (string, error)
@@ -1548,7 +892,7 @@ func (c *RealClient) StatusAllWithContext(ctx context.Context) (string, error)
 StatusAllWithContext returns the status of all fail2ban jails with context support.
 
 <a name="RealClient.StatusJailWithContext"></a>
-### func \(\*RealClient\) [StatusJailWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L315>)
+### func \(\*RealClient\) [StatusJailWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L260>)
 
 ```go
 func (c *RealClient) StatusJailWithContext(ctx context.Context, jail string) (string, error)
@@ -1557,16 +901,16 @@ func (c *RealClient) StatusJailWithContext(ctx context.Context, jail string) (st
 StatusJailWithContext returns the status of a specific fail2ban jail with context support.
 
 <a name="RealClient.TestFilterWithContext"></a>
-### func \(\*RealClient\) [TestFilterWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L473>)
+### func \(\*RealClient\) [TestFilterWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L427>)
 
 ```go
-func (c *RealClient) TestFilterWithContext(ctx context.Context, filter string) (string, error)
+func (c *RealClient) TestFilterWithContext(ctx context.Context, filter, logFile string) (string, error)
 ```
 
-TestFilterWithContext tests a fail2ban filter against its configured log files with context support.
+TestFilterWithContext runs fail2ban\-regex for filter against logFile, or against the logpath the filter declares when logFile is empty.
 
 <a name="RealClient.UnbanIPWithContext"></a>
-### func \(\*RealClient\) [UnbanIPWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L358>)
+### func \(\*RealClient\) [UnbanIPWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L303>)
 
 ```go
 func (c *RealClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (int, error)
@@ -1575,7 +919,7 @@ func (c *RealClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (i
 UnbanIPWithContext unbans an IP address from the specified jail with context support.
 
 <a name="RealSudoChecker"></a>
-## type [RealSudoChecker](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L22-L31>)
+## type [RealSudoChecker](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L22-L36>)
 
 RealSudoChecker implements SudoChecker using actual system calls
 
@@ -1586,16 +930,16 @@ type RealSudoChecker struct {
 ```
 
 <a name="RealSudoChecker.CanUseSudo"></a>
-### func \(\*RealSudoChecker\) [CanUseSudo](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L123>)
+### func \(\*RealSudoChecker\) [CanUseSudo](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L134>)
 
 ```go
 func (r *RealSudoChecker) CanUseSudo() bool
 ```
 
-CanUseSudo returns true if the current user can use sudo
+CanUseSudo returns true if the current user can use sudo. The answer is cached: probing per call spawned up to two sudo processes for every fail2ban\-client invocation of a least\-privilege user.
 
 <a name="RealSudoChecker.HasSudoPrivileges"></a>
-### func \(\*RealSudoChecker\) [HasSudoPrivileges](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L141>)
+### func \(\*RealSudoChecker\) [HasSudoPrivileges](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L158>)
 
 ```go
 func (r *RealSudoChecker) HasSudoPrivileges() bool
@@ -1604,7 +948,7 @@ func (r *RealSudoChecker) HasSudoPrivileges() bool
 HasSudoPrivileges returns true if user has any form of sudo access
 
 <a name="RealSudoChecker.InSudoGroup"></a>
-### func \(\*RealSudoChecker\) [InSudoGroup](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L60>)
+### func \(\*RealSudoChecker\) [InSudoGroup](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L65>)
 
 ```go
 func (r *RealSudoChecker) InSudoGroup() bool
@@ -1613,7 +957,7 @@ func (r *RealSudoChecker) InSudoGroup() bool
 InSudoGroup returns true if the current user belongs to a group that conventionally grants sudo \(sudo, wheel or admin\). Group names, not GIDs, are matched because GIDs vary between distributions.
 
 <a name="RealSudoChecker.IsRoot"></a>
-### func \(\*RealSudoChecker\) [IsRoot](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L53>)
+### func \(\*RealSudoChecker\) [IsRoot](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L58>)
 
 ```go
 func (r *RealSudoChecker) IsRoot() bool
@@ -1622,22 +966,20 @@ func (r *RealSudoChecker) IsRoot() bool
 IsRoot returns true if the current user is root \(UID 0\)
 
 <a name="Runner"></a>
-## type [Runner](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/interfaces.go#L45-L51>)
+## type [Runner](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/interfaces.go#L46-L50>)
 
 Runner defines the interface for executing system commands. Implementations provide different execution strategies \(real, mock, etc.\).
 
 ```go
 type Runner interface {
-    CombinedOutput(name string, args ...string) ([]byte, error)
-    CombinedOutputWithSudo(name string, args ...string) ([]byte, error)
-    // Context-aware versions for timeout and cancellation support
-    CombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error)
+    // CombinedOutputWithSudoContext runs name, through sudo when it needs
+    // privileges and the user has them, under ctx's timeout and cancellation.
     CombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error)
 }
 ```
 
 <a name="GetRunner"></a>
-### func [GetRunner](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L151>)
+### func [GetRunner](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L124>)
 
 ```go
 func GetRunner() Runner
@@ -1831,7 +1173,7 @@ func (l *SlogLogger) WithFields(fields Fields) LoggerEntry
 WithFields returns an entry with the given structured fields added.
 
 <a name="SudoChecker"></a>
-## type [SudoChecker](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/interfaces.go#L54-L63>)
+## type [SudoChecker](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/interfaces.go#L53-L62>)
 
 SudoChecker provides methods to check sudo privileges
 
@@ -1849,7 +1191,7 @@ type SudoChecker interface {
 ```
 
 <a name="GetSudoChecker"></a>
-### func [GetSudoChecker](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L46>)
+### func [GetSudoChecker](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L51>)
 
 ```go
 func GetSudoChecker() SudoChecker
@@ -1857,20 +1199,8 @@ func GetSudoChecker() SudoChecker
 
 GetSudoChecker returns the current sudo checker
 
-<a name="TestingInterface"></a>
-## type [TestingInterface](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/test_helpers.go#L16-L19>)
-
-TestingInterface is the subset of testing.TB these helpers need.
-
-```go
-type TestingInterface interface {
-    Helper()
-    Fatalf(format string, args ...any)
-}
-```
-
 <a name="TimedOperation"></a>
-## type [TimedOperation](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/helpers.go#L79-L84>)
+## type [TimedOperation](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/helpers.go#L74-L79>)
 
 TimedOperation represents a timed operation with metadata
 
@@ -1884,7 +1214,7 @@ type TimedOperation struct {
 ```
 
 <a name="NewTimedOperation"></a>
-### func [NewTimedOperation](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/helpers.go#L87>)
+### func [NewTimedOperation](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/helpers.go#L82>)
 
 ```go
 func NewTimedOperation(name, command string, args ...string) *TimedOperation
@@ -1893,7 +1223,7 @@ func NewTimedOperation(name, command string, args ...string) *TimedOperation
 NewTimedOperation creates a new timed operation and starts timing
 
 <a name="TimedOperation.FinishWithContext"></a>
-### func \(\*TimedOperation\) [FinishWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/helpers.go#L97>)
+### func \(\*TimedOperation\) [FinishWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/helpers.go#L92>)
 
 ```go
 func (t *TimedOperation) FinishWithContext(ctx context.Context, err error)

@@ -1,9 +1,6 @@
-package fail2ban
+package fail2bantest
 
-// MockSudoChecker is a test double for the SudoChecker interface. It was
-// extracted from sudo.go to keep test-only code out of the production sudo
-// implementation; it lives in package fail2ban so it can reach package
-// internals when needed.
+// MockSudoChecker is a test double for the fail2ban.SudoChecker interface.
 type MockSudoChecker struct {
 	MockIsRoot            bool
 	MockInSudoGroup       bool

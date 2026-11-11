@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -9,10 +10,10 @@ import (
 	"github.com/ivuorinen/f2b/fail2ban"
 )
 
-// ServiceCmd returns the service command with injected config
-func ServiceCmd(config *Config) *cobra.Command {
+// ServiceCmd returns the service command with injected runner and config
+func ServiceCmd(runner fail2ban.Runner, config *Config) *cobra.Command {
 	actions := strings.Join(serviceActions, "|")
-	return NewCommand(
+	return withArgs(cobra.MaximumNArgs(1), NewCommand(
 		"service ["+actions+"]",
 		"Manage the Fail2Ban service",
 		nil,
@@ -27,32 +28,23 @@ func ServiceCmd(config *Config) *cobra.Command {
 				return HandleValidationError(err)
 			}
 
-			// cmd.Context() carries Ctrl-C/SIGTERM cancellation. No
-			// CommandTimeout is applied: a service restart can legitimately
-			// take longer than the per-command default.
-			ctx := cmd.Context()
+			// A restart can legitimately outlast the per-command default, so
+			// CommandTimeout is not applied; the ceiling keeps a hung service
+			// manager from blocking an unattended run forever.
+			ctx, cancel := context.WithTimeout(cmd.Context(), constants.MaxCommandTimeout)
+			defer cancel()
 
 			// enable/disable are systemd concepts that service(8) does not
 			// forward to systemctl, so invoke systemctl directly for them.
 			// The runner folds the command's own diagnostic output into a
 			// failure's error, so it is not appended again here.
-			var out []byte
-			var err error
+			name, serviceArgs := constants.ServiceCommand, []string{constants.ServiceFail2ban, action}
 			if action == "enable" || action == "disable" {
-				out, err = fail2ban.RunnerCombinedOutputWithSudoContext(
-					ctx,
-					"systemctl",
-					action,
-					constants.ServiceFail2ban,
-				)
-			} else {
-				out, err = fail2ban.RunnerCombinedOutputWithSudoContext(
-					ctx,
-					constants.ServiceCommand,
-					constants.ServiceFail2ban,
-					action,
-				)
+				name, serviceArgs = "systemctl", []string{action, constants.ServiceFail2ban}
 			}
+			timer := fail2ban.NewTimedOperation("service", name, serviceArgs...)
+			out, err := runner.CombinedOutputWithSudoContext(ctx, name, serviceArgs...)
+			timer.FinishWithContext(ctx, err)
 			if err != nil {
 				Logger.WithField("action", action).WithError(err).Error("Service action failed")
 				return HandleSystemError(err)
@@ -62,5 +54,5 @@ func ServiceCmd(config *Config) *cobra.Command {
 			// audit record like ban/unban do, not only stdout output.
 			Logger.WithField("action", action).Info("Service action completed")
 			return PrintOutput(string(out), config.Format)
-		})
+		}))
 }

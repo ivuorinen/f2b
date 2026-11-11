@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/fail2ban/fail2bantest"
 )
 
 func TestParseLogLevel(t *testing.T) {
@@ -259,7 +260,7 @@ func TestExecute(t *testing.T) {
 		{
 			name: "successful execution with mock client",
 			setupClient: func() fail2ban.Client {
-				return fail2ban.NewMockClient()
+				return fail2bantest.NewMockClient()
 			},
 			config:    validTestConfig("plain"),
 			wantError: false,
@@ -267,7 +268,7 @@ func TestExecute(t *testing.T) {
 		{
 			name: "execution with json format",
 			setupClient: func() fail2ban.Client {
-				return fail2ban.NewMockClient()
+				return fail2bantest.NewMockClient()
 			},
 			config:    validTestConfig("json"),
 			wantError: false,
@@ -312,7 +313,7 @@ func TestExecute(t *testing.T) {
 
 func TestExecuteWithRealCommands(t *testing.T) {
 	// Test that Execute properly adds all commands
-	client := fail2ban.NewMockClient()
+	client := fail2bantest.NewMockClient()
 	config := Config{
 		LogDir:    "/tmp",
 		FilterDir: "/tmp",
@@ -439,7 +440,7 @@ func TestCompletionCmdExecution(t *testing.T) {
 			testRoot.AddCommand(TestIPCmd(mockClient, &testConfig))
 			testRoot.AddCommand(LogsCmd(mockClient, &testConfig))
 			testRoot.AddCommand(LogsWatchCmd(mockClient, &testConfig))
-			testRoot.AddCommand(ServiceCmd(&testConfig))
+			testRoot.AddCommand(ServiceCmd(fail2ban.GetRunner(), &testConfig))
 			testRoot.AddCommand(VersionCmd(&testConfig))
 			testRoot.AddCommand(TestFilterCmd(mockClient, &testConfig))
 			testRoot.AddCommand(completionCmd())
@@ -621,6 +622,35 @@ func TestPersistentPreRunRejectsLogFileOutsideAllowlist(t *testing.T) {
 				t.Errorf("error = %v, want an allowlist rejection", err)
 			}
 		})
+	}
+}
+
+// TestPersistentPreRunRefusesLogFileSymlinkEscape pins that a symlink at the
+// --log-file leaf cannot redirect the open: only the directory is validated,
+// so under `sudo f2b` a link inside an allowed directory let root create or
+// append a file anywhere.
+func TestPersistentPreRunRefusesLogFileSymlinkEscape(t *testing.T) {
+	t.Setenv("ALLOW_DEV_PATHS", "1") // temp dirs live under /tmp
+	originalCfg := cfg
+	cfg = validTestConfig("plain")
+	defer func() { cfg = originalCfg }()
+	t.Cleanup(cleanupResources)
+
+	dir, outside := t.TempDir(), t.TempDir()
+	target := filepath.Join(outside, "created-through-link")
+	link := filepath.Join(dir, "f2b.log")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatalf("symlink required for this security test: %v", err)
+	}
+
+	cmd := &cobra.Command{}
+	cmd.Flags().String("log-file", link, "")
+	cmd.Flags().String("log-level", "info", "")
+	if err := rootCmd.PersistentPreRunE(cmd, []string{}); err == nil {
+		t.Error("--log-file through a symlink leaving its directory was accepted")
+	}
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
+		t.Errorf("symlink target was created: stat error = %v", err)
 	}
 }
 
@@ -861,7 +891,7 @@ func assertExecuteIntegrationCase(t *testing.T, name string, args []string, conf
 		t.Setenv("F2B_FILTER_DIR", config.FilterDir)
 	}
 
-	client := fail2ban.NewMockClient()
+	client := fail2bantest.NewMockClient()
 
 	// Capture output
 	oldStdout := os.Stdout
@@ -925,7 +955,7 @@ func BenchmarkParseLogLevelExtended(b *testing.B) {
 }
 
 func BenchmarkExecute(b *testing.B) {
-	client := fail2ban.NewMockClient()
+	client := fail2bantest.NewMockClient()
 	config := Config{
 		LogDir:    "/tmp",
 		FilterDir: "/tmp",

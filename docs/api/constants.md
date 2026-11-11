@@ -15,21 +15,6 @@ Package constants provides constants used across all packages in the f2b project
 
 ## Constants
 
-<a name="CacheMaxSize"></a>Cache configuration constants
-
-```go
-const (
-    // CacheMaxSize is the maximum number of entries in bounded caches
-    CacheMaxSize = 10000
-
-    // CacheEvictionThreshold is the percentage at which cache eviction triggers (0.9 = 90%)
-    CacheEvictionThreshold = 0.9
-
-    // CacheEvictionRate is the percentage of entries to evict (0.25 = remove 25%, keep 75%)
-    CacheEvictionRate = 0.25
-)
-```
-
 <a name="SecondsPerMinute"></a>Time duration constants
 
 ```go
@@ -45,6 +30,12 @@ const (
 
     // DefaultBanDuration is the default fallback duration for bans when parsing fails
     DefaultBanDuration = 24 * time.Hour
+
+    // PermanentBanTime is the bantime fail2ban reports for a ban that never expires
+    PermanentBanTime = "-1"
+
+    // PermanentBan is the remaining time shown for a ban that never expires
+    PermanentBan = "permanent"
 )
 ```
 
@@ -135,9 +126,6 @@ const (
 
     // Fail2BanRegexCommand is the fail2ban regex testing command
     Fail2BanRegexCommand = "fail2ban-regex"
-
-    // Fail2BanServerCommand is the fail2ban server command
-    Fail2BanServerCommand = "fail2ban-server"
 )
 ```
 

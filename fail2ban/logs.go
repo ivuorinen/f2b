@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/ivuorinen/f2b/constants"
+	"github.com/ivuorinen/f2b/fail2ban/internal/query"
 )
 
 // Log reading and filtering for Fail2Ban logs, including rotated and
@@ -43,19 +44,8 @@ func validateLogFilters(jailFilter, ipFilter string) (string, string, error) {
 	return jailFilter, ipFilter, nil
 }
 
-// canonicalizeIPFilter normalizes an IP filter via net.ParseIP so that e.g.
-// the IPv6 query "2001:DB8::1" matches the lowercase canonical form fail2ban
-// writes to its logs. Non-IP values pass through untouched (they are rejected
-// by validation upstream).
-func canonicalizeIPFilter(ip string) string {
-	if ip == "" || ip == constants.AllFilter {
-		return ip
-	}
-	if parsed := net.ParseIP(ip); parsed != nil {
-		return parsed.String()
-	}
-	return ip
-}
+// maxLogLineSize caps one log line in every scanner that reads a log.
+const maxLogLineSize = 64 * 1024
 
 // logSource is one log file to read and whether it is the active log.
 type logSource struct {
@@ -76,7 +66,9 @@ type logSource struct {
 // A context cancellation is returned. Any other per-file failure is logged and
 // the file skipped; when no file could be read and at least one failed, the
 // joined failures are returned, because an unreadable log (e.g. root:adm 0640
-// for a non-adm user) must not look like "no matches".
+// for a non-adm user) must not look like "no matches". A directory holding no
+// fail2ban log at all (wrong --log-dir, or logtarget = SYSTEMD-JOURNAL) is an
+// error for the same reason.
 func collectLogLines(ctx context.Context, logDir string, baseConfig LogReadConfig) ([]string, error) {
 	if baseConfig.MaxLines <= 0 {
 		return []string{}, nil
@@ -85,6 +77,9 @@ func collectLogLines(ctx context.Context, logDir string, baseConfig LogReadConfi
 	sources, err := logSourcesNewestFirst(logDir)
 	if err != nil {
 		return nil, err
+	}
+	if len(sources) == 0 {
+		return nil, fmt.Errorf("no fail2ban log found under %s", logDir)
 	}
 
 	var chunks [][]string // newest file first
@@ -153,10 +148,9 @@ func readLogLinesFromFile(
 	ctx context.Context, path string, baseConfig LogReadConfig, isCurrent bool,
 ) ([]string, error) {
 	fileConfig := baseConfig
-	// ponytail: unbounded per-file line buffer (MaxFileSize caps it at 100MB
-	// of input); switch to a per-file ring of MaxLines if transient RSS on
-	// large all-matching logs ever matters.
+	// MaxLines stops at the first N lines of a file; the newest N are wanted.
 	fileConfig.MaxLines = 0
+	fileConfig.TailLines = baseConfig.MaxLines
 	fileConfig.TailOversized = isCurrent
 	return streamLogFileWithContext(ctx, path, fileConfig)
 }
@@ -236,39 +230,28 @@ type rotatedLog struct {
 // LogReadConfig holds configuration for streaming log reading
 type LogReadConfig struct {
 	MaxLines    int    // Maximum number of lines to read (0 = unlimited)
+	TailLines   int    // Keep only the newest N matching lines (0 = keep all)
 	MaxFileSize int64  // Maximum file size to process in bytes (0 = unlimited)
 	JailFilter  string // Filter by jail name (empty = no filter)
 	IPFilter    string // Filter by IP address (empty = no filter)
-	BaseDir     string // Base directory for log validation
+	BaseDir     string // Base directory the log file must stay inside
 	// TailOversized reads the newest MaxFileSize bytes of an oversized file
 	// instead of skipping it. Set only for the active (plain-text) log: it is
 	// the file most likely to exceed the cap, and skipping it would drop the
 	// newest events; rotated files are still skipped.
 	TailOversized bool
 
-	// jailPattern is the "[jail]" substring passesFilters looks for, built
-	// once per read by prepareLogFilters instead of formatted per line.
-	jailPattern string
+	// filter is the jail/IP filter passesFilters applies, built once per read
+	// by prepareLogFilters instead of per line.
+	filter query.LogFilter
 }
 
 // prepareLogFilters derives the per-read filter state: the bracketed jail
 // pattern and the canonical IP. It runs once per file read so the per-line
 // filter does no formatting or allocation.
 func prepareLogFilters(config LogReadConfig) LogReadConfig {
-	config.jailPattern = ""
-	if config.JailFilter != "" && config.JailFilter != constants.AllFilter {
-		config.jailPattern = "[" + config.JailFilter + "]"
-	}
-	config.IPFilter = canonicalizeIPFilter(config.IPFilter)
+	config.filter = query.NewLogFilter(config.JailFilter, config.IPFilter)
 	return config
-}
-
-// resolveBaseDir returns the base directory from config or falls back to GetLogDir()
-func resolveBaseDir(config LogReadConfig) string {
-	if config.BaseDir != "" {
-		return config.BaseDir
-	}
-	return GetLogDir()
 }
 
 // streamLogFileWithContext reads a log file line by line with memory limits,
@@ -282,7 +265,7 @@ func streamLogFileWithContext(ctx context.Context, path string, config LogReadCo
 	}
 	config = prepareLogFilters(config)
 
-	cleanPath, err := ValidateLogPath(path, resolveBaseDir(config))
+	cleanPath, err := ValidateLogPath(path, config.BaseDir)
 	if err != nil {
 		return nil, err
 	}
@@ -339,9 +322,8 @@ func scanOversizedTail(ctx context.Context, path string, config LogReadConfig) (
 	getLogger().WithField(constants.LogFieldFile, path).WithField("size", info.Size()).
 		Warn("Active log exceeds size limit; reading only the newest bytes within the limit")
 
-	const maxLineSize = 64 * 1024 // matches createLogScanner
 	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), maxLineSize)
+	scanner.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), maxLogLineSize)
 	scanner.Scan() // discard the first, likely partial, line
 
 	return scanLogLinesWithContext(ctx, scanner, config)
@@ -365,8 +347,7 @@ func shouldSkipFile(path string, maxFileSize int64) bool {
 
 // createLogScanner creates a scanner for the log file, handling gzip compression
 func createLogScanner(path string) (*bufio.Scanner, func(), error) {
-	const maxLineSize = 64 * 1024 // 64KB per line
-	return createGzipAwareScanner(path, maxLineSize)
+	return createGzipAwareScanner(path, maxLogLineSize)
 }
 
 // salvageScannedLines decides what to keep when a log scan stops with an
@@ -415,7 +396,7 @@ func scanLogLinesWithContext(ctx context.Context, scanner *bufio.Scanner, config
 			continue
 		}
 
-		lines = append(lines, line)
+		lines = compactTail(append(lines, line), config.TailLines)
 		lineCount++
 
 		if config.MaxLines > 0 && lineCount >= config.MaxLines {
@@ -423,6 +404,7 @@ func scanLogLinesWithContext(ctx context.Context, scanner *bufio.Scanner, config
 		}
 	}
 
+	lines = newestOf(lines, config.TailLines)
 	if err := scanner.Err(); err != nil {
 		return salvageScannedLines(lines, err)
 	}
@@ -430,57 +412,25 @@ func scanLogLinesWithContext(ctx context.Context, scanner *bufio.Scanner, config
 	return lines, nil
 }
 
-// passesFilters checks if a log line passes the configured filters. config
-// must come from prepareLogFilters, which builds the jail pattern.
-func passesFilters(line string, config LogReadConfig) bool {
-	if config.jailPattern != "" && !strings.Contains(line, config.jailPattern) {
-		return false
+// compactTail keeps the last limit lines once lines reach twice the limit,
+// which bounds memory by the limit while keeping the copying amortized.
+func compactTail(lines []string, limit int) []string {
+	if limit > 0 && len(lines) >= 2*limit {
+		return append(lines[:0], lines[len(lines)-limit:]...)
 	}
-
-	if config.IPFilter != "" && config.IPFilter != constants.AllFilter {
-		if !containsIPToken(line, config.IPFilter) {
-			return false
-		}
-	}
-
-	return true
+	return lines
 }
 
-// containsIPToken reports whether ip appears in line as a whole token, i.e. not
-// as a substring of a longer address. A plain substring match for "10.0.0.1"
-// wrongly matches "10.0.0.100" (and "110.0.0.1"), attributing other hosts'
-// events to the requested IP.
-//
-// For an IPv4 query, ':' is treated as a separator rather than an address
-// byte, so IPv4-mapped IPv6 forms ("::ffff:10.0.0.1") and "IP:port" forms
-// still match the plain IPv4 address.
-func containsIPToken(line, ip string) bool {
-	ipv4 := strings.Contains(ip, ".") && !strings.Contains(ip, ":")
-	isIPByte := func(b byte) bool {
-		switch {
-		case b >= '0' && b <= '9',
-			b >= 'a' && b <= 'f',
-			b >= 'A' && b <= 'F',
-			b == '.':
-			return true
-		case b == ':':
-			return !ipv4
-		default:
-			return false
-		}
+// newestOf returns the last limit lines, or all of them when limit is 0.
+func newestOf(lines []string, limit int) []string {
+	if limit > 0 && len(lines) > limit {
+		return lines[len(lines)-limit:]
 	}
-	for idx := 0; ; {
-		i := strings.Index(line[idx:], ip)
-		if i < 0 {
-			return false
-		}
-		start := idx + i
-		end := start + len(ip)
-		beforeOK := start == 0 || !isIPByte(line[start-1])
-		afterOK := end == len(line) || !isIPByte(line[end])
-		if beforeOK && afterOK {
-			return true
-		}
-		idx = start + 1
-	}
+	return lines
+}
+
+// passesFilters checks if a log line passes the configured filters. config
+// must come from prepareLogFilters, which builds the filter.
+func passesFilters(line string, config LogReadConfig) bool {
+	return config.filter.Matches(line)
 }

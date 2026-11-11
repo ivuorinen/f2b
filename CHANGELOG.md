@@ -44,9 +44,33 @@ ______________________________________________________________________
 - Release checksums are signed with cosign keyless signing (a `.bundle` next to
   the checksums file).
 - Commit-message hooks rejecting non-semantic subjects and Claude session links.
+- `ban` and `unban` accept a CIDR range (`f2b ban 198.51.100.0/24`). fail2ban
+  bans a range as one entry, and unbanning a range also removes every banned
+  address inside it. `test` stays address-only.
 
 ### Changed
 
+- **BREAKING (for external importers)**: `BanRecordParser`,
+  `NewBanRecordParser` and its `ParseBanRecordLine` method are removed;
+  `ParseBanRecords` is a plain function. `PathSecurityConfig.ResolveSymlinks`
+  is removed: symlinks are always resolved before the base check.
+- **BREAKING (for external importers)**: the test doubles (`MockClient`,
+  `MockRunner`, `MockSudoChecker`, `SetupMockEnvironment*`, `WithTestRunner`,
+  `StandardMockSetup`, `MustMock*`, `AssertError`) moved from `fail2ban` to
+  the test-only `fail2ban/fail2bantest` package, and their helpers take
+  `testing.TB` (`TestingInterface` is gone).
+- **BREAKING**: `test-filter` takes an optional log file as its second argument,
+  because stock filters declare no logpath; the `Client` method gained a
+  `logFile` parameter. The `Runner` interface is reduced to
+  `CombinedOutputWithSudoContext`, and `ServiceCmd` takes a `Runner`.
+- `logs` and `logs-watch` fail when the log directory holds no fail2ban log,
+  instead of printing nothing and exiting 0.
+- `logs-watch --format json` prints an array of lines per batch, as `logs` does.
+- Every command except `completion` rejects surplus positional arguments.
+- `banned` reports `permanent` for bans that never expire.
+- `service` calls are bounded by the 10-minute command ceiling.
+- A failed command prints one error on the terminal; the structured record is
+  kept only when logs go to a `--log-file`.
 - **BREAKING (for external importers)**: renamed the `shared` package to
   `constants`; the import path changed from `github.com/ivuorinen/f2b/shared`
   to `github.com/ivuorinen/f2b/constants`.
@@ -104,6 +128,11 @@ ______________________________________________________________________
 
 ### Removed
 
+- `F2B_VERBOSE_TESTS` and the CI log quieting it overrode, which never took
+  effect on a real run.
+- `BoundedTimeCache`, `FastTimeCache` and their constants, `SetLogDir`/`GetLogDir`,
+  `GetDangerousCommandPatterns`, `RunnerCombinedOutputWithSudoContext`, `IsCI`,
+  and the allowlist entry for `fail2ban-server`, which nothing executes.
 - Removed the `metrics` command and its performance-metrics subsystem.
 - Dropped the `google/uuid` and `hashicorp/go-version` dependencies.
 - Release builds for the BSDs, Linux 386/mips64/mips64le/ppc64le/s390x and
@@ -121,10 +150,20 @@ ______________________________________________________________________
 
 ### Security
 
+- An empty path allowlist refuses every path; it used to mean no restrictions.
 - Pull requests to `main` require the PR Lint and prek checks, and two unused
   repository secrets are removed.
+- Path validation resolves every path component, so a symlinked ancestor can no
+  longer carry a path outside the allowlist.
+- `--log-file` is opened through `os.Root`, so a symlink at the leaf cannot
+  redirect it outside the validated directory.
+- `sudo`, `fail2ban-regex`, `service` and `systemctl` are resolved to trusted
+  absolute paths, as `fail2ban-client` already was.
+- `ALLOW_DEV_PATHS` is parsed as a boolean; `0` and `false` no longer enable it.
+- `test-filter` records the filter and log path it reads as root.
 - The release workflow runs lint and tests before publishing, and pull requests
   check the title and commit messages and run `govulncheck`.
+- Test fixtures no longer contain publicly routable IP addresses.
 - **Privilege validation**: All user input validated before privilege escalation
 - **Secure command execution**: Uses argument arrays instead of shell string concatenation
 - **Test isolation**: Comprehensive mocking prevents accidental privileged operations in tests
@@ -149,5 +188,10 @@ ______________________________________________________________________
   built under the caller's context.
 - `logs` reports an error when no log file could be read instead of an empty
   result.
+- `banned` lists CIDR ranges banned through `fail2ban-client`, in `--format json`
+  as the `ip` value; they were dropped from the output.
+- `banned` reports an error when fail2ban lists bans for a jail and none can be
+  read (for example, bans on a non-address ID) instead of showing no bans. In
+  `banned all`, the other jails are still listed.
 
 ______________________________________________________________________

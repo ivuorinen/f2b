@@ -98,6 +98,18 @@ func ExecuteIPCommand(
 	}
 }
 
+// banTargetArgument returns the IP address or CIDR range that ban and unban
+// act on. `test` stays address-only and uses ValidateIPArgument.
+func banTargetArgument(args []string) (string, error) {
+	if len(args) < 1 {
+		return "", fmt.Errorf("IP address or CIDR range required")
+	}
+	if err := fail2ban.ValidateBanTarget(args[0]); err != nil {
+		return "", err
+	}
+	return args[0], nil
+}
+
 // runIPOperation executes the validated IP command body: validate the IP and
 // jails, run the per-jail operation, and print results (including partial
 // results when the operation fails after changing some jails). rootCtx has no
@@ -113,7 +125,7 @@ func runIPOperation(
 	ctx, cancel := createTimeoutContext(rootCtx, config)
 	defer cancel()
 
-	ip, err := ValidateIPArgument(args)
+	ip, err := banTargetArgument(args)
 	if err != nil {
 		return HandleValidationError(err)
 	}

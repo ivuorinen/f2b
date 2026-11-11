@@ -12,9 +12,7 @@ import (
 // A 6/7-field line whose fields aren't timestamps is an exotic variant, not
 // garbage: it must produce a simple-format fallback record, not an error.
 func TestParseBanRecordSixFieldNonTimestampFallback(t *testing.T) {
-	parser := NewBanRecordParser()
-
-	record, err := parser.ParseBanRecordLine("192.168.1.100 foo bar + baz qux", "sshd")
+	record, err := parseBanRecordLine("192.168.1.100 foo bar + baz qux", "sshd")
 	if err != nil {
 		t.Fatalf("expected fallback record, got error: %v", err)
 	}
@@ -31,8 +29,6 @@ func TestParseBanRecordSixFieldNonTimestampFallback(t *testing.T) {
 }
 
 func TestBanRecordParser(t *testing.T) {
-	parser := NewBanRecordParser()
-
 	tests := []struct {
 		name    string
 		line    string
@@ -85,16 +81,16 @@ func TestBanRecordParser(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assertBanRecordParserCase(t, parser, tt.line, tt.jail, tt.wantIP, tt.wantNil)
+			assertBanRecordParserCase(t, tt.line, tt.jail, tt.wantIP, tt.wantNil)
 		})
 	}
 }
 
 // assertBanRecordParserCase parses a single line and asserts nil/IP/jail/time
 // expectations for TestBanRecordParser.
-func assertBanRecordParserCase(t *testing.T, parser *BanRecordParser, line, jail, wantIP string, wantNil bool) {
+func assertBanRecordParserCase(t *testing.T, line, jail, wantIP string, wantNil bool) {
 	t.Helper()
-	record, err := parser.ParseBanRecordLine(line, jail)
+	record, err := parseBanRecordLine(line, jail)
 
 	if wantNil {
 		if record != nil {
@@ -128,24 +124,21 @@ func assertBanRecordParserCase(t *testing.T, parser *BanRecordParser, line, jail
 // ParseBanRecordLine (empty / path-separator / traversal jail names). Without
 // this, the guard is mutation-blind: no test ever passed it an unsafe jail.
 func TestParseBanRecordLineRejectsUnsafeJail(t *testing.T) {
-	parser := NewBanRecordParser()
 	line := "192.168.1.100 2023-12-01 14:30:45 + 2023-12-02 14:30:45 remaining"
 	unsafeJails := []string{"", "..", "../etc", "a/b", `a\b`, "foo/../bar"}
 	for _, jail := range unsafeJails {
-		if _, err := parser.ParseBanRecordLine(line, jail); err == nil {
+		if _, err := parseBanRecordLine(line, jail); err == nil {
 			t.Errorf("ParseBanRecordLine accepted unsafe jail %q, want error", jail)
 		}
 	}
 	// A safe jail on the same line must still succeed, so the guard is not
 	// simply rejecting everything.
-	if _, err := parser.ParseBanRecordLine(line, "sshd"); err != nil {
+	if _, err := parseBanRecordLine(line, "sshd"); err != nil {
 		t.Errorf("ParseBanRecordLine rejected safe jail %q: %v", "sshd", err)
 	}
 }
 
 func TestParseBanRecords(t *testing.T) {
-	parser := NewBanRecordParser()
-
 	output := strings.Join([]string{
 		"192.168.1.100 2023-12-01 14:30:45 + 2023-12-02 14:30:45 remaining",
 		"192.168.1.101 2023-12-01 15:00:00 + 2023-12-02 15:00:00 remaining",
@@ -154,7 +147,7 @@ func TestParseBanRecords(t *testing.T) {
 		"192.168.1.102 banned simple", // simple format
 	}, "\n")
 
-	records, err := parser.ParseBanRecords(output, "sshd")
+	records, err := ParseBanRecords(output, "sshd")
 	if err != nil {
 		t.Fatalf("ParseBanRecords failed: %v", err)
 	}
@@ -175,9 +168,9 @@ func TestParseBanRecords(t *testing.T) {
 	}
 }
 
-func TestDefaultParserParseBanRecordLine(t *testing.T) {
+func TestParseBanRecordLineReadsTheFullFormat(t *testing.T) {
 	line := "192.168.1.100 2023-12-01 14:30:45 + 2023-12-02 14:30:45 remaining"
-	record, err := defaultBanRecordParser.ParseBanRecordLine(line, "sshd")
+	record, err := parseBanRecordLine(line, "sshd")
 
 	if err != nil {
 		t.Fatalf("ParseBanRecordLine failed: %v", err)
@@ -223,32 +216,28 @@ func TestParseBanRecordsPackageEntryPoint(t *testing.T) {
 }
 
 func BenchmarkParseBanRecordLine(b *testing.B) {
-	parser := NewBanRecordParser()
 	line := "192.168.1.100 2023-12-01 14:30:45 + 2023-12-02 14:30:45 remaining"
 
 	b.ResetTimer()
 	for b.Loop() {
-		_, _ = parser.ParseBanRecordLine(line, "sshd")
+		_, _ = parseBanRecordLine(line, "sshd")
 	}
 }
 
 func BenchmarkParseBanRecords(b *testing.B) {
-	parser := NewBanRecordParser()
 	output := strings.Repeat("192.168.1.100 2023-12-01 14:30:45 + 2023-12-02 14:30:45 remaining\n", 100)
 
 	b.ResetTimer()
 	for b.Loop() {
-		_, _ = parser.ParseBanRecords(output, "sshd")
+		_, _ = ParseBanRecords(output, "sshd")
 	}
 }
 
 // Test error handling for invalid time formats
 func TestParseBanRecordInvalidTime(t *testing.T) {
-	parser := NewBanRecordParser()
-
 	// Invalid ban time should be skipped (original behavior) - must have 8+ fields
 	line := "192.168.1.100 invalid-date 14:30:45 + 2023-12-02 14:30:45 remaining extra"
-	record, err := parser.ParseBanRecordLine(line, "sshd")
+	record, err := parseBanRecordLine(line, "sshd")
 
 	if err == nil {
 		t.Errorf("Expected error for invalid ban time, but got none")
@@ -266,7 +255,6 @@ func TestParseBanRecordInvalidTime(t *testing.T) {
 
 // Test concurrent access to parser
 func TestBanRecordParserConcurrent(t *testing.T) {
-	parser := NewBanRecordParser()
 	line := "192.168.1.100 2023-12-01 14:30:45 + 2023-12-02 14:30:45 remaining"
 
 	const numGoroutines = 10
@@ -278,7 +266,7 @@ func TestBanRecordParserConcurrent(t *testing.T) {
 		go func() {
 			var err error
 			for range numOperations {
-				_, err = parser.ParseBanRecordLine(line, "sshd")
+				_, err = parseBanRecordLine(line, "sshd")
 				if err != nil {
 					break
 				}
@@ -296,8 +284,6 @@ func TestBanRecordParserConcurrent(t *testing.T) {
 
 // TestRealWorldBanRecordPatterns tests with actual patterns from production logs
 func TestRealWorldBanRecordPatterns(t *testing.T) {
-	parser := NewBanRecordParser()
-
 	// Real patterns observed in production fail2ban
 	realWorldPatterns := []struct {
 		name        string
@@ -338,7 +324,7 @@ func TestRealWorldBanRecordPatterns(t *testing.T) {
 
 	for _, tt := range realWorldPatterns {
 		t.Run(tt.name, func(t *testing.T) {
-			assertRealWorldBanPattern(t, parser, tt.output, tt.jail, tt.wantRecords, tt.checkIPs)
+			assertRealWorldBanPattern(t, tt.output, tt.jail, tt.wantRecords, tt.checkIPs)
 		})
 	}
 }
@@ -346,10 +332,10 @@ func TestRealWorldBanRecordPatterns(t *testing.T) {
 // assertRealWorldBanPattern parses a production output block and asserts the
 // record count, jail, non-zero ban times, and expected IP presence.
 func assertRealWorldBanPattern(
-	t *testing.T, parser *BanRecordParser, output, jail string, wantRecords int, checkIPs []string,
+	t *testing.T, output, jail string, wantRecords int, checkIPs []string,
 ) {
 	t.Helper()
-	records, err := parser.ParseBanRecords(output, jail)
+	records, err := ParseBanRecords(output, jail)
 	if err != nil {
 		t.Fatalf("ParseBanRecords failed: %v", err)
 	}
@@ -383,8 +369,6 @@ func assertRealWorldBanPattern(
 
 // TestProductionLogTimingPatterns verifies timing patterns from real logs
 func TestProductionLogTimingPatterns(t *testing.T) {
-	parser := NewBanRecordParser()
-
 	// Test various real production patterns
 	tests := []struct {
 		name       string
@@ -425,13 +409,13 @@ func TestProductionLogTimingPatterns(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			testSingleProductionPattern(t, parser, tt)
+			testSingleProductionPattern(t, tt)
 		})
 	}
 }
 
 // testSingleProductionPattern tests a single production log pattern
-func testSingleProductionPattern(t *testing.T, parser *BanRecordParser, tt struct {
+func testSingleProductionPattern(t *testing.T, tt struct {
 	name       string
 	line       string
 	wantIP     string
@@ -439,7 +423,7 @@ func testSingleProductionPattern(t *testing.T, parser *BanRecordParser, tt struc
 	wantParsed bool
 }) {
 	t.Helper()
-	record, err := parser.ParseBanRecordLine(tt.line, "sshd")
+	record, err := parseBanRecordLine(tt.line, "sshd")
 
 	if !tt.wantParsed {
 		if record != nil || err == nil {

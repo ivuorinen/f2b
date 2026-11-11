@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"io"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -42,9 +43,10 @@ func LogsCmd(client fail2ban.Client, config *Config) *cobra.Command {
 				return HandleClientError(err)
 			}
 
-			return printLogLines(cmd, lines, config.Format)
+			return printLogLines(GetCmdOutput(cmd), lines, config.Format)
 		})
 
+	cmd.Args = cobra.MaximumNArgs(2)
 	AddLogFlags(cmd)
 	return cmd
 }
@@ -53,12 +55,12 @@ func LogsCmd(client fail2ban.Client, config *Config) *cobra.Command {
 // wc -l` counts matches, and as a JSON array otherwise. Printing the slice
 // through the generic plain path rendered every match space-joined inside
 // "[ ]" on a single line.
-func printLogLines(cmd *cobra.Command, lines []string, format string) error {
+func printLogLines(out io.Writer, lines []string, format string) error {
 	if format == JSONFormat {
-		return PrintOutputTo(GetCmdOutput(cmd), lines, format)
+		return PrintOutputTo(out, lines, format)
 	}
 	if len(lines) == 0 {
 		return nil
 	}
-	return PrintOutputTo(GetCmdOutput(cmd), strings.Join(lines, "\n"), format)
+	return PrintOutputTo(out, strings.Join(lines, "\n"), format)
 }

@@ -1,4 +1,4 @@
-package fail2ban_test
+package fail2bantest
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 var bg = context.Background()
 
 func TestNewMockClient(t *testing.T) {
-	client := fail2ban.NewMockClient()
+	client := NewMockClient()
 
 	if client == nil {
 		t.Fatal("NewMockClient should return a non-nil client")
@@ -21,7 +21,7 @@ func TestNewMockClient(t *testing.T) {
 
 	// Test default jails
 	jails, err := client.ListJailsWithContext(bg)
-	fail2ban.AssertError(t, err, false, "ListJails")
+	AssertError(t, err, false, "ListJails")
 
 	expectedJails := []string{"sshd", "apache"}
 	if len(jails) != len(expectedJails) {
@@ -30,7 +30,7 @@ func TestNewMockClient(t *testing.T) {
 
 	// Test default filters
 	filters, err := client.ListFiltersWithContext(bg)
-	fail2ban.AssertError(t, err, false, "ListFilters")
+	AssertError(t, err, false, "ListFilters")
 
 	expectedFilters := []string{"sshd", "apache"}
 	if len(filters) != len(expectedFilters) {
@@ -39,10 +39,10 @@ func TestNewMockClient(t *testing.T) {
 }
 
 func TestMockClientListJails(t *testing.T) {
-	client := fail2ban.NewMockClient()
+	client := NewMockClient()
 
 	jails, err := client.ListJailsWithContext(bg)
-	fail2ban.AssertError(t, err, false, "ListJails")
+	AssertError(t, err, false, "ListJails")
 
 	// Should contain default jails
 	jailMap := make(map[string]bool)
@@ -59,10 +59,10 @@ func TestMockClientListJails(t *testing.T) {
 }
 
 func TestMockClientStatusAll(t *testing.T) {
-	client := fail2ban.NewMockClient()
+	client := NewMockClient()
 
 	status, err := client.StatusAllWithContext(bg)
-	fail2ban.AssertError(t, err, false, "StatusAll")
+	AssertError(t, err, false, "StatusAll")
 
 	expected := "Mock status for all jails"
 	if status != expected {
@@ -71,7 +71,7 @@ func TestMockClientStatusAll(t *testing.T) {
 }
 
 func TestMockClientStatusJail(t *testing.T) {
-	client := fail2ban.NewMockClient()
+	client := NewMockClient()
 
 	tests := []struct {
 		name        string
@@ -99,7 +99,7 @@ func TestMockClientStatusJail(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			status, err := client.StatusJailWithContext(bg, tt.jail)
 
-			fail2ban.AssertError(t, err, tt.expectError, tt.name)
+			AssertError(t, err, tt.expectError, tt.name)
 			if !tt.expectError {
 				expected := "Mock status for jail " + tt.jail
 				if status != expected {
@@ -111,7 +111,7 @@ func TestMockClientStatusJail(t *testing.T) {
 }
 
 func TestMockClientBanIP(t *testing.T) {
-	client := fail2ban.NewMockClient()
+	client := NewMockClient()
 
 	tests := []struct {
 		name         string
@@ -153,7 +153,7 @@ func TestMockClientBanIP(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			code, err := client.BanIPWithContext(bg, tt.ip, tt.jail)
 
-			fail2ban.AssertError(t, err, tt.expectError, tt.name)
+			AssertError(t, err, tt.expectError, tt.name)
 			if !tt.expectError {
 				if code != tt.expectedCode {
 					t.Errorf("expected code %d, got %d", tt.expectedCode, code)
@@ -164,11 +164,11 @@ func TestMockClientBanIP(t *testing.T) {
 }
 
 func TestMockClientUnbanIP(t *testing.T) {
-	client := fail2ban.NewMockClient()
+	client := NewMockClient()
 
 	// First ban an IP
 	_, err := client.BanIPWithContext(bg, "192.168.1.100", "sshd")
-	fail2ban.AssertError(t, err, false, "ban IP for setup")
+	AssertError(t, err, false, "ban IP for setup")
 
 	tests := []struct {
 		name         string
@@ -210,7 +210,7 @@ func TestMockClientUnbanIP(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			code, err := client.UnbanIPWithContext(bg, tt.ip, tt.jail)
 
-			fail2ban.AssertError(t, err, tt.expectError, tt.name)
+			AssertError(t, err, tt.expectError, tt.name)
 			if !tt.expectError {
 				if code != tt.expectedCode {
 					t.Errorf("expected code %d, got %d", tt.expectedCode, code)
@@ -221,14 +221,14 @@ func TestMockClientUnbanIP(t *testing.T) {
 }
 
 func TestMockClientBannedIn(t *testing.T) {
-	client := fail2ban.NewMockClient()
+	client := NewMockClient()
 
 	// Ban IP in multiple jails
 	_, err := client.BanIPWithContext(bg, "192.168.1.100", "sshd")
-	fail2ban.AssertError(t, err, false, "ban IP in sshd")
+	AssertError(t, err, false, "ban IP in sshd")
 
 	_, err = client.BanIPWithContext(bg, "192.168.1.100", "apache")
-	fail2ban.AssertError(t, err, false, "ban IP in apache")
+	AssertError(t, err, false, "ban IP in apache")
 
 	tests := []struct {
 		name          string
@@ -250,7 +250,7 @@ func TestMockClientBannedIn(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			jails, err := client.BannedInWithContext(bg, tt.ip)
-			fail2ban.AssertError(t, err, false, tt.name)
+			AssertError(t, err, false, tt.name)
 
 			if len(jails) != len(tt.expectedJails) {
 				t.Errorf("expected %d jails, got %d", len(tt.expectedJails), len(jails))
@@ -272,17 +272,17 @@ func TestMockClientBannedIn(t *testing.T) {
 }
 
 func TestMockClientGetBanRecords(t *testing.T) {
-	client := fail2ban.NewMockClient()
+	client := NewMockClient()
 
 	// Ban some IPs
 	_, err := client.BanIPWithContext(bg, "192.168.1.100", "sshd")
-	fail2ban.AssertError(t, err, false, "ban IP 1")
+	AssertError(t, err, false, "ban IP 1")
 
 	_, err = client.BanIPWithContext(bg, "192.168.1.101", "apache")
-	fail2ban.AssertError(t, err, false, "ban IP 2")
+	AssertError(t, err, false, "ban IP 2")
 
 	records, err := client.GetBanRecordsWithContext(bg, []string{"sshd", "apache"})
-	fail2ban.AssertError(t, err, false, "GetBanRecords")
+	AssertError(t, err, false, "GetBanRecords")
 
 	if len(records) != 2 {
 		t.Errorf("expected 2 ban records, got %d", len(records))
@@ -312,17 +312,17 @@ func TestMockClientGetBanRecords(t *testing.T) {
 }
 
 func TestMockClientGetLogLines(t *testing.T) {
-	client := fail2ban.NewMockClient()
+	client := NewMockClient()
 
 	// Ban and unban some IPs to generate log entries
 	_, err := client.BanIPWithContext(bg, "192.168.1.100", "sshd")
-	fail2ban.AssertError(t, err, false, "ban IP for logs")
+	AssertError(t, err, false, "ban IP for logs")
 
 	_, err = client.UnbanIPWithContext(bg, "192.168.1.100", "sshd")
-	fail2ban.AssertError(t, err, false, "unban IP for logs")
+	AssertError(t, err, false, "unban IP for logs")
 
 	_, err = client.BanIPWithContext(bg, "192.168.1.101", "apache")
-	fail2ban.AssertError(t, err, false, "ban IP 2 for logs")
+	AssertError(t, err, false, "ban IP 2 for logs")
 
 	tests := []struct {
 		name          string
@@ -371,7 +371,7 @@ func TestMockClientGetLogLines(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			lines, err := client.GetLogLinesWithContext(bg, tt.jail, tt.ip)
-			fail2ban.AssertError(t, err, false, tt.name)
+			AssertError(t, err, false, tt.name)
 
 			if len(lines) != tt.expectedLines {
 				t.Errorf("expected %d lines, got %d", tt.expectedLines, len(lines))
@@ -389,10 +389,10 @@ func TestMockClientGetLogLines(t *testing.T) {
 }
 
 func TestMockClientListFilters(t *testing.T) {
-	client := fail2ban.NewMockClient()
+	client := NewMockClient()
 
 	filters, err := client.ListFiltersWithContext(bg)
-	fail2ban.AssertError(t, err, false, "ListFilters")
+	AssertError(t, err, false, "ListFilters")
 
 	expectedFilters := []string{"sshd", "apache"}
 	if len(filters) != len(expectedFilters) {
@@ -412,7 +412,7 @@ func TestMockClientListFilters(t *testing.T) {
 }
 
 func TestMockClientTestFilter(t *testing.T) {
-	client := fail2ban.NewMockClient()
+	client := NewMockClient()
 
 	tests := []struct {
 		name        string
@@ -433,9 +433,9 @@ func TestMockClientTestFilter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := client.TestFilterWithContext(bg, tt.filter)
+			result, err := client.TestFilterWithContext(bg, tt.filter, "")
 
-			fail2ban.AssertError(t, err, tt.expectError, tt.name)
+			AssertError(t, err, tt.expectError, tt.name)
 			if !tt.expectError {
 				if result == "" {
 					t.Errorf("expected non-empty result")
@@ -446,25 +446,25 @@ func TestMockClientTestFilter(t *testing.T) {
 }
 
 func TestMockClientReset(t *testing.T) {
-	client := fail2ban.NewMockClient()
+	client := NewMockClient()
 
 	// Ban some IPs and generate logs
 	_, err := client.BanIPWithContext(bg, "192.168.1.100", "sshd")
-	fail2ban.AssertError(t, err, false, "ban IP for reset test")
+	AssertError(t, err, false, "ban IP for reset test")
 
 	_, err = client.BanIPWithContext(bg, "192.168.1.101", "apache")
-	fail2ban.AssertError(t, err, false, "ban IP 2 for reset test")
+	AssertError(t, err, false, "ban IP 2 for reset test")
 
 	// Verify that IPs are banned
 	jails, err := client.BannedInWithContext(bg, "192.168.1.100")
-	fail2ban.AssertError(t, err, false, "BannedIn before reset")
+	AssertError(t, err, false, "BannedIn before reset")
 	if len(jails) == 0 {
 		t.Fatalf("expected IP to be banned before reset")
 	}
 
 	// Verify that logs exist
 	logs, err := client.GetLogLinesWithContext(bg, "", "")
-	fail2ban.AssertError(t, err, false, "GetLogLines before reset")
+	AssertError(t, err, false, "GetLogLines before reset")
 	if len(logs) == 0 {
 		t.Fatalf("expected logs to exist before reset")
 	}
@@ -474,14 +474,14 @@ func TestMockClientReset(t *testing.T) {
 
 	// Verify that bans are cleared
 	jails, err = client.BannedInWithContext(bg, "192.168.1.100")
-	fail2ban.AssertError(t, err, false, "BannedIn after reset")
+	AssertError(t, err, false, "BannedIn after reset")
 	if len(jails) != 0 {
 		t.Errorf("expected no banned IPs after reset, got %d", len(jails))
 	}
 
 	// Verify that logs are cleared
 	logs, err = client.GetLogLinesWithContext(bg, "", "")
-	fail2ban.AssertError(t, err, false, "GetLogLines after reset")
+	AssertError(t, err, false, "GetLogLines after reset")
 	if len(logs) != 0 {
 		t.Errorf("expected no logs after reset, got %d", len(logs))
 	}
@@ -497,7 +497,7 @@ func TestMockClientReset(t *testing.T) {
 }
 
 func TestMockClientConcurrency(t *testing.T) {
-	client := fail2ban.NewMockClient()
+	client := NewMockClient()
 
 	// Test concurrent operations
 	done := make(chan bool, 10)
@@ -552,7 +552,7 @@ func TestMockClientConcurrency(t *testing.T) {
 }
 
 func BenchmarkMockClientBanUnban(b *testing.B) {
-	client := fail2ban.NewMockClient()
+	client := NewMockClient()
 
 	b.ResetTimer()
 	for i := 0; b.Loop(); i++ {
@@ -563,7 +563,7 @@ func BenchmarkMockClientBanUnban(b *testing.B) {
 }
 
 func BenchmarkMockClientBannedIn(b *testing.B) {
-	client := fail2ban.NewMockClient()
+	client := NewMockClient()
 
 	// Pre-ban some IPs
 	for i := range 100 {

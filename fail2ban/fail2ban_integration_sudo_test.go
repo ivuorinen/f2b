@@ -1,4 +1,4 @@
-package fail2ban
+package fail2ban_test
 
 import (
 	"context"
@@ -7,16 +7,18 @@ import (
 	"testing"
 
 	"github.com/ivuorinen/f2b/constants"
+	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/fail2ban/fail2bantest"
 )
 
 // setupMockRunnerForPrivilegedTest configures mock responses for privileged tests
-func setupMockRunnerForPrivilegedTest(mockRunner *MockRunner) {
+func setupMockRunnerForPrivilegedTest(mockRunner *fail2bantest.MockRunner) {
 	// Use standard mock setup as the base
-	StandardMockSetup(mockRunner)
+	fail2bantest.StandardMockSetup(mockRunner)
 }
 
 // testClientOperations tests various client operations
-func testClientOperations(t *testing.T, client Client, expectOperationErr bool) {
+func testClientOperations(t *testing.T, client fail2ban.Client, expectOperationErr bool) {
 	t.Helper()
 	testOperations := []struct {
 		name string
@@ -63,15 +65,15 @@ func TestSudoIntegrationWithClient(t *testing.T) {
 	// Test normal client creation (in test environment, sudo checking is skipped)
 	t.Run("normal client creation", func(t *testing.T) {
 		// Modern standardized setup with automatic cleanup
-		_, cleanup := SetupMockEnvironmentWithSudo(t, true)
+		_, cleanup := fail2bantest.SetupMockEnvironmentWithSudo(t, true)
 		defer cleanup()
 
 		// Get the mock runner and configure additional responses
-		mockRunner := MustMockRunner(t)
+		mockRunner := fail2bantest.MustMockRunner(t)
 		setupMockRunnerForPrivilegedTest(mockRunner)
 
 		// Test client creation
-		client, err := NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
+		client, err := fail2ban.NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
 		if err != nil {
 			t.Fatalf("unexpected client creation error: %v", err)
 		}
@@ -126,11 +128,11 @@ func assertSudoRequirementsCase(t *testing.T, hasPrivileges, isRoot, expectError
 	t.Helper()
 
 	// Modern standardized setup with automatic cleanup
-	_, cleanup := SetupMockEnvironmentWithSudo(t, hasPrivileges)
+	_, cleanup := fail2bantest.SetupMockEnvironmentWithSudo(t, hasPrivileges)
 	defer cleanup()
 
 	// Get the mock sudo checker and configure based on test case
-	mockChecker := MustMockSudoChecker(t)
+	mockChecker := fail2bantest.MustMockSudoChecker(t)
 	mockChecker.MockIsRoot = isRoot
 	if isRoot {
 		// Root user always has privileges
@@ -138,7 +140,7 @@ func assertSudoRequirementsCase(t *testing.T, hasPrivileges, isRoot, expectError
 	}
 
 	// Test sudo requirements directly
-	err := CheckSudoRequirements()
+	err := fail2ban.CheckSudoRequirements()
 
 	if expectError {
 		if err == nil {
@@ -207,20 +209,20 @@ func TestSudoCommandSelection(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Modern standardized setup with automatic cleanup
-			_, cleanup := SetupMockEnvironmentWithSudo(t, tt.hasPrivileges)
+			_, cleanup := fail2bantest.SetupMockEnvironmentWithSudo(t, tt.hasPrivileges)
 			defer cleanup()
 
 			// Set custom mock checker for this specific test
-			mock := &MockSudoChecker{
+			mock := &fail2bantest.MockSudoChecker{
 				MockIsRoot:        tt.isRoot,
 				MockInSudoGroup:   tt.hasPrivileges && !tt.isRoot,
 				MockCanUseSudo:    tt.hasPrivileges && !tt.isRoot,
 				MockHasPrivileges: tt.hasPrivileges,
 			}
-			SetSudoChecker(mock)
+			fail2ban.SetSudoChecker(mock)
 
 			// Get the mock runner and configure responses
-			mockRunner := MustMockRunner(t)
+			mockRunner := fail2bantest.MustMockRunner(t)
 			mockRunner.SetResponse(tt.expectedCommand, []byte("success"))
 
 			// Test command selection logic using mock runner directly
@@ -274,11 +276,11 @@ func assertSudoErrorPropagationCase(t *testing.T, hasPrivileges, expectError boo
 	t.Helper()
 
 	// Modern standardized setup with automatic cleanup
-	_, cleanup := SetupMockEnvironmentWithSudo(t, hasPrivileges)
+	_, cleanup := fail2bantest.SetupMockEnvironmentWithSudo(t, hasPrivileges)
 	defer cleanup()
 
 	// Test CheckSudoRequirements directly
-	err := CheckSudoRequirements()
+	err := fail2ban.CheckSudoRequirements()
 
 	if expectError {
 		if err == nil {
@@ -297,16 +299,16 @@ func assertSudoErrorPropagationCase(t *testing.T, hasPrivileges, expectError boo
 // TestSudoWithDifferentCommands tests sudo behavior with various command types
 func TestSudoWithDifferentCommands(t *testing.T) {
 	// Modern standardized setup with sudo privileges (not root)
-	_, cleanup := SetupMockEnvironmentWithSudo(t, true)
+	_, cleanup := fail2bantest.SetupMockEnvironmentWithSudo(t, true)
 	defer cleanup()
 
 	// Set custom mock checker for this test (not root, but has sudo)
-	mock := &MockSudoChecker{
+	mock := &fail2bantest.MockSudoChecker{
 		MockIsRoot:      false,
 		MockInSudoGroup: true,
 		MockCanUseSudo:  true,
 	} // not root, but in sudo group and can sudo
-	SetSudoChecker(mock)
+	fail2ban.SetSudoChecker(mock)
 
 	tests := []struct {
 		name           string
@@ -351,14 +353,14 @@ func TestSudoWithDifferentCommands(t *testing.T) {
 			expectedPrefix: "systemctl",
 		},
 		{
-			// fail2ban-server is allowlisted but has no RequiresSudo case, so
-			// it exercises the default no-sudo branch (non-allowlisted
-			// commands like `echo` never reach the runner at all).
+			// -V only prints the client version and never touches the socket,
+			// so it takes the no-sudo branch (non-allowlisted commands like
+			// `echo` never reach the runner at all).
 			name:           "non-privileged command does not require sudo",
-			command:        "fail2ban-server",
+			command:        "fail2ban-client",
 			args:           []string{"-V"},
 			expectsSudo:    false,
-			expectedPrefix: "fail2ban-server",
+			expectedPrefix: "fail2ban-client",
 		},
 	}
 
@@ -374,14 +376,14 @@ func assertSudoCommandBehavior(t *testing.T, command string, args []string, expe
 	t.Helper()
 
 	// Test RequiresSudo function
-	requiresSudo := RequiresSudo(command, args...)
+	requiresSudo := fail2ban.RequiresSudo(command, args...)
 	if requiresSudo != expectsSudo {
 		t.Errorf("RequiresSudo(%s, %v) = %v, want %v", command, args, requiresSudo, expectsSudo)
 	}
 
 	// Configure the mock runner with expected response
 	// Note: Reusing outer mock environment to avoid nested cleanup issues
-	mockRunner := MustMockRunner(t)
+	mockRunner := fail2bantest.MustMockRunner(t)
 	expectedCall := expectedPrefix + " " + strings.Join(args, " ")
 	mockRunner.SetResponse(expectedCall, []byte("mock response"))
 
@@ -446,11 +448,11 @@ func TestSudoPrivilegeEscalation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Modern standardized setup with automatic cleanup
-			_, cleanup := SetupMockEnvironmentWithSudo(t, tt.initialPrivs)
+			_, cleanup := fail2bantest.SetupMockEnvironmentWithSudo(t, tt.initialPrivs)
 			defer cleanup()
 
 			// Get the mock runner and configure responses
-			mockRunner := MustMockRunner(t)
+			mockRunner := fail2bantest.MustMockRunner(t)
 
 			// Set up responses for both sudo and non-sudo versions
 			nonSudoCmd := tt.targetCommand + " " + strings.Join(tt.targetArgs, " ")
@@ -538,7 +540,7 @@ func TestSudoMockConsistency(t *testing.T) {
 func assertSudoMockConsistencyCase(t *testing.T, isRoot, inSudoGroup, canUseSudo, expectedPrivileges bool) {
 	t.Helper()
 
-	mock := &MockSudoChecker{
+	mock := &fail2bantest.MockSudoChecker{
 		MockIsRoot:      isRoot,
 		MockInSudoGroup: inSudoGroup,
 		MockCanUseSudo:  canUseSudo,
@@ -561,10 +563,10 @@ func assertSudoMockConsistencyCase(t *testing.T, isRoot, inSudoGroup, canUseSudo
 	}
 
 	// Test that CheckSudoRequirements behaves consistently
-	originalChecker := GetSudoChecker()
-	SetSudoChecker(mock)
+	originalChecker := fail2ban.GetSudoChecker()
+	fail2ban.SetSudoChecker(mock)
 
-	err := CheckSudoRequirements()
+	err := fail2ban.CheckSudoRequirements()
 
 	if expectedPrivileges && err != nil {
 		t.Errorf("CheckSudoRequirements() failed when privileges expected: %v", err)
@@ -573,5 +575,5 @@ func assertSudoMockConsistencyCase(t *testing.T, isRoot, inSudoGroup, canUseSudo
 		t.Error("CheckSudoRequirements() succeeded when no privileges expected")
 	}
 
-	SetSudoChecker(originalChecker)
+	fail2ban.SetSudoChecker(originalChecker)
 }

@@ -7,11 +7,11 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/ivuorinen/f2b/constants"
-	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/fail2ban/fail2bantest"
 )
 
 // MockClient is a type alias for the enhanced MockClient from fail2ban package
-type MockClient = fail2ban.MockClient
+type MockClient = fail2bantest.MockClient
 
 // validTestConfig returns a Config that passes ValidateConfig (system default
 // directories, positive timeouts). Tests exercising Execute must use a valid
@@ -29,7 +29,7 @@ func validTestConfig(format string) Config {
 
 // NewMockClient creates a new MockClient for testing
 func NewMockClient() *MockClient {
-	return fail2ban.NewMockClient()
+	return fail2bantest.NewMockClient()
 }
 
 // setMockJails sets jails for the enhanced MockClient

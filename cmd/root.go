@@ -111,7 +111,7 @@ func Execute(client fail2ban.Client, config Config) error {
 	rootCmd.AddCommand(TestIPCmd(client, &cfg))
 	rootCmd.AddCommand(LogsCmd(client, &cfg))
 	rootCmd.AddCommand(LogsWatchCmd(client, &cfg))
-	rootCmd.AddCommand(ServiceCmd(&cfg))
+	rootCmd.AddCommand(ServiceCmd(fail2ban.GetRunner(), &cfg))
 	rootCmd.AddCommand(VersionCmd(&cfg))
 	rootCmd.AddCommand(TestFilterCmd(client, &cfg))
 	rootCmd.AddCommand(completionCmd())
@@ -209,8 +209,7 @@ func init() {
 				return err
 			}
 
-			// #nosec G304 - resolveLogFilePath confines the file to the log allowlist.
-			f, err := os.OpenFile(cleanPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, constants.DefaultFilePermissions)
+			f, err := openLogFile(cleanPath)
 			if err != nil {
 				return fmt.Errorf("failed to open log file %s: %w", cleanPath, err)
 			}
@@ -244,6 +243,23 @@ func resolveLogFilePath(logFile string) (string, error) {
 		return "", fmt.Errorf("log file %s is outside the allowed log directories: %w", cleanPath, err)
 	}
 	return filepath.Join(dir, filepath.Base(cleanPath)), nil
+}
+
+// openLogFile opens path for appending through an os.Root on its validated
+// directory. resolveLogFilePath checks only the directory, so a plain open
+// followed a symlink at the leaf and let `sudo f2b` create or append a file
+// outside the allowlist; the Root refuses any symlink that leaves the directory.
+func openLogFile(path string) (*os.File, error) {
+	root, err := os.OpenRoot(filepath.Dir(path))
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if closeErr := root.Close(); closeErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Failed to close log directory: %v\n", closeErr)
+		}
+	}()
+	return root.OpenFile(filepath.Base(path), os.O_CREATE|os.O_WRONLY|os.O_APPEND, constants.DefaultFilePermissions)
 }
 
 // registerLogFileCleanup registers a log file so cleanupResources closes it

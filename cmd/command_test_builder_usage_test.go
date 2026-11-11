@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/fail2ban/fail2bantest"
 )
 
 // TestDemoCommandTestFramework demonstrates the modern testing framework capabilities
@@ -13,7 +13,7 @@ func TestDemoCommandTestFramework(t *testing.T) {
 	t.Run("basic_command_example", func(t *testing.T) {
 		NewCommandTest(t, "status").
 			WithArgs("all").
-			WithSetup(func(mock *fail2ban.MockClient) {
+			WithSetup(func(mock *fail2bantest.MockClient) {
 				mock.StatusAllData = "Status for all jails"
 				setMockJails(mock, []string{"sshd", "apache"})
 			}).
@@ -32,7 +32,7 @@ func TestDemoCommandTestFramework(t *testing.T) {
 		NewCommandTest(t, "ban").
 			WithArgs("192.168.1.100", "sshd").
 			WithEnvironment(env).
-			WithSetup(func(mock *fail2ban.MockClient) {
+			WithSetup(func(mock *fail2bantest.MockClient) {
 				setMockJails(mock, []string{"sshd"})
 			}).
 			ExpectSuccess().
@@ -45,7 +45,7 @@ func TestDemoCommandTestFramework(t *testing.T) {
 		NewCommandTest(t, "banned").
 			WithArgs("sshd").
 			WithJSONFormat().
-			WithSetup(func(mock *fail2ban.MockClient) {
+			WithSetup(func(mock *fail2bantest.MockClient) {
 				setMockJails(mock, []string{"sshd"})
 				// Pre-ban an IP for testing
 				_, _ = mock.BanIPWithContext(context.Background(), "192.168.1.100", "sshd")
@@ -71,14 +71,14 @@ func TestDemoTableDrivenWithFramework(t *testing.T) {
 		name        string
 		command     string
 		args        []string
-		setup       func(*fail2ban.MockClient)
+		setup       func(*fail2bantest.MockClient)
 		expectError bool
 		expectedOut string
 	}{
 		{
 			name:    "list jails success",
 			command: "list-jails",
-			setup: func(mock *fail2ban.MockClient) {
+			setup: func(mock *fail2bantest.MockClient) {
 				setMockJails(mock, []string{"sshd", "apache"})
 			},
 			expectError: false,
@@ -88,7 +88,7 @@ func TestDemoTableDrivenWithFramework(t *testing.T) {
 			name:    "status specific jail",
 			command: "status",
 			args:    []string{"sshd"},
-			setup: func(mock *fail2ban.MockClient) {
+			setup: func(mock *fail2bantest.MockClient) {
 				setMockJails(mock, []string{"sshd"})
 				mock.StatusJailData = map[string]string{"sshd": "Status for sshd"}
 			},

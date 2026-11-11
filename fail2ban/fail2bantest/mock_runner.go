@@ -1,8 +1,4 @@
-// Test support: MockRunner is a mock implementation of the Runner interface
-// used only by unit tests (see test_helpers.go for why it is not a _test.go
-// file).
-
-package fail2ban
+package fail2bantest
 
 import (
 	"context"
@@ -11,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/ivuorinen/f2b/constants"
+	"github.com/ivuorinen/f2b/fail2ban"
 )
 
 // MockRunner is a simple mock for Runner, used in unit tests.
@@ -41,8 +38,11 @@ func (m *MockRunner) CombinedOutput(name string, args ...string) ([]byte, error)
 	if name == constants.SudoCommand && len(args) > 0 {
 		inner, innerArgs = args[0], args[1:]
 	}
-	if err := validateCommandExecution(inner, innerArgs); err != nil {
-		return nil, err
+	if err := fail2ban.ValidateCommand(inner); err != nil {
+		return nil, fmt.Errorf(constants.ErrCommandValidationFailed, err)
+	}
+	if err := fail2ban.ValidateArguments(innerArgs); err != nil {
+		return nil, fmt.Errorf(constants.ErrArgumentValidationFailed, err)
 	}
 
 	key := name + " " + strings.Join(args, " ")
@@ -81,7 +81,7 @@ func (m *MockRunner) CombinedOutput(name string, args ...string) ([]byte, error)
 
 // CombinedOutputWithSudo returns a mocked response for sudo commands.
 func (m *MockRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte, error) {
-	checker := GetSudoChecker()
+	checker := fail2ban.GetSudoChecker()
 
 	// If mock checker says we're root, don't use sudo
 	if checker.IsRoot() {
@@ -89,7 +89,7 @@ func (m *MockRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte
 	}
 
 	// If command requires sudo and we have privileges, mock with sudo
-	if RequiresSudo(name, args...) && checker.HasSudoPrivileges() {
+	if fail2ban.RequiresSudo(name, args...) && checker.HasSudoPrivileges() {
 		sudoKey := "sudo " + name + " " + strings.Join(args, " ")
 
 		// Check for sudo-specific response first (with lock protection)
@@ -148,13 +148,6 @@ func (m *MockRunner) GetCalls() []string {
 	calls := make([]string, len(m.CallLog))
 	copy(calls, m.CallLog)
 	return calls
-}
-
-// CombinedOutputWithContext returns a mocked response or error for a command with context support.
-func (m *MockRunner) CombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error) {
-	return withContextCheck(ctx, func() ([]byte, error) {
-		return m.CombinedOutput(name, args...)
-	})
 }
 
 // CombinedOutputWithSudoContext returns a mocked response for sudo commands with context support.

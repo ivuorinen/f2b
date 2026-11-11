@@ -1,9 +1,11 @@
-package fail2ban
+package fail2bantest
 
 import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/ivuorinen/f2b/fail2ban"
 )
 
 func TestMockClientContextMethods(t *testing.T) {
@@ -117,7 +119,7 @@ func assertMockContextFilterMethods(t *testing.T, mockClient *MockClient) {
 	}
 
 	// Test TestFilterWithContext - may fail if filter doesn't exist, that's ok
-	result, err := mockClient.TestFilterWithContext(ctx, "sshd")
+	result, err := mockClient.TestFilterWithContext(ctx, "sshd", "")
 	if err == nil && result == "" {
 		t.Error("Expected test result or error, got neither")
 	}
@@ -147,7 +149,7 @@ func assertMockContextCanceled(t *testing.T, mockClient *MockClient) {
 func TestMockClientConfigurationMethods(t *testing.T) {
 	mockClient := NewMockClient()
 
-	testErr := NewInvalidIPError("test ip")
+	testErr := fail2ban.NewInvalidIPError("test ip")
 	// Set*(jail, ip, ...) — jail first. (The original test passed these
 	// swapped, which went unnoticed because it asserted nothing.)
 	mockClient.SetBanError("sshd", "192.168.1.1", testErr)
@@ -175,7 +177,12 @@ func TestMockClientConfigurationMethods(t *testing.T) {
 	if status, err := mockClient.StatusJailWithContext(ctx, "apache"); err != nil || status != "status: active" {
 		t.Errorf("StatusJailWithContext = (%q, %v), want (\"status: active\", nil)", status, err)
 	}
-	if filter, err := mockClient.TestFilterWithContext(ctx, "apache"); err != nil || filter != "filter test result" {
+	if filter, err := mockClient.TestFilterWithContext(
+		ctx,
+		"apache",
+		"",
+	); err != nil ||
+		filter != "filter test result" {
 		t.Errorf("TestFilterWithContext = (%q, %v), want (\"filter test result\", nil)", filter, err)
 	}
 }
