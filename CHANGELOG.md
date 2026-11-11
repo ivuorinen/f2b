@@ -121,6 +121,10 @@ ______________________________________________________________________
 
 ### Security
 
+- Pull requests to `main` require the PR Lint and prek checks, and two unused
+  repository secrets are removed.
+- The release workflow runs lint and tests before publishing, and pull requests
+  check the title and commit messages and run `govulncheck`.
 - **Privilege validation**: All user input validated before privilege escalation
 - **Secure command execution**: Uses argument arrays instead of shell string concatenation
 - **Test isolation**: Comprehensive mocking prevents accidental privileged operations in tests

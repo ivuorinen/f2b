@@ -5,6 +5,8 @@ name: govulncheck
 on:
   push:
     branches: [master, main]
+  pull_request:
+    branches: [master, main]
   schedule:
     - cron: "0 6 * * 1" # Every Monday at 06:00
 
