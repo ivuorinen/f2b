@@ -3,6 +3,7 @@ package fail2ban
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -70,16 +71,12 @@ func parseBanRecordLine(line, jail string) (*BanRecord, error) {
 
 // parseFullFormat handles the full ban-record format (ban + unban timestamps),
 // filling record's BannedAt and Remaining. Ban date/time is always
-// fields[1]/fields[2]. The unban timestamp position depends on the layout
-// emitted by fail2ban-client:
-//   - 8-field "IP date time + SECS = date time": "=" at index 5, unban at 6/7
+// fields[1]/fields[2]. Where the ban ends depends on the layout emitted by
+// fail2ban-client:
+//   - 8-field "IP date time + SECS = date time": "=" at index 5, ban time + SECS
 //   - 6/7-field "IP date time + date time [remaining]": unban at 4/5
 func parseFullFormat(fields []string, record *BanRecord) error {
 	bannedStr := fields[1] + " " + fields[2]
-	unbanStr := fields[4] + " " + fields[5]
-	if len(fields) >= 8 && fields[5] == "=" {
-		unbanStr = fields[6] + " " + fields[7]
-	}
 
 	// Parse ban time
 	tBan, err := parseBanTime(bannedStr)
@@ -92,17 +89,6 @@ func parseFullFormat(fields []string, record *BanRecord) error {
 		return ErrInvalidBanTime
 	}
 
-	// Parse unban time with fallback
-	tUnban, err := parseBanTime(unbanStr)
-	if err != nil {
-		getLogger().WithFields(Fields{
-			"jail":     record.Jail,
-			"ip":       record.IP,
-			"unbanStr": unbanStr,
-		}).Warnf("Failed to parse unban time: %v", err)
-		tUnban = time.Now().Add(constants.DefaultBanDuration) // 24h fallback
-	}
-
 	record.BannedAt = tBan
 	// fail2ban clamps a permanent ban's end to the year 9999, which would
 	// otherwise print as a remaining time of millions of days.
@@ -110,8 +96,44 @@ func parseFullFormat(fields []string, record *BanRecord) error {
 		record.Remaining = constants.PermanentBan
 		return nil
 	}
-	record.Remaining = formatDuration(max(tUnban.Unix()-time.Now().Unix(), 0))
+	unbanUnix, err := parseUnbanUnix(fields, tBan, record)
+	if err != nil {
+		return err
+	}
+	record.Remaining = formatDuration(max(unbanUnix-time.Now().Unix(), 0))
 	return nil
+}
+
+// parseUnbanUnix returns when the ban in fields ends, in Unix seconds. The
+// 8-field layout carries the ban duration, and ban time + SECS is used instead
+// of its end timestamp: that timestamp has no zone, so during a DST fall-back
+// hour it is read an hour early. Seconds are added as integers, because a
+// time.Duration overflows for a ban longer than about 292 years.
+func parseUnbanUnix(fields []string, tBan time.Time, record *BanRecord) (int64, error) {
+	if len(fields) >= 8 && fields[5] == "=" {
+		secs, err := strconv.ParseInt(fields[4], 10, 64)
+		if err != nil || secs < 0 {
+			getLogger().WithFields(Fields{
+				"jail": record.Jail,
+				"ip":   record.IP,
+				"secs": fields[4],
+			}).Warn("Failed to parse ban duration")
+			return 0, ErrInvalidBanTime
+		}
+		return tBan.Unix() + secs, nil
+	}
+
+	unbanStr := fields[4] + " " + fields[5]
+	tUnban, err := parseBanTime(unbanStr)
+	if err != nil {
+		getLogger().WithFields(Fields{
+			"jail":     record.Jail,
+			"ip":       record.IP,
+			"unbanStr": unbanStr,
+		}).Warnf("Failed to parse unban time: %v", err)
+		return time.Now().Add(constants.DefaultBanDuration).Unix(), nil // 24h fallback
+	}
+	return tUnban.Unix(), nil
 }
 
 // hasBanListLayout reports whether line has fail2ban's ban list layout,
