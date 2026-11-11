@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/spf13/cobra"
 
@@ -50,6 +53,30 @@ func PrintOutputTo(w io.Writer, data any, format string) error {
 		return fmt.Errorf("%s: %w", constants.MsgFailedToWriteOutput, err)
 	}
 	return nil
+}
+
+// escapeControlChars replaces every control character in s except tab and
+// newline (C0, DEL and C1) with a visible \xHH escape, for plain output of
+// log-derived text: a log line could otherwise retitle the terminal, move the
+// cursor or hide lines. A byte that is not valid UTF-8 is judged on its own, so
+// a raw 8-bit C1 byte, which 8-bit terminals act on, is escaped too. JSON
+// output needs none of this: the encoder escapes control characters.
+func escapeControlChars(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if r == utf8.RuneError && size == 1 {
+			r = rune(s[i])
+		}
+		if unicode.IsControl(r) && r != '\t' && r != '\n' {
+			fmt.Fprintf(&b, `\x%02x`, r)
+		} else {
+			b.WriteString(s[i : i+size])
+		}
+		i += size
+	}
+	return b.String()
 }
 
 // printedError marks an error that was already reported to the user via

@@ -197,6 +197,13 @@ allowed base directories listed under [Allowed Paths](#allowed-paths).
 `--log-file` is then opened through an `os.Root` anchored at that base, so a
 directory swapped for a symlink after validation cannot redirect the open.
 
+### Log-Derived Output
+
+Log lines can carry attacker-chosen text. Plain `logs`, `logs-watch` and
+`test-filter` output replaces control characters other than tab and newline
+with `\xHH` escapes, so a log line cannot retitle the terminal, move the cursor
+or hide lines. JSON output relies on the encoder's escaping.
+
 ## Safe Command Execution
 
 ### Argument Array Pattern

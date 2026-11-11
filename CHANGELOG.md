@@ -169,6 +169,8 @@ ______________________________________________________________________
   its allowed log base, so neither a leaf symlink nor a directory swapped for a
   symlink can redirect it outside the allowlist; a leaf symlink to a file inside
   the allowlist opens.
+- Plain `logs`, `logs-watch` and `test-filter` output shows control characters
+  from log lines as `\xHH` escapes instead of passing them to the terminal.
 - `sudo`, `fail2ban-regex`, `service` and `systemctl` are resolved to trusted
   absolute paths, as `fail2ban-client` already was.
 - `ALLOW_DEV_PATHS` is parsed as a boolean; `0` and `false` no longer enable it.

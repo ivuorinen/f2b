@@ -62,5 +62,14 @@ func printLogLines(out io.Writer, lines []string, format string) error {
 	if len(lines) == 0 {
 		return nil
 	}
-	return PrintOutputTo(out, strings.Join(lines, "\n"), format)
+	return printLogText(out, strings.Join(lines, "\n"), format)
+}
+
+// printLogText writes log-derived text, with its control characters escaped
+// in plain format; the JSON encoder escapes them itself.
+func printLogText(out io.Writer, text, format string) error {
+	if format != JSONFormat {
+		text = escapeControlChars(text)
+	}
+	return PrintOutputTo(out, text, format)
 }

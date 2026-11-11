@@ -50,6 +50,7 @@ func TestFilterCmd(client fail2ban.Client, config *Config) *cobra.Command {
 				return HandleClientError(err)
 			}
 
-			return PrintOutputTo(GetCmdOutput(cmd), out, config.Format)
+			// fail2ban-regex echoes the log lines it reads.
+			return printLogText(GetCmdOutput(cmd), out, config.Format)
 		}))
 }
