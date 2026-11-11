@@ -1,4 +1,4 @@
-package fail2ban
+package fail2ban_test
 
 import (
 	"context"
@@ -8,6 +8,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/fail2ban/fail2bantest"
 )
 
 // writeFail2banLog writes lines as dir/fail2ban.log.
@@ -29,7 +32,7 @@ func TestGetLogLinesWithContextDefaultLimit(t *testing.T) {
 		"2025-01-01 10:01:00 fail2ban.actions [1]: NOTICE [apache] Ban 192.168.1.1",
 		"2025-01-01 10:02:00 fail2ban.actions [1]: NOTICE [sshd] Ban 192.168.1.10",
 	)
-	client := &RealClient{LogDir: dir}
+	client := &fail2ban.RealClient{LogDir: dir}
 
 	lines, err := client.GetLogLinesWithContext(context.Background(), "sshd", "192.168.1.1")
 	require.NoError(t, err)
@@ -43,19 +46,19 @@ func TestGetLogLinesWithContextDefaultLimit(t *testing.T) {
 
 // TestBanIPWithContext tests the BanIPWithContext function
 func TestBanIPWithContext(t *testing.T) {
-	restoreRunner := WithTestRunner(t, GetRunner())
+	restoreRunner := fail2bantest.WithTestRunner(t, fail2ban.GetRunner())
 	defer restoreRunner()
 
 	tests := []struct {
 		name        string
-		setupMock   func(*MockRunner)
+		setupMock   func(*fail2bantest.MockRunner)
 		ip          string
 		jail        string
 		expectError bool
 	}{
 		{
 			name: "successful ban",
-			setupMock: func(m *MockRunner) {
+			setupMock: func(m *fail2bantest.MockRunner) {
 				m.SetResponse("fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
 				m.SetResponse("sudo fail2ban-client -V", []byte("Fail2Ban v0.11.0"))
 				m.SetResponse("fail2ban-client ping", []byte("Server replied: pong"))
@@ -73,11 +76,11 @@ func TestBanIPWithContext(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockRunner := NewMockRunner()
+			mockRunner := fail2bantest.NewMockRunner()
 			tt.setupMock(mockRunner)
-			SetRunner(mockRunner)
+			fail2ban.SetRunner(mockRunner)
 
-			client, err := NewClient("/var/log/fail2ban", "/etc/fail2ban/filter.d")
+			client, err := fail2ban.NewClient("/var/log/fail2ban", "/etc/fail2ban/filter.d")
 			require.NoError(t, err)
 
 			ctx := context.Background()
@@ -95,7 +98,7 @@ func TestBanIPWithContext(t *testing.T) {
 
 // newLimitReadClient returns a client over a log with three sshd entries for
 // 192.168.1.1 around one apache entry for the same IP.
-func newLimitReadClient(t *testing.T) *RealClient {
+func newLimitReadClient(t *testing.T) *fail2ban.RealClient {
 	t.Helper()
 	dir := t.TempDir()
 	writeFail2banLog(t, dir,
@@ -104,7 +107,7 @@ func newLimitReadClient(t *testing.T) *RealClient {
 		"2025-01-01 10:02:00 fail2ban.actions [1]: NOTICE [sshd] Unban 192.168.1.1",
 		"2025-01-01 10:03:00 fail2ban.actions [1]: NOTICE [sshd] Ban 192.168.1.1",
 	)
-	return &RealClient{LogDir: dir}
+	return &fail2ban.RealClient{LogDir: dir}
 }
 
 // TestGetLogLinesWithLimitContextOutcomes pins the exact result of the
