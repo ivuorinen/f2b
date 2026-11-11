@@ -94,7 +94,7 @@ ______________________________________________________________________
   matching fail2ban semantics.
 - Bumped Go to 1.26.
 - Logging migrated from logrus to the standard library's `log/slog`.
-- Toolchain go1.27.3 (language floor stays `go 1.26`); golangci-lint v2.15.0,
+- Toolchain go1.27.4 (language floor stays `go 1.26`); golangci-lint v2.15.0,
   goreleaser v2.19.0, gosec v2.30.0, prek v0.5.7, and current action pins.
 - **Security**: log directories are restricted to `/var/log` and filter
   directories to `/etc/fail2ban`, `/usr/local/etc/fail2ban` and
