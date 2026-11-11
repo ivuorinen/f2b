@@ -4,7 +4,16 @@
 // runner and sudo checker.
 //
 // Only test code imports this package, so neither it nor the testing package
-// reaches the f2b binary. MockClient and MockRunner reuse fail2ban's own jail
-// selection, log filtering and input validation, so a test passing against a
-// double does not depend on behavior the real client lacks.
+// reaches the f2b binary.
+//
+// MockRunner validates every command and its arguments with fail2ban's
+// validators before it returns a response, sudo-keyed responses included, as
+// OSRunner validates before it runs anything.
+//
+// MockClient reuses fail2ban's jail selection and log filtering, and validates
+// with fail2ban's validators, as RealClient does: ban and unban targets and
+// jails, log jail and IP filters, and log line limits. It does not validate
+// the address given to BannedInWithContext or the filter name and log path
+// given to TestFilterWithContext; test those against RealClient over a
+// MockRunner.
 package fail2bantest

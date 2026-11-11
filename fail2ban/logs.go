@@ -23,9 +23,10 @@ import (
 // Log reading and filtering for Fail2Ban logs, including rotated and
 // compressed logs.
 
-// validateLogFilters trims and validates the jail/IP filter values of a log
+// ValidateLogFilters trims and validates the jail/IP filter values of a log
 // read, so an invalid filter errors instead of silently matching nothing.
-func validateLogFilters(jailFilter, ipFilter string) (string, string, error) {
+// Exported so fail2bantest.MockClient applies the same rules.
+func ValidateLogFilters(jailFilter, ipFilter string) (string, string, error) {
 	jailFilter = strings.TrimSpace(jailFilter)
 	ipFilter = strings.TrimSpace(ipFilter)
 

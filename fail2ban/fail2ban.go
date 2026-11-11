@@ -207,14 +207,14 @@ func (c *RealClient) GetLogLinesWithLimitContext(ctx context.Context, jail, ip s
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if err := validateMaxLines(maxLines); err != nil {
+	if err := ValidateMaxLines(maxLines); err != nil {
 		return nil, err
 	}
 	if maxLines == 0 {
 		return []string{}, nil
 	}
 
-	jail, ip, err := validateLogFilters(jail, ip)
+	jail, ip, err := ValidateLogFilters(jail, ip)
 	if err != nil {
 		return nil, err
 	}
@@ -331,8 +331,9 @@ func (c *RealClient) GetLogLinesWithContext(ctx context.Context, jail, ip string
 	return c.GetLogLinesWithLimitContext(ctx, jail, ip, constants.DefaultLogLinesLimit)
 }
 
-// validateMaxLines rejects negative limits and limits above MaxLogLinesLimit.
-func validateMaxLines(maxLines int) error {
+// ValidateMaxLines rejects negative limits and limits above MaxLogLinesLimit.
+// Exported so fail2bantest.MockClient applies the same rules.
+func ValidateMaxLines(maxLines int) error {
 	if maxLines < 0 {
 		return fmt.Errorf(constants.ErrMaxLinesNegative, maxLines)
 	}

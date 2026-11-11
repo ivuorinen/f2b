@@ -3,6 +3,7 @@ package fail2bantest
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -37,7 +38,7 @@ type MockClient struct {
 	// Enhanced features for advanced testing
 	StatusAllData  string
 	StatusJailData map[string]string
-	BanRecords     []fail2ban.BanRecord
+	BanRecords     []fail2ban.BanRecord        // returned for the requested jails
 	BanResults     map[string]map[string]int   // jail -> ip -> result code
 	BanErrors      map[string]map[string]error // jail -> ip -> error
 	UnbanResults   map[string]map[string]int   // jail -> ip -> result code
@@ -45,11 +46,12 @@ type MockClient struct {
 	BannedIPs      map[string][]string         // jail -> list of banned IPs
 	LogLines       []string                    // configurable log lines
 	FilterTests    map[string]string           // filter -> test result
-	// Recorded query arguments so tests can assert that jail/ip flags actually
-	// reach the client (configured LogLines/BanRecords are returned verbatim).
+	// Recorded query arguments so tests can assert that jail/ip flags, limits
+	// and log files actually reach the client.
 	LastLogQuery        [2]string // last (jail, ip) passed to a log read
 	LastLogLimit        int       // last maxLines passed to a log read
 	LastBanRecordsJails []string  // last jails passed to GetBanRecordsWithContext
+	LastFilterLogFile   string    // last logFile passed to TestFilterWithContext
 }
 
 // NewMockClient creates a new MockClient with default jails and filters.
@@ -115,9 +117,22 @@ func (m *MockClient) StatusJailWithContext(ctx context.Context, jail string) (st
 	return fmt.Sprintf("Mock status for jail %s", jail), nil
 }
 
+// validateIPAction applies RealClient's ban/unban input checks before any
+// configured result, so a test cannot pass on a target or jail production
+// refuses.
+func validateIPAction(ip, jail string) error {
+	if err := fail2ban.ValidateBanTarget(ip); err != nil {
+		return err
+	}
+	return fail2ban.ValidateJail(jail)
+}
+
 // BanIPWithContext bans the given IP in the specified jail. Returns 0 if banned, 1 if already banned.
 func (m *MockClient) BanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
 	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	if err := validateIPAction(ip, jail); err != nil {
 		return 0, err
 	}
 	m.mu.Lock()
@@ -157,6 +172,9 @@ func (m *MockClient) BanIPWithContext(ctx context.Context, ip, jail string) (int
 // UnbanIPWithContext unbans the given IP in the specified jail. Returns 0 if unbanned, 1 if already unbanned.
 func (m *MockClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
 	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	if err := validateIPAction(ip, jail); err != nil {
 		return 0, err
 	}
 	m.mu.Lock()
@@ -217,7 +235,7 @@ func (m *MockClient) GetBanRecordsWithContext(ctx context.Context, jails []strin
 
 	// Use configured ban records if available
 	if len(m.BanRecords) > 0 {
-		return m.BanRecords, nil
+		return m.configuredBanRecords(jails), nil
 	}
 
 	// Mirror the real client: an empty list or any ""/"all" element queries
@@ -244,6 +262,22 @@ func (m *MockClient) GetBanRecordsWithContext(ctx context.Context, jails []strin
 	return recs, nil
 }
 
+// configuredBanRecords returns the configured BanRecords of the requested
+// jails, or all of them when every jail is requested: the real client queries
+// only the jails it is given.
+func (m *MockClient) configuredBanRecords(jails []string) []fail2ban.BanRecord {
+	if query.RequestsAllJails(jails) {
+		return m.BanRecords
+	}
+	recs := make([]fail2ban.BanRecord, 0, len(m.BanRecords))
+	for _, rec := range m.BanRecords {
+		if slices.Contains(jails, rec.Jail) {
+			recs = append(recs, rec)
+		}
+	}
+	return recs
+}
+
 // GetLogLinesWithContext returns the newest DefaultLogLinesLimit log lines
 // filtered by jail and/or IP, like the real client.
 func (m *MockClient) GetLogLinesWithContext(ctx context.Context, jail, ip string) ([]string, error) {
@@ -252,7 +286,8 @@ func (m *MockClient) GetLogLinesWithContext(ctx context.Context, jail, ip string
 
 // GetLogLinesWithLimitContext returns the newest maxLines log lines filtered
 // by jail and/or IP, recording the query and limit so tests can assert that
-// the command forwarded them.
+// the command forwarded them. It validates the limit and filters with
+// RealClient's validators, in the same order.
 func (m *MockClient) GetLogLinesWithLimitContext(ctx context.Context, jail, ip string, maxLines int) ([]string, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -261,6 +296,17 @@ func (m *MockClient) GetLogLinesWithLimitContext(ctx context.Context, jail, ip s
 	defer m.mu.Unlock()
 	m.LastLogQuery = [2]string{jail, ip}
 	m.LastLogLimit = maxLines
+
+	if err := fail2ban.ValidateMaxLines(maxLines); err != nil {
+		return nil, err
+	}
+	if maxLines == 0 {
+		return []string{}, nil
+	}
+	jail, ip, err := fail2ban.ValidateLogFilters(jail, ip)
+	if err != nil {
+		return nil, err
+	}
 
 	// Filter with the real client's filter (bracketed jail, canonical IP token
 	// matching) so tests can't pass against substring behavior the production
@@ -276,7 +322,7 @@ func (m *MockClient) GetLogLinesWithLimitContext(ctx context.Context, jail, ip s
 			lines = append(lines, l)
 		}
 	}
-	if maxLines > 0 && len(lines) > maxLines {
+	if len(lines) > maxLines {
 		lines = lines[len(lines)-maxLines:]
 	}
 	return lines, nil
@@ -295,13 +341,15 @@ func (m *MockClient) ListFiltersWithContext(ctx context.Context) ([]string, erro
 	return filters, nil
 }
 
-// TestFilterWithContext simulates running fail2ban-regex for the given filter.
-func (m *MockClient) TestFilterWithContext(ctx context.Context, filter, _ string) (string, error) {
+// TestFilterWithContext simulates running fail2ban-regex for the given filter,
+// recording logFile so tests can assert that the command forwarded it.
+func (m *MockClient) TestFilterWithContext(ctx context.Context, filter, logFile string) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.LastFilterLogFile = logFile
 	// Check configured filter tests first
 	if result, ok := m.FilterTests[filter]; ok {
 		return result, nil

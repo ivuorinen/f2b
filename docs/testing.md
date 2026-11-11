@@ -262,6 +262,10 @@ mock.Banned = map[string]map[string]time.Time{
 }
 ```
 
+`MockClient` validates ban and unban targets and jails, log filters and log line limits with `fail2ban`'s
+validators before any configured result, so fixtures must use inputs `RealClient` accepts. Configured
+`BanRecords` are returned only for the requested jails.
+
 ### MockRunner Setup
 
 For testing command execution:
