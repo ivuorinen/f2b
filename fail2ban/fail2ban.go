@@ -425,7 +425,7 @@ func parseFilterFile(content string) (logPath string, hasFailregex bool) {
 
 // TestFilterWithContext runs fail2ban-regex for filter against logFile, or
 // against the logpath the filter declares when logFile is empty.
-func (c *RealClient) TestFilterWithContext(ctx context.Context, filter, logFile string) (string, error) {
+func (c *RealClient) TestFilterWithContext(ctx context.Context, filter, logFile string) (output string, err error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -434,17 +434,46 @@ func (c *RealClient) TestFilterWithContext(ctx context.Context, filter, logFile 
 		return "", err
 	}
 
-	// fail2ban-regex runs under sudo (RequiresSudo), so the log path, whether
-	// the caller named it or the filter declared it, must pass the log
-	// allowlist before it reaches argv — otherwise `sudo fail2ban-regex <log>
+	// fail2ban-regex runs under sudo (RequiresSudo) and prints the lines it
+	// reads, so the log, whether the caller named it or the filter declared
+	// it, must pass the log allowlist — otherwise `sudo fail2ban-regex <log>
 	// <filter>` is a read-as-root primitive (e.g. /etc/shadow).
-	validatedLogPath, err := ValidatePathWithSecurity(logPath, CreateLogPathConfig())
+	logConfig := CreateLogPathConfig()
+	validatedLogPath, err := ValidatePathWithSecurity(logPath, logConfig)
 	if err != nil {
 		return "", fmt.Errorf("filter %q has an invalid logpath %q: %w", filter, logPath, err)
 	}
 
+	// When f2b itself runs as root (`sudo f2b`, the privilege boundary), the
+	// validated path is not handed on: a user who can write a directory on it
+	// could swap the file for a symlink before fail2ban-regex opens it. f2b
+	// opens the log through the allowlisted directory that holds it, where no
+	// component can lead outside, refuses anything but a regular file of at
+	// most DefaultMaxFileSize bytes, and gives fail2ban-regex a copy in a
+	// private directory that is removed afterwards. An ordinary user whose
+	// commands escalate one at a time can already run `sudo fail2ban-regex
+	// <file>` directly, so there is no boundary to protect, and the path is
+	// passed as is: f2b reading the log with that user's privileges would
+	// refuse logs only root can read.
+	regexLog := validatedLogPath
+	if GetSudoChecker().IsRoot() {
+		var removeCopy func() error
+		regexLog, removeCopy, err = copyLogForRegex(
+			validatedLogPath,
+			logConfig.AllowedBasePaths,
+			constants.DefaultMaxFileSize,
+		)
+		if err != nil {
+			return "", fmt.Errorf("filter %q: cannot read log %q: %w", filter, validatedLogPath, err)
+		}
+		defer func() {
+			if rmErr := removeCopy(); rmErr != nil {
+				err = errors.Join(err, fmt.Errorf("could not remove the log copy %q: %w", regexLog, rmErr))
+			}
+		}()
+	}
+
 	getLogger().WithFields(Fields{"filter": filter, "logpath": validatedLogPath}).Info("Running fail2ban-regex")
-	output, err := c.cmdRunner().CombinedOutputWithSudoContext(
-		ctx, constants.Fail2BanRegexCommand, validatedLogPath, cleanPath)
-	return string(output), err
+	out, err := c.cmdRunner().CombinedOutputWithSudoContext(ctx, constants.Fail2BanRegexCommand, regexLog, cleanPath)
+	return string(out), err
 }

@@ -59,7 +59,7 @@ DO require sudo/root, because fail2ban's control socket
 
 ### Allowed Paths
 
-`test-filter` runs `sudo fail2ban-regex <logpath> <filter>`, and fail2ban-regex
+`test-filter` runs `sudo fail2ban-regex <log> <filter>`, and fail2ban-regex
 prints the lines it reads, so every allowed directory is one root can be made to
 read. The allowlists are therefore limited to fail2ban's own locations:
 
@@ -73,6 +73,17 @@ read. The allowlists are therefore limited to fail2ban's own locations:
 `/home`, `/opt` and `/usr/local` as whole trees are not allowed: under
 `sudo f2b` they let a filter file name another user's private files as its
 logpath.
+
+When f2b runs as root (`sudo f2b`, the privilege boundary), `test-filter` does
+not hand fail2ban-regex the validated log path, which a user who can write a
+directory on it could swap for a symlink before fail2ban-regex opens it. f2b
+opens the log through an `os.Root` anchored at the allowed log directory that
+holds it, refuses anything but a regular file of at most `DefaultMaxFileSize`
+bytes, and passes fail2ban-regex a copy in a private (`0700`) temporary
+directory that is removed afterwards. When f2b runs as an ordinary user and
+escalates per command, it passes the validated path: that user can already run
+`sudo fail2ban-regex <file>` directly, so there is no boundary to protect, and
+logs only root can read keep working.
 
 ### Trusted Binary Directories
 

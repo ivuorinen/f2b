@@ -175,6 +175,9 @@ ______________________________________________________________________
   absolute paths, as `fail2ban-client` already was.
 - `ALLOW_DEV_PATHS` is parsed as a boolean; `0` and `false` no longer enable it.
 - `test-filter` records the filter and log path it reads as root.
+- When f2b runs as root, `test-filter` reads the log through the allowlisted
+  directory and hands fail2ban-regex a private copy, so swapping the file for a
+  symlink after validation no longer makes root read another file.
 - The release workflow runs lint and tests before publishing, and pull requests
   check the title and commit messages and run `govulncheck`.
 - Test fixtures no longer contain publicly routable IP addresses.
