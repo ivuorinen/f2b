@@ -186,7 +186,23 @@ Clean up after: `rm -f graphify-out/.graphify_old.json`
 Skip Steps 1–3. Re-run clustering on the existing graph:
 
 ```bash
-graphify cluster-only .
+$(cat graphify-out/.graphify_python) -m graphify cluster-only . --no-label
 ```
 
-`graphify cluster-only .` is **self-contained**: it re-clusters, names communities, and regenerates `GRAPH_REPORT.md`, `graph.json`, and `graph.html` from the existing graph. **Do not re-run Steps 5–9** — they read intermediate files (`.graphify_extract.json`, `.graphify_detect.json`, `.graphify_analysis.json`) that a prior build's cleanup (Step 9) already deleted, so they raise `FileNotFoundError` (#1392). When it finishes, present the refreshed `GRAPH_REPORT.md` summary as usual.
+`--no-label` keeps graphify from naming communities through a third-party LLM. Without it, 0.9.16's `cluster-only`
+names them itself whenever `graphify-out/.graphify_labels.json` is missing: it calls `generate_community_labels`,
+which picks a provider from whatever API key or AWS setting the environment holds and sends it the communities'
+node labels. With `--no-label` it makes no LLM call. It reuses the saved labels (a community whose membership
+changed is renamed after its hub node), or writes `Community N` placeholders when no labels file exists. Ignore its
+hint to run `graphify label`: that subcommand is the LLM path.
+
+The command is **self-contained**: it re-clusters and regenerates `GRAPH_REPORT.md`, `graph.json`, `graph.html` and
+`.graphify_analysis.json` from the existing graph. **Do not re-run Steps 5–9** — they read intermediate files
+(`.graphify_extract.json`, `.graphify_detect.json`) that a prior build's cleanup (Step 9) already deleted, so they
+raise `FileNotFoundError` (#1392).
+
+If the report shows `Community N` placeholders, name those communities yourself, as Step 5 does: take each
+community's node IDs from `graphify-out/.graphify_analysis.json` and their labels from `graphify-out/graph.json`.
+Read `graphify-out/.graphify_labels.json`, overwrite it with the Write tool in the same shape (`{"0": "Name", ...}`),
+and run the command above again. Clustering is seeded, so the second run gets the same communities and keeps your
+names. When it finishes, present the refreshed `GRAPH_REPORT.md` summary as usual.
