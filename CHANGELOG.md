@@ -59,6 +59,8 @@ ______________________________________________________________________
   `StandardMockSetup`, `MustMock*`, `AssertError`) moved from `fail2ban` to
   the test-only `fail2ban/fail2bantest` package, and their helpers take
   `testing.TB` (`TestingInterface` is gone).
+- The vendored graphify skill is pinned to the version it was reviewed at
+  (0.9.16), and its PATH-resolved `hook-guard` hooks are removed.
 - **BREAKING**: `test-filter` takes an optional log file as its second argument,
   because stock filters declare no logpath; the `Client` method gained a
   `logFile` parameter. The `Runner` interface is reduced to
@@ -152,6 +154,13 @@ ______________________________________________________________________
 ### Security
 
 - An empty path allowlist refuses every path; it used to mean no restrictions.
+- The vendored graphify skill no longer sends documents to Gemini when
+  `GEMINI_API_KEY` or `GOOGLE_API_KEY` is set, runs extraction subagents with
+  only Read and Write, passes questions, answers and node labels to the shell
+  in quoted heredocs, and takes the Neo4j password from `NEO4J_PASSWORD`
+  instead of the command line.
+- The project settings no longer pre-approve the context-mode code execution
+  tools, and `git commit` and `git push` always ask.
 - Pull requests to `main` require the PR Lint and prek checks, and two unused
   repository secrets are removed.
 - Path validation resolves every path component, so a symlinked ancestor can no

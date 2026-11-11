@@ -30,10 +30,13 @@ Graphify clones into `~/.graphify/repos/<owner>/<repo>` and reuses existing clon
 The skill pipeline writes all intermediate and final outputs to `graphify-out/` in the current working directory. Running the skill on each subfolder separately will clobber the same output dir. Instead, use the CLI directly for each subfolder — it places `graphify-out/` *inside* the scanned path:
 
 ```bash
-graphify extract ./core/     # → ./core/graphify-out/graph.json
-graphify extract ./service/  # → ./service/graphify-out/graph.json
-graphify extract ./platform/ # → ./platform/graphify-out/graph.json
-# Add --backend gemini|kimi|openai|deepseek|claude-cli depending on which API key you have set
+$(cat graphify-out/.graphify_python) -m graphify extract ./core/ --code-only     # → ./core/graphify-out/graph.json
+$(cat graphify-out/.graphify_python) -m graphify extract ./service/ --code-only  # → ./service/graphify-out/graph.json
+$(cat graphify-out/.graphify_python) -m graphify extract ./platform/ --code-only # → ./platform/graphify-out/graph.json
+# --code-only keeps every file on this machine. Without it, `graphify extract`
+# sends docs, papers and images to whichever LLM provider has a key in the
+# environment (Gemini first), even one exported for another tool. Extract
+# those with /graphify in the assistant instead.
 
 # Then merge at the project root:
 graphify merge-graphs \

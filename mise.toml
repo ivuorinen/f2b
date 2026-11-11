@@ -31,8 +31,9 @@ node = "24.22.2"
 "npm:markdown-link-check" = "3.15.0"
 prek = "0.5.7"
 "pypi:check-jsonschema" = "0.39.0"
-# Renovate does not read `with`: bump mdformat-gfm by hand with mdformat.
-"pypi:mdformat" = { version = "1.0.0", with = ["mdformat-gfm==1.0.0"] }
+# Renovate does not read `with`: bump the plugins by hand with mdformat.
+# mdformat-frontmatter keeps the YAML frontmatter of .claude/agents/*.md.
+"pypi:mdformat" = { version = "1.0.0", with = ["mdformat-gfm==1.0.0", "mdformat-frontmatter==2.2.0"] }
 shfmt = "3.14.1"
 uv = "0.13.6"
 yamlfmt = "0.21.0"
