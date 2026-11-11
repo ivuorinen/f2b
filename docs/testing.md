@@ -508,13 +508,13 @@ func BenchmarkBanIP(b *testing.B) {
 ### Coverage Verification
 
 ```bash
-# Run tests with coverage
-go test -coverprofile=coverage.out ./...
+# Run race-enabled tests, write coverage.out and report branch coverage with gobco
+mise run test-cov
 
-# View coverage report
+# View the statement coverage report
 go tool cover -html=coverage.out
 
-# Check coverage percentage
+# Check the statement coverage percentage
 go tool cover -func=coverage.out | grep total
 ```
 

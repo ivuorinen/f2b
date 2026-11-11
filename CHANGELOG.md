@@ -123,6 +123,7 @@ ______________________________________________________________________
 - Development tasks and tool pins moved from the Makefile to `mise.toml`, and
   `codex.sh` is removed. The prek hooks and CI workflows run every tool through
   mise, so `mise.toml` is the only version pin.
+- `mise run test-cov` also reports branch coverage per package with `gobco`.
 - Releases use CalVer tags: `mise run release` pushes the next one (from
   gh-calver), and CI builds and signs the release.
 

@@ -355,8 +355,8 @@ ______________________________________________________________________
 # Run all tests
 go test ./...
 
-# Run with coverage
-go test -coverprofile=coverage.out ./...
+# Run with coverage: writes coverage.out and reports branch coverage
+mise run test-cov
 
 # Security-focused testing with enhanced validation
 F2B_TEST_SUDO=true go test ./fail2ban -run TestSudo
