@@ -245,7 +245,15 @@ Load files from `graphify-out/.graphify_uncached.txt`. Split into chunks of 20-2
 
 Call the Agent tool multiple times IN THE SAME RESPONSE - one call per chunk. This is the only way they run in parallel. If you make one Agent call, wait, then make another, you are doing it sequentially and defeating the purpose.
 
-**IMPORTANT - subagent type:** Always use `subagent_type="graphify-extractor"` (defined in `.claude/agents/graphify-extractor.md`). It has only Read and Write: the documents it reads can carry prompt injection, so it gets no shell and no network. Do NOT use `Explore` - it cannot write chunk files to disk, which silently drops extraction results. Do NOT use `general-purpose` - it holds Bash and the user's credentials while reading untrusted content.
+**IMPORTANT - subagent type:** Always use `subagent_type="graphify-extractor"` (defined in
+`.claude/agents/graphify-extractor.md`). It has only Read and Write: the documents it reads can carry prompt
+injection, so it gets no shell and no network, and a PreToolUse hook in its definition blocks any Write except
+`graphify-out/.graphify_chunk_<N>.json` in the working directory (this session runs `graphify-out/.graphify_python`
+as a command, so a free Write would be code execution). Claude Code runs a project agent's frontmatter hooks only
+after the workspace trust dialog was accepted for this folder; in an untrusted folder or a `-p` session the hook is
+skipped and Write is unrestricted. Do NOT use `Explore` - it cannot write chunk files to disk, which
+silently drops extraction results. Do NOT use `general-purpose` - it holds Bash and the user's credentials while
+reading untrusted content.
 
 Concrete example for 3 chunks:
 ```
