@@ -384,47 +384,21 @@ func TestGetBanRecordsWithInvalidTimes(t *testing.T) {
 		FilterDir: "/etc/fail2ban/filter.d",
 	}
 
+	// validRecord follows the record under test in every timed case.
+	const validRecord = "\n192.168.1.101 2023-01-01 14:00:00 + 2023-01-01 15:00:00 extra field"
 	tests := []struct {
 		name          string
 		mockResponse  string
 		expectedCount int
-		expectSkipped bool
 	}{
-		{
-			name: "valid times",
-			mockResponse: "192.168.1.100 2023-01-01 12:00:00 + 2023-01-01 13:00:00 extra field\n" +
-				"192.168.1.101 2023-01-01 14:00:00 + 2023-01-01 15:00:00 extra field",
-			expectedCount: 2,
-			expectSkipped: false,
-		},
-		{
-			name: "invalid ban time - entry should be skipped",
-			mockResponse: "192.168.1.100 invalid-date 12:00:00 + 2023-01-01 13:00:00 extra field\n" +
-				"192.168.1.101 2023-01-01 14:00:00 + 2023-01-01 15:00:00 extra field",
-			expectedCount: 1,
-			expectSkipped: true,
-		},
-		{
-			name: "invalid unban time - entry should use fallback",
-			mockResponse: "192.168.1.100 2023-01-01 12:00:00 + invalid-time 13:00:00 extra field\n" +
-				"192.168.1.101 2023-01-01 14:00:00 + 2023-01-01 15:00:00 extra field",
-			expectedCount: 2,
-			expectSkipped: false,
-		},
-		{
-			name: "both times invalid - entry should be skipped",
-			mockResponse: "192.168.1.100 invalid-date 12:00:00 + invalid-time 13:00:00 extra field\n" +
-				"192.168.1.101 2023-01-01 14:00:00 + 2023-01-01 15:00:00 extra field",
-			expectedCount: 1,
-			expectSkipped: true,
-		},
-		{
-			name: "short format fallback",
-			mockResponse: "192.168.1.100 banned extra field\n" +
-				"192.168.1.101 also banned extra",
-			expectedCount: 2,
-			expectSkipped: false,
-		},
+		{"valid times", "192.168.1.100 2023-01-01 12:00:00 + 2023-01-01 13:00:00 extra field" + validRecord, 2},
+		{"invalid ban time - entry should be skipped",
+			"192.168.1.100 invalid-date 12:00:00 + 2023-01-01 13:00:00 extra field" + validRecord, 1},
+		{"invalid unban time - entry should use fallback",
+			"192.168.1.100 2023-01-01 12:00:00 + invalid-time 13:00:00 extra field" + validRecord, 2},
+		{"both times invalid - entry should be skipped",
+			"192.168.1.100 invalid-date 12:00:00 + invalid-time 13:00:00 extra field" + validRecord, 1},
+		{"short format fallback", "192.168.1.100 banned extra field\n192.168.1.101 also banned extra", 2},
 	}
 
 	for _, tt := range tests {

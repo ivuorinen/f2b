@@ -129,54 +129,18 @@ func TestCompareVersions(t *testing.T) {
 		v2       string
 		expected int
 	}{
-		{
-			name:     "equal versions",
-			v1:       "1.0.0",
-			v2:       "1.0.0",
-			expected: 0,
-		},
-		{
-			name:     "v1 less than v2",
-			v1:       "0.11.0",
-			v2:       "1.0.0",
-			expected: -1,
-		},
-		{
-			name:     "v1 greater than v2",
-			v1:       "1.2.0",
-			v2:       "1.0.0",
-			expected: 1,
-		},
-		{
-			name:     "patch version difference",
-			v1:       "1.0.1",
-			v2:       "1.0.2",
-			expected: -1,
-		},
-		{
-			name:     "prerelease versions",
-			v1:       "1.0.0-alpha",
-			v2:       "1.0.0",
-			expected: -1,
-		},
-		{
-			name:     "invalid version strings fallback to string comparison",
-			v1:       "invalid.version",
-			v2:       "another.invalid",
-			expected: 1, // "invalid.version" > "another.invalid" lexicographically
-		},
-		{
-			name:     "mixed valid and invalid",
-			v1:       "1.0.0",
-			v2:       "invalid",
-			expected: -1, // string comparison: "1.0.0" < "invalid"
-		},
-		{
-			name:     "version with build metadata",
-			v1:       "1.0.0+build.1",
-			v2:       "1.0.0+build.2",
-			expected: 0, // build metadata should be ignored in semantic versioning
-		},
+		{name: "equal versions", v1: "1.0.0", v2: "1.0.0", expected: 0},
+		{name: "v1 less than v2", v1: "0.11.0", v2: "1.0.0", expected: -1},
+		{name: "v1 greater than v2", v1: "1.2.0", v2: "1.0.0", expected: 1},
+		{name: "patch version difference", v1: "1.0.1", v2: "1.0.2", expected: -1},
+		{name: "prerelease versions", v1: "1.0.0-alpha", v2: "1.0.0", expected: -1},
+		// Not versions: compared as strings, "invalid.version" > "another.invalid".
+		{name: "invalid version strings fallback to string comparison",
+			v1: "invalid.version", v2: "another.invalid", expected: 1},
+		// String comparison: "1.0.0" < "invalid".
+		{name: "mixed valid and invalid", v1: "1.0.0", v2: "invalid", expected: -1},
+		// Build metadata is ignored, as semantic versioning requires.
+		{name: "version with build metadata", v1: "1.0.0+build.1", v2: "1.0.0+build.2", expected: 0},
 		{
 			name:     "numeric prerelease identifiers compare numerically",
 			v1:       "0.11.0-rc.9",
@@ -189,12 +153,7 @@ func TestCompareVersions(t *testing.T) {
 			v2:       "1.0.0-alpha.beta",
 			expected: -1,
 		},
-		{
-			name:     "shorter prerelease sorts first",
-			v1:       "1.0.0-alpha",
-			v2:       "1.0.0-alpha.1",
-			expected: -1,
-		},
+		{name: "shorter prerelease sorts first", v1: "1.0.0-alpha", v2: "1.0.0-alpha.1", expected: -1},
 	}
 
 	for _, tt := range tests {

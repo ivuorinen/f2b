@@ -184,54 +184,19 @@ func TestLogFiltering(t *testing.T) {
 		ipFilter      string
 		expectedCount int
 	}{
-		{
-			name:          "no filter",
-			jailFilter:    "",
-			ipFilter:      "",
-			expectedCount: 5,
-		},
-		{
-			name:          "filter by jail sshd",
-			jailFilter:    "sshd",
-			ipFilter:      "",
-			expectedCount: 2,
-		},
-		{
-			name:          "filter by IP 192.168.1.100",
-			jailFilter:    "",
-			ipFilter:      "192.168.1.100",
-			expectedCount: 2,
-		},
+		{name: "no filter", expectedCount: 5},
+		{name: "filter by jail sshd", jailFilter: "sshd", expectedCount: 2},
+		{name: "filter by IP 192.168.1.100", ipFilter: "192.168.1.100", expectedCount: 2},
 		{
 			name:          "filter by jail apache and IP 192.168.1.101",
 			jailFilter:    "apache",
 			ipFilter:      "192.168.1.101",
 			expectedCount: 2,
 		},
-		{
-			name:          "filter by nonexistent jail",
-			jailFilter:    "nonexistent",
-			ipFilter:      "",
-			expectedCount: 0,
-		},
-		{
-			name:          "filter by nonexistent IP",
-			jailFilter:    "",
-			ipFilter:      "10.0.0.1",
-			expectedCount: 0,
-		},
-		{
-			name:          "filter by 'all' jail",
-			jailFilter:    "all",
-			ipFilter:      "",
-			expectedCount: 5,
-		},
-		{
-			name:          "filter by 'all' IP",
-			jailFilter:    "",
-			ipFilter:      "all",
-			expectedCount: 5,
-		},
+		{name: "filter by nonexistent jail", jailFilter: "nonexistent", expectedCount: 0},
+		{name: "filter by nonexistent IP", ipFilter: "10.0.0.1", expectedCount: 0},
+		{name: "filter by 'all' jail", jailFilter: "all", expectedCount: 5},
+		{name: "filter by 'all' IP", ipFilter: "all", expectedCount: 5},
 	}
 
 	for _, tt := range tests {
