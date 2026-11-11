@@ -205,5 +205,7 @@ ______________________________________________________________________
 - `banned` reports an error when fail2ban lists bans for a jail and none can be
   read (for example, bans on a non-address ID) instead of showing no bans. In
   `banned all`, the other jails are still listed.
+- After a run with `--log-file`, `Logger` writes to stderr again instead of the
+  closed file, so later `Execute` runs in the same process keep their logs.
 
 ______________________________________________________________________

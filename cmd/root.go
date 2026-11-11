@@ -282,12 +282,15 @@ func registerLogFileCleanup(f *os.File) {
 	logFileMutex.Unlock()
 }
 
-// cleanupResources performs cleanup of allocated resources
+// cleanupResources closes the --log-file after handing Logger back to stderr,
+// so a later Execute run in the same process (tests, embedding) does not log
+// into the closed file.
 func cleanupResources() {
 	logFileMutex.Lock()
 	defer logFileMutex.Unlock()
 
 	if logFile != nil {
+		Logger.SetOutput(os.Stderr)
 		if err := logFile.Close(); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: Failed to close log file: %v\n", err)
 		}

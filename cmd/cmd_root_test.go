@@ -536,6 +536,7 @@ func TestPersistentPreRun(t *testing.T) {
 	originalOutput := Logger.Output()
 	originalLevel := Logger.GetLevel()
 	defer func() {
+		cleanupResources() // close the log file PersistentPreRunE opened
 		cfg = originalCfg
 		Logger.SetOutput(originalOutput)
 		Logger.SetLevel(originalLevel)
