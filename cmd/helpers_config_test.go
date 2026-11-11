@@ -9,16 +9,17 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/fail2ban/fail2bantest"
 )
 
 // TestProcessBanOperation tests the ProcessBanOperationWithContext function
 func TestProcessBanOperation(t *testing.T) {
-	restoreRunner := fail2ban.WithTestRunner(t, fail2ban.GetRunner())
+	restoreRunner := fail2bantest.WithTestRunner(t, fail2ban.GetRunner())
 	defer restoreRunner()
 
 	tests := []struct {
 		name        string
-		setupMock   func(*fail2ban.MockRunner)
+		setupMock   func(*fail2bantest.MockRunner)
 		ip          string
 		jails       []string
 		expectError bool
@@ -26,8 +27,8 @@ func TestProcessBanOperation(t *testing.T) {
 	}{
 		{
 			name: "successful ban single jail",
-			setupMock: func(m *fail2ban.MockRunner) {
-				fail2ban.StandardMockSetup(m)
+			setupMock: func(m *fail2bantest.MockRunner) {
+				fail2bantest.StandardMockSetup(m)
 				m.SetResponse("fail2ban-client set sshd banip 192.168.1.1", []byte("1"))
 				m.SetResponse("sudo fail2ban-client set sshd banip 192.168.1.1", []byte("1"))
 			},
@@ -38,8 +39,8 @@ func TestProcessBanOperation(t *testing.T) {
 		},
 		{
 			name: "successful ban multiple jails",
-			setupMock: func(m *fail2ban.MockRunner) {
-				fail2ban.StandardMockSetup(m)
+			setupMock: func(m *fail2bantest.MockRunner) {
+				fail2bantest.StandardMockSetup(m)
 				m.SetResponse("fail2ban-client set sshd banip 192.168.1.1", []byte("1"))
 				m.SetResponse("sudo fail2ban-client set sshd banip 192.168.1.1", []byte("1"))
 				m.SetResponse("fail2ban-client set apache banip 192.168.1.1", []byte("1"))
@@ -52,8 +53,8 @@ func TestProcessBanOperation(t *testing.T) {
 		},
 		{
 			name: "invalid IP address",
-			setupMock: func(m *fail2ban.MockRunner) {
-				fail2ban.StandardMockSetup(m)
+			setupMock: func(m *fail2bantest.MockRunner) {
+				fail2bantest.StandardMockSetup(m)
 			},
 			ip:          "invalid.ip",
 			jails:       []string{"sshd"},
@@ -63,7 +64,7 @@ func TestProcessBanOperation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockRunner := fail2ban.NewMockRunner()
+			mockRunner := fail2bantest.NewMockRunner()
 			tt.setupMock(mockRunner)
 			fail2ban.SetRunner(mockRunner)
 

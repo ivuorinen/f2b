@@ -17,8 +17,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ivuorinen/f2b/constants"
-
 	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/fail2ban/fail2bantest"
 )
 
 // CommandTestResult represents the result of a command execution
@@ -45,13 +45,13 @@ type CommandTestBuilder struct {
 	name           string
 	command        string
 	args           []string
-	mockClient     *fail2ban.MockClient
+	mockClient     *fail2bantest.MockClient
 	config         *Config
 	expectError    bool
 	expectedOut    string
 	expectedOutSet bool
 	exactMatch     bool
-	setupFunc      func(*fail2ban.MockClient)
+	setupFunc      func(*fail2bantest.MockClient)
 	environment    *TestEnvironment
 }
 
@@ -75,7 +75,7 @@ func NewTestEnvironment() *TestEnvironment {
 // WithPrivileges sets up sudo checker with specified privileges
 func (env *TestEnvironment) WithPrivileges(hasPrivileges bool) *TestEnvironment {
 	env.originalChecker = fail2ban.GetSudoChecker()
-	mockChecker := &fail2ban.MockSudoChecker{
+	mockChecker := &fail2bantest.MockSudoChecker{
 		MockHasPrivileges:     hasPrivileges,
 		ExplicitPrivilegesSet: true,
 	}
@@ -89,7 +89,7 @@ func (env *TestEnvironment) WithPrivileges(hasPrivileges bool) *TestEnvironment 
 // WithMockRunner sets up a mock runner with common responses
 func (env *TestEnvironment) WithMockRunner() *TestEnvironment {
 	env.originalRunner = fail2ban.GetRunner()
-	mockRunner := fail2ban.NewMockRunner()
+	mockRunner := fail2bantest.NewMockRunner()
 	// Set up common responses
 	mockRunner.SetResponse(constants.MockCommandVersion, []byte(constants.VersionOutput))
 	mockRunner.SetResponse(constants.MockCommandPing, []byte(constants.PingOutput))
@@ -187,7 +187,7 @@ func (ctb *CommandTestBuilder) WithArgs(args ...string) *CommandTestBuilder {
 }
 
 // WithMockClient sets the mock client for the test
-func (ctb *CommandTestBuilder) WithMockClient(mock *fail2ban.MockClient) *CommandTestBuilder {
+func (ctb *CommandTestBuilder) WithMockClient(mock *fail2bantest.MockClient) *CommandTestBuilder {
 	ctb.mockClient = mock
 	return ctb
 }
@@ -202,14 +202,14 @@ func (ctb *CommandTestBuilder) WithJSONFormat() *CommandTestBuilder {
 }
 
 // WithSetup provides a function to set up the mock client with specific data
-func (ctb *CommandTestBuilder) WithSetup(setupFunc func(*fail2ban.MockClient)) *CommandTestBuilder {
+func (ctb *CommandTestBuilder) WithSetup(setupFunc func(*fail2bantest.MockClient)) *CommandTestBuilder {
 	ctb.setupFunc = setupFunc
 	return ctb
 }
 
 // WithServiceSetup provides a function to set up mock runner for service commands
-func (ctb *CommandTestBuilder) WithServiceSetup(setupFunc func(*fail2ban.MockRunner)) *CommandTestBuilder {
-	ctb.setupFunc = func(_ *fail2ban.MockClient) {
+func (ctb *CommandTestBuilder) WithServiceSetup(setupFunc func(*fail2bantest.MockRunner)) *CommandTestBuilder {
+	ctb.setupFunc = func(_ *fail2bantest.MockClient) {
 		// Save and restore the package-global sudo checker and runner so this
 		// setup does not leak mock state into later tests (which made outcomes
 		// order-dependent under `go test -shuffle=on`).
@@ -221,14 +221,14 @@ func (ctb *CommandTestBuilder) WithServiceSetup(setupFunc func(*fail2ban.MockRun
 		})
 
 		// Set up sudo checker
-		mockChecker := &fail2ban.MockSudoChecker{
+		mockChecker := &fail2bantest.MockSudoChecker{
 			MockHasPrivileges:     true,
 			ExplicitPrivilegesSet: true,
 		}
 		fail2ban.SetSudoChecker(mockChecker)
 
 		// Create and set up mock runner
-		mockRunner := &fail2ban.MockRunner{
+		mockRunner := &fail2bantest.MockRunner{
 			Responses: make(map[string][]byte),
 			Errors:    make(map[string]error),
 		}
@@ -277,7 +277,7 @@ func (ctb *CommandTestBuilder) Run() *CommandTestResult {
 
 	// Set up default mock client if none provided
 	if ctb.mockClient == nil {
-		ctb.mockClient = fail2ban.NewMockClient()
+		ctb.mockClient = fail2bantest.NewMockClient()
 	}
 
 	// Apply setup function if provided
@@ -332,7 +332,7 @@ func (ctb *CommandTestBuilder) executeCommand() (string, error) {
 	case "test-filter":
 		cmd = TestFilterCmd(ctb.mockClient, ctb.config)
 	case constants.ServiceCommand:
-		cmd = ServiceCmd(ctb.config)
+		cmd = ServiceCmd(fail2ban.GetRunner(), ctb.config)
 	case constants.CLICmdVersion:
 		cmd = VersionCmd(ctb.config)
 	default:
@@ -531,7 +531,7 @@ func (result *CommandTestResult) AssertNotEmpty() *CommandTestResult {
 
 // MockClientBuilder provides a fluent interface for building complex mock configurations
 type MockClientBuilder struct {
-	client     *fail2ban.MockClient
+	client     *fail2bantest.MockClient
 	jails      []string
 	banRecords []fail2ban.BanRecord
 	logLines   []string
@@ -542,7 +542,7 @@ type MockClientBuilder struct {
 // NewMockClientBuilder creates a new mock client builder
 func NewMockClientBuilder() *MockClientBuilder {
 	return &MockClientBuilder{
-		client:    fail2ban.NewMockClient(),
+		client:    fail2bantest.NewMockClient(),
 		responses: make(map[string]string),
 		errors:    make(map[string]error),
 	}
@@ -614,7 +614,7 @@ func (b *MockClientBuilder) WithUnbanError(jail, ip string, err error) *MockClie
 // Use WithLogLine to add log entries or modify LogLines directly
 
 // Build creates the configured mock client
-func (b *MockClientBuilder) Build() *fail2ban.MockClient {
+func (b *MockClientBuilder) Build() *fail2bantest.MockClient {
 	// Apply jails
 	if len(b.jails) > 0 {
 		setMockJails(b.client, b.jails)
