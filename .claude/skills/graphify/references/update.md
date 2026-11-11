@@ -6,13 +6,18 @@ Load this only when the user passed `--update` or `--cluster-only`. A first-time
 
 Use when you've added or modified files since the last run. Only re-extracts changed files - saves tokens and time.
 
+First write the scan path exactly as the user gave it (`.` when none was given) to
+`graphify-out/.graphify_input_path.txt` with the Write tool, as in SKILL.md Step 1. The blocks below and Steps 4–8
+read it from there; never paste the path into a command or a `-c` program.
+
 ```bash
 $(cat graphify-out/.graphify_python) -c "
 import sys, json
 from graphify.detect import detect_incremental, save_manifest
 from pathlib import Path
 
-result = detect_incremental(Path('INPUT_PATH'))
+input_path = Path('graphify-out/.graphify_input_path.txt').read_text(encoding='utf-8').rstrip('\n')
+result = detect_incremental(Path(input_path))
 new_total = result.get('new_total', 0)
 print(json.dumps(result, indent=2, ensure_ascii=False))
 Path('graphify-out/.graphify_incremental.json').write_text(json.dumps(result, ensure_ascii=False), encoding=\"utf-8\")
@@ -96,10 +101,11 @@ deleted = list(incremental.get('deleted_files', []))
 # prune_sources is ONLY for genuinely DELETED files. Changed/re-extracted files are
 # handled by build_merge's replace-on-re-extract (#1344): every source_file in
 # new_chunks is dropped from the base before merge, so old/stale nodes don't survive.
-# Do NOT add `changed` here: with root= passed, prune_set relativizes to the same base
+# Do NOT add 'changed' here: with root= passed, prune_set relativizes to the same base
 # as the freshly merged nodes and would DELETE the re-extracted content (#1178 is moot
 # now that replace — not the dedup pass — reconciles changed files).
 prune = list(deleted) or None
+input_path = Path('graphify-out/.graphify_input_path.txt').read_text(encoding='utf-8').rstrip('\n')
 
 # Use build_merge() — reads graph.json directly without NetworkX round-trip
 # so edge direction (calls, implements, imports) is always preserved (#801).
@@ -113,7 +119,7 @@ G = build_merge(
     [new_extraction],
     graph_path='graphify-out/graph.json',
     prune_sources=prune,
-    root='INPUT_PATH',
+    root=input_path,
     directed=IS_DIRECTED,
 )
 print(f'[graphify update] Merged: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges')
@@ -142,7 +148,7 @@ print(f'[graphify update] Merged extraction written ({len(merged_out[\"nodes\"])
 # root= matches the build_merge call above so the manifest keys stay relative to
 # the scan root — portable across clones/machines, so --update keeps matching
 # cached files instead of missing every one after a move (#1417).
-save_manifest(incremental['files'], root='INPUT_PATH')
+save_manifest(incremental['files'], root=input_path)
 print('[graphify update] Manifest saved.')
 "
 ```
@@ -178,6 +184,7 @@ if old_data:
 
 Before the merge step, save the old graph: `cp graphify-out/graph.json graphify-out/.graphify_old.json`
 Clean up after: `rm -f graphify-out/.graphify_old.json`
+When Steps 4–8 are done, delete the scan-path file too: `rm -f graphify-out/.graphify_input_path.txt`.
 
 ---
 

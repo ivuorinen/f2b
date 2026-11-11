@@ -9,7 +9,7 @@ Load this when the user passed one of the export flags (`--wiki`, `--neo4j`, `--
 Run this before Step 9 (cleanup) so `.graphify_labels.json` is still available.
 
 ```bash
-graphify export wiki
+$(cat graphify-out/.graphify_python) -m graphify export wiki
 ```
 
 ### Step 7 - Neo4j export (only if --neo4j or --neo4j-push flag)
@@ -17,13 +17,20 @@ graphify export wiki
 **If `--neo4j`** - generate a Cypher file for manual import:
 
 ```bash
-graphify export neo4j
+$(cat graphify-out/.graphify_python) -m graphify export neo4j
 ```
 
-**If `--neo4j-push <uri>`** - push directly to a running Neo4j instance. Ask the user for the URI and user if not provided. Never put the password on the command line or in the conversation: a `--password` argument shows in the process list and the transcript. graphify reads `NEO4J_PASSWORD` when `--password` is absent, so ask the user to export it in the environment this session runs in, then run:
+**If `--neo4j-push <uri>`** - push directly to a running Neo4j instance. Ask the user for the URI and user if not
+provided. Never put the password on the command line or in the conversation: a `--password` argument shows in the
+process list and the transcript. graphify reads `NEO4J_PASSWORD` when `--password` is absent, so ask the user to
+export it in the environment this session runs in.
+Write the URI to `graphify-out/.graphify_push_uri.txt` and the user to `graphify-out/.graphify_push_user.txt` with
+the Write tool (never type them into the command), then run:
 
 ```bash
-graphify export neo4j --push bolt://localhost:7687 --user neo4j
+$(cat graphify-out/.graphify_python) -m graphify export neo4j --push "$(cat graphify-out/.graphify_push_uri.txt)" \
+    --user "$(cat graphify-out/.graphify_push_user.txt)"
+rc=$?; rm -f graphify-out/.graphify_push_uri.txt graphify-out/.graphify_push_user.txt; exit "$rc"
 ```
 
 Default URI is `bolt://localhost:7687`, default user is `neo4j`. Uses MERGE - safe to re-run without creating duplicates.
@@ -33,13 +40,18 @@ Default URI is `bolt://localhost:7687`, default user is `neo4j`. Uses MERGE - sa
 **If `--falkordb`** - generate a Cypher file. The statements are OpenCypher, but FalkorDB's `GRAPH.QUERY` runs one statement at a time (no bulk script import like Neo4j's `cypher-shell`), so prefer `--falkordb-push` to load a graph. Use this only when you want the portable `cypher.txt` artifact:
 
 ```bash
-graphify export falkordb
+$(cat graphify-out/.graphify_python) -m graphify export falkordb
 ```
 
-**If `--falkordb-push <uri>`** - push directly to a running FalkorDB instance. Credentials are optional; ask the user only if the instance requires auth:
+**If `--falkordb-push <uri>`** - push directly to a running FalkorDB instance. Credentials are optional; ask the
+user only if the instance requires auth.
+Write the URI to `graphify-out/.graphify_push_uri.txt` with the Write tool, then run the command below. If the
+instance requires auth, also write the user to `graphify-out/.graphify_push_user.txt`, add
+`--user "$(cat graphify-out/.graphify_push_user.txt)"`, and ask the user to export `FALKORDB_PASSWORD`:
 
 ```bash
-graphify export falkordb --push falkordb://localhost:6379
+$(cat graphify-out/.graphify_python) -m graphify export falkordb --push "$(cat graphify-out/.graphify_push_uri.txt)"
+rc=$?; rm -f graphify-out/.graphify_push_uri.txt graphify-out/.graphify_push_user.txt; exit "$rc"
 ```
 
 Default URI is `falkordb://localhost:6379` (the scheme is informational - `redis://` or a bare `host:port` work too), auth is optional, and the target graph defaults to `graphify`. Uses MERGE - safe to re-run without creating duplicates.
@@ -47,13 +59,13 @@ Default URI is `falkordb://localhost:6379` (the scheme is informational - `redis
 ### Step 7b - SVG export (only if --svg flag)
 
 ```bash
-graphify export svg
+$(cat graphify-out/.graphify_python) -m graphify export svg
 ```
 
 ### Step 7c - GraphML export (only if --graphml flag)
 
 ```bash
-graphify export graphml
+$(cat graphify-out/.graphify_python) -m graphify export graphml
 ```
 
 ### Step 7d - MCP server (only if --mcp flag)
@@ -81,7 +93,7 @@ To configure in Claude Desktop, add to `claude_desktop_config.json`. Claude Desk
 If `total_words` from `graphify-out/.graphify_detect.json` is greater than 5,000, run:
 
 ```bash
-graphify benchmark
+$(cat graphify-out/.graphify_python) -m graphify benchmark
 ```
 
 Print the output directly in chat. If `total_words <= 5000`, skip silently - the graph value is structural clarity, not token compression, for small corpora.
