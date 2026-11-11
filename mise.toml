@@ -93,10 +93,20 @@ description = "Install the prek git hooks"
 run = "prek install"
 
 # Runs the same commit-msg hooks over what the squash merge puts on main, so CI
-# holds no second copy of their patterns. pr-lint sets the three variables.
+# holds no second copy of their patterns. The commit-messages workflow sets the
+# three variables. An unset, invalid or empty range fails instead of passing
+# after checking only the title: a failing git rev-list inside a for word list
+# would be ignored even under errexit, so its output is captured first. The loop
+# splits it through printf because zsh does not word-split a bare $shas.
 [tasks.check-commit-messages]
 description = "Run the commit-msg hooks over PR_TITLE and BASE_SHA..HEAD_SHA"
 run = '''
+: "${BASE_SHA:?}" "${HEAD_SHA:?}"
+shas=$(git rev-list "$BASE_SHA..$HEAD_SHA")
+if [ -z "$shas" ]; then
+  echo "No commits in $BASE_SHA..$HEAD_SHA" >&2
+  exit 1
+fi
 msg=$(mktemp)
 trap 'rm -f "$msg"' EXIT
 check() {
@@ -104,7 +114,7 @@ check() {
 }
 printf '%s\n' "$PR_TITLE" >"$msg"
 check
-for sha in $(git rev-list "$BASE_SHA..$HEAD_SHA"); do
+for sha in $(printf '%s\n' "$shas"); do
   git log -1 --format=%B "$sha" >"$msg"
   check
 done
