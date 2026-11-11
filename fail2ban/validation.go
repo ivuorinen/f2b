@@ -31,12 +31,23 @@ func ValidateIP(ip string) error {
 
 // ValidateBanTarget validates what ban and unban act on: an IP address or a
 // CIDR range. fail2ban bans a range as one entry, and unbanning a range also
-// removes every banned address inside it.
+// removes every banned address inside it. A range must not be /0, which bans
+// every source, and must be written as its network address: fail2ban masks
+// host bits away, so 192.168.1.23/24 would ban more than the target names.
 func ValidateBanTarget(target string) error {
-	if _, _, err := net.ParseCIDR(target); err == nil {
-		return nil
+	ip, network, err := net.ParseCIDR(target)
+	if err != nil {
+		return ValidateIP(target)
 	}
-	return ValidateIP(target)
+	// ParseCIDR accepted the target, so it holds no injection characters and
+	// is safe to echo back.
+	if ones, _ := network.Mask.Size(); ones == 0 {
+		return fmt.Errorf("invalid ban target %s: a /0 range covers every address", target)
+	}
+	if !ip.Equal(network.IP) {
+		return fmt.Errorf("invalid ban target %s: host bits are set, use %s", target, network)
+	}
+	return nil
 }
 
 // ValidateJail validates a jail name and returns an error if invalid
