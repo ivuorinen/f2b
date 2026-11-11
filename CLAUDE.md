@@ -28,8 +28,8 @@ Rules:
 
 - Run graphify as `$(cat graphify-out/.graphify_python) -m graphify`: that is
   the interpreter the skill installed at the vendored version
-  (`.claude/skills/graphify/.graphify_version`). The `graphify` found through
-  the `PATH` environment variable can be a different release.
+  (`.claude/skills/graphify/.graphify_version`). The `graphify` found on the
+  executable search path (`PATH`) can be a different release.
 - For codebase questions, first run `graphify query` when
   graphify-out/graph.json exists. Run it, and `graphify path` for
   relationships or `graphify explain` for focused concepts, through
