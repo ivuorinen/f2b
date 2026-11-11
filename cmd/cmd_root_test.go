@@ -625,10 +625,10 @@ func TestPersistentPreRunRejectsLogFileOutsideAllowlist(t *testing.T) {
 	}
 }
 
-// TestPersistentPreRunRefusesLogFileSymlinkEscape pins that a symlink at the
-// --log-file leaf cannot redirect the open: only the directory is validated,
-// so under `sudo f2b` a link inside an allowed directory let root create or
-// append a file anywhere.
+// TestPersistentPreRunRefusesLogFileSymlinkEscape pins that a dangling symlink
+// at the --log-file leaf cannot redirect the open to create its target: under
+// `sudo f2b` a link inside an allowed directory let root create or append a
+// file anywhere.
 func TestPersistentPreRunRefusesLogFileSymlinkEscape(t *testing.T) {
 	t.Setenv("ALLOW_DEV_PATHS", "1") // temp dirs live under /tmp
 	originalCfg := cfg

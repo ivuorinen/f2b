@@ -165,8 +165,10 @@ ______________________________________________________________________
   repository secrets are removed.
 - Path validation resolves every path component, so a symlinked ancestor can no
   longer carry a path outside the allowlist.
-- `--log-file` is opened through `os.Root`, so a symlink at the leaf cannot
-  redirect it outside the validated directory.
+- `--log-file` is resolved in full and opened through an `os.Root` anchored at
+  its allowed log base, so neither a leaf symlink nor a directory swapped for a
+  symlink can redirect it outside the allowlist; a leaf symlink to a file inside
+  the allowlist opens.
 - `sudo`, `fail2ban-regex`, `service` and `systemctl` are resolved to trusted
   absolute paths, as `fail2ban-client` already was.
 - `ALLOW_DEV_PATHS` is parsed as a boolean; `0` and `false` no longer enable it.

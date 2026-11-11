@@ -204,14 +204,14 @@ func init() {
 		format := fail2ban.SlogText
 		logFileFlag, _ := cmd.Flags().GetString(constants.FlagLogFile)
 		if logFileFlag != "" {
-			cleanPath, err := resolveLogFilePath(logFileFlag)
+			logPath, err := resolveLogFilePath(logFileFlag)
 			if err != nil {
 				return err
 			}
 
-			f, err := openLogFile(cleanPath)
+			f, err := openLogFile(logPath)
 			if err != nil {
-				return fmt.Errorf("failed to open log file %s: %w", cleanPath, err)
+				return fmt.Errorf("failed to open log file %s: %w", logPath, err)
 			}
 			Logger.SetOutput(f)
 			// Register cleanup for graceful shutdown
@@ -228,38 +228,47 @@ func init() {
 // the bare command name.
 const logFieldCommandPath = "command_path"
 
-// resolveLogFilePath returns the absolute --log-file path after confining its
-// directory to the log allowlist. The file is created or appended for every
-// subcommand, so under `sudo f2b` an unchecked path let the caller create a
-// root-owned file anywhere (e.g. /etc/cron.d/x) or append log lines to one
-// (e.g. /root/.bashrc).
+// resolveLogFilePath returns the --log-file path with every symlink resolved,
+// the leaf included when it exists, after confining that resolved path to the
+// log allowlist. The file is created or appended for every subcommand, so
+// under `sudo f2b` an unchecked path let the caller create a root-owned file
+// anywhere (e.g. /etc/cron.d/x) or append log lines to one (e.g. /root/.bashrc).
 func resolveLogFilePath(logFile string) (string, error) {
 	cleanPath, err := filepath.Abs(filepath.Clean(logFile))
 	if err != nil {
 		return "", fmt.Errorf("invalid log file path %s: %w", logFile, err)
 	}
-	dir, err := fail2ban.ValidatePathWithSecurity(filepath.Dir(cleanPath), fail2ban.CreateLogPathConfig())
+	resolved, err := fail2ban.ValidatePathWithSecurity(cleanPath, fail2ban.CreateLogPathConfig())
 	if err != nil {
 		return "", fmt.Errorf("log file %s is outside the allowed log directories: %w", cleanPath, err)
 	}
-	return filepath.Join(dir, filepath.Base(cleanPath)), nil
+	return resolved, nil
 }
 
-// openLogFile opens path for appending through an os.Root on its validated
-// directory. resolveLogFilePath checks only the directory, so a plain open
-// followed a symlink at the leaf and let `sudo f2b` create or append a file
-// outside the allowlist; the Root refuses any symlink that leaves the directory.
+// openLogFile opens the resolved path for appending through an os.Root
+// anchored at the allowed log base that contains it, by its base-relative
+// path. Every component is confined to that base, not only the leaf: a
+// directory swapped for a symlink after resolveLogFilePath cannot lead the
+// open outside it. A Root on the file's own directory re-followed that
+// directory's path, and refused even an absolute leaf symlink inside it.
 func openLogFile(path string) (*os.File, error) {
-	root, err := os.OpenRoot(filepath.Dir(path))
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if closeErr := root.Close(); closeErr != nil {
-			fmt.Fprintf(os.Stderr, "Warning: Failed to close log directory: %v\n", closeErr)
+	for _, base := range fail2ban.GetLogAllowedPaths() {
+		rel, err := filepath.Rel(base, path)
+		if err != nil || !filepath.IsLocal(rel) {
+			continue
 		}
-	}()
-	return root.OpenFile(filepath.Base(path), os.O_CREATE|os.O_WRONLY|os.O_APPEND, constants.DefaultFilePermissions)
+		root, err := os.OpenRoot(base)
+		if err != nil {
+			return nil, err
+		}
+		defer func() {
+			if closeErr := root.Close(); closeErr != nil {
+				fmt.Fprintf(os.Stderr, "Warning: Failed to close log directory: %v\n", closeErr)
+			}
+		}()
+		return root.OpenFile(rel, os.O_CREATE|os.O_WRONLY|os.O_APPEND, constants.DefaultFilePermissions)
+	}
+	return nil, fmt.Errorf("%s is outside the allowed log directories", path)
 }
 
 // registerLogFileCleanup registers a log file so cleanupResources closes it

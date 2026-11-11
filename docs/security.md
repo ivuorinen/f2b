@@ -194,6 +194,8 @@ func ContainsPathTraversal(input string) bool {
 `ValidatePathWithSecurity` (`fail2ban/pathsecurity.go`), which canonicalizes the
 path, resolves symlinks and requires the result to stay inside one of the
 allowed base directories listed under [Allowed Paths](#allowed-paths).
+`--log-file` is then opened through an `os.Root` anchored at that base, so a
+directory swapped for a symlink after validation cannot redirect the open.
 
 ## Safe Command Execution
 
