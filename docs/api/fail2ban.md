@@ -42,7 +42,9 @@ Package fail2ban provides comprehensive functionality for managing fail2ban jail
 - [func ValidateFilter\(filter string\) error](<#ValidateFilter>)
 - [func ValidateIP\(ip string\) error](<#ValidateIP>)
 - [func ValidateJail\(jail string\) error](<#ValidateJail>)
+- [func ValidateLogFilters\(jailFilter, ipFilter string\) \(string, string, error\)](<#ValidateLogFilters>)
 - [func ValidateLogPath\(path, logDir string\) \(string, error\)](<#ValidateLogPath>)
+- [func ValidateMaxLines\(maxLines int\) error](<#ValidateMaxLines>)
 - [func ValidatePathWithSecurity\(path string, config PathSecurityConfig\) \(string, error\)](<#ValidatePathWithSecurity>)
 - [func WithIP\(ctx context.Context, ip string\) context.Context](<#WithIP>)
 - [func WithJail\(ctx context.Context, jail string\) context.Context](<#WithJail>)
@@ -82,7 +84,7 @@ Package fail2ban provides comprehensive functionality for managing fail2ban jail
   - [func \(c \*RealClient\) ListJailsWithContext\(ctx context.Context\) \(\[\]string, error\)](<#RealClient.ListJailsWithContext>)
   - [func \(c \*RealClient\) StatusAllWithContext\(ctx context.Context\) \(string, error\)](<#RealClient.StatusAllWithContext>)
   - [func \(c \*RealClient\) StatusJailWithContext\(ctx context.Context, jail string\) \(string, error\)](<#RealClient.StatusJailWithContext>)
-  - [func \(c \*RealClient\) TestFilterWithContext\(ctx context.Context, filter, logFile string\) \(string, error\)](<#RealClient.TestFilterWithContext>)
+  - [func \(c \*RealClient\) TestFilterWithContext\(ctx context.Context, filter, logFile string\) \(output string, err error\)](<#RealClient.TestFilterWithContext>)
   - [func \(c \*RealClient\) UnbanIPWithContext\(ctx context.Context, ip, jail string\) \(int, error\)](<#RealClient.UnbanIPWithContext>)
 - [type RealSudoChecker](<#RealSudoChecker>)
   - [func \(r \*RealSudoChecker\) CanUseSudo\(\) bool](<#RealSudoChecker.CanUseSudo>)
@@ -383,7 +385,7 @@ func SetSudoChecker(checker SudoChecker)
 SetSudoChecker allows injecting a mock sudo checker for testing
 
 <a name="ValidateArguments"></a>
-## func [ValidateArguments](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/validation.go#L249>)
+## func [ValidateArguments](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/validation.go#L260>)
 
 ```go
 func ValidateArguments(args []string) error
@@ -392,13 +394,13 @@ func ValidateArguments(args []string) error
 ValidateArguments validates command arguments for security. It is the one argument validator: its WithContext twin took a context it never used, so the name promised cancellation that never happened.
 
 <a name="ValidateBanTarget"></a>
-## func [ValidateBanTarget](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/validation.go#L35>)
+## func [ValidateBanTarget](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/validation.go#L37>)
 
 ```go
 func ValidateBanTarget(target string) error
 ```
 
-ValidateBanTarget validates what ban and unban act on: an IP address or a CIDR range. fail2ban bans a range as one entry, and unbanning a range also removes every banned address inside it.
+ValidateBanTarget validates what ban and unban act on: an IP address or a CIDR range. fail2ban bans a range as one entry, and unbanning a range also removes every banned address inside it. A range must not be /0, which bans every source, and must be written as its network address: fail2ban masks host bits away, so 192.168.1.23/24 would ban more than the target names.
 
 <a name="ValidateClientFilterPath"></a>
 ## func [ValidateClientFilterPath](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/pathsecurity.go#L341>)
@@ -419,7 +421,7 @@ func ValidateClientLogPath(logDir string) (string, error)
 ValidateClientLogPath validates a log directory against the log allowlist.
 
 <a name="ValidateCommand"></a>
-## func [ValidateCommand](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/validation.go#L148>)
+## func [ValidateCommand](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/validation.go#L159>)
 
 ```go
 func ValidateCommand(command string) error
@@ -428,7 +430,7 @@ func ValidateCommand(command string) error
 ValidateCommand validates that a command is in the allowlist for security
 
 <a name="ValidateFilter"></a>
-## func [ValidateFilter](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/validation.go#L75>)
+## func [ValidateFilter](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/validation.go#L86>)
 
 ```go
 func ValidateFilter(filter string) error
@@ -446,13 +448,22 @@ func ValidateIP(ip string) error
 ValidateIP validates an IP address string and returns an error if invalid
 
 <a name="ValidateJail"></a>
-## func [ValidateJail](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/validation.go#L43>)
+## func [ValidateJail](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/validation.go#L54>)
 
 ```go
 func ValidateJail(jail string) error
 ```
 
 ValidateJail validates a jail name and returns an error if invalid
+
+<a name="ValidateLogFilters"></a>
+## func [ValidateLogFilters](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L29>)
+
+```go
+func ValidateLogFilters(jailFilter, ipFilter string) (string, string, error)
+```
+
+ValidateLogFilters trims and validates the jail/IP filter values of a log read, so an invalid filter errors instead of silently matching nothing. Exported so fail2bantest.MockClient applies the same rules.
 
 <a name="ValidateLogPath"></a>
 ## func [ValidateLogPath](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/pathsecurity.go#L331>)
@@ -462,6 +473,15 @@ func ValidateLogPath(path, logDir string) (string, error)
 ```
 
 ValidateLogPath validates and sanitizes a log file path, confined to logDir.
+
+<a name="ValidateMaxLines"></a>
+## func [ValidateMaxLines](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L336>)
+
+```go
+func ValidateMaxLines(maxLines int) error
+```
+
+ValidateMaxLines rejects negative limits and limits above MaxLogLinesLimit. Exported so fail2bantest.MockClient applies the same rules.
 
 <a name="ValidatePathWithSecurity"></a>
 ## func [ValidatePathWithSecurity](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/pathsecurity.go#L117>)
@@ -523,7 +543,7 @@ type BanRecord struct {
 ```
 
 <a name="ParseBanRecords"></a>
-### func [ParseBanRecords](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L132>)
+### func [ParseBanRecords](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/ban_record_parser.go#L154>)
 
 ```go
 func ParseBanRecords(output, jail string) ([]BanRecord, error)
@@ -677,7 +697,7 @@ type Fields map[string]any
 ```
 
 <a name="LogReadConfig"></a>
-## type [LogReadConfig](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L231-L247>)
+## type [LogReadConfig](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/logs.go#L232-L248>)
 
 LogReadConfig holds configuration for streaming log reading
 
@@ -901,10 +921,10 @@ func (c *RealClient) StatusJailWithContext(ctx context.Context, jail string) (st
 StatusJailWithContext returns the status of a specific fail2ban jail with context support.
 
 <a name="RealClient.TestFilterWithContext"></a>
-### func \(\*RealClient\) [TestFilterWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L427>)
+### func \(\*RealClient\) [TestFilterWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L428>)
 
 ```go
-func (c *RealClient) TestFilterWithContext(ctx context.Context, filter, logFile string) (string, error)
+func (c *RealClient) TestFilterWithContext(ctx context.Context, filter, logFile string) (output string, err error)
 ```
 
 TestFilterWithContext runs fail2ban\-regex for filter against logFile, or against the logpath the filter declares when logFile is empty.

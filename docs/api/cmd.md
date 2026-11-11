@@ -186,7 +186,7 @@ func FormatStatusResult(jail, status string) string
 FormatStatusResult formats status results for output
 
 <a name="GetCmdOutput"></a>
-## func [GetCmdOutput](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L97>)
+## func [GetCmdOutput](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L131>)
 
 ```go
 func GetCmdOutput(cmd *cobra.Command) io.Writer
@@ -249,7 +249,7 @@ func IsEmptyString(s string) bool
 IsEmptyString checks if a string is empty after trimming whitespace
 
 <a name="IsPrinted"></a>
-## func [IsPrinted](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L65>)
+## func [IsPrinted](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L92>)
 
 ```go
 func IsPrinted(err error) bool
@@ -321,7 +321,7 @@ func ParseOptionalArgs(args []string, count int) []string
 ParseOptionalArgs parses optional arguments up to a given count
 
 <a name="PrintError"></a>
-## func [PrintError](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L71>)
+## func [PrintError](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L105>)
 
 ```go
 func PrintError(err error)
@@ -330,7 +330,7 @@ func PrintError(err error)
 PrintError logs and prints an error to stderr with enhanced context if available.
 
 <a name="PrintOutput"></a>
-## func [PrintOutput](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L31>)
+## func [PrintOutput](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L34>)
 
 ```go
 func PrintOutput(data any, format string) error
@@ -339,7 +339,7 @@ func PrintOutput(data any, format string) error
 PrintOutput prints data to stdout in the specified format \(PlainFormat or JSONFormat\).
 
 <a name="PrintOutputTo"></a>
-## func [PrintOutputTo](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L40>)
+## func [PrintOutputTo](<https://github.com/ivuorinen/f2b/blob/main/cmd/output.go#L43>)
 
 ```go
 func PrintOutputTo(w io.Writer, data any, format string) error
@@ -514,7 +514,7 @@ type ContextualLogger struct {
 ```
 
 <a name="GetContextualLogger"></a>
-### func [GetContextualLogger](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L145>)
+### func [GetContextualLogger](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L148>)
 
 ```go
 func GetContextualLogger() *ContextualLogger
@@ -532,7 +532,7 @@ func NewContextualLogger() *ContextualLogger
 NewContextualLogger creates a contextual logger over the centralized cmd.Logger itself. Sharing Logger keeps one format, level and output, chosen in PersistentPreRunE; a second logger on the same sink would interleave two formats in one stream.
 
 <a name="ContextualLogger.LogBanOperation"></a>
-### func \(\*ContextualLogger\) [LogBanOperation](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L114-L119>)
+### func \(\*ContextualLogger\) [LogBanOperation](<https://github.com/ivuorinen/f2b/blob/main/cmd/logging.go#L117-L122>)
 
 ```go
 func (cl *ContextualLogger) LogBanOperation(ctx context.Context, operation, ip, jail string, success bool, duration time.Duration)
