@@ -59,7 +59,7 @@ DO require sudo/root, because fail2ban's control socket
 
 ### Allowed Paths
 
-`test-filter` runs `sudo fail2ban-regex <logpath> <filter>`, and fail2ban-regex
+`test-filter` runs `sudo fail2ban-regex <log> <filter>`, and fail2ban-regex
 prints the lines it reads, so every allowed directory is one root can be made to
 read. The allowlists are therefore limited to fail2ban's own locations:
 
@@ -67,20 +67,31 @@ read. The allowlists are therefore limited to fail2ban's own locations:
   under `/var/log`
 - Filter directories (`--filter-dir`, `F2B_FILTER_DIR`): under `/etc/fail2ban`,
   `/usr/local/etc/fail2ban` or `/opt/fail2ban`
-- `ALLOW_DEV_PATHS` (development only) additionally allows `/tmp` and macOS
+- `ALLOW_DEV_PATHS` (development only, parsed as a boolean) additionally allows `/tmp` and macOS
   temporary directories
 
 `/home`, `/opt` and `/usr/local` as whole trees are not allowed: under
 `sudo f2b` they let a filter file name another user's private files as its
 logpath.
 
+When f2b runs as root (`sudo f2b`, the privilege boundary), `test-filter` does
+not hand fail2ban-regex the validated log path, which a user who can write a
+directory on it could swap for a symlink before fail2ban-regex opens it. f2b
+opens the log through an `os.Root` anchored at the allowed log directory that
+holds it, refuses anything but a regular file of at most `DefaultMaxFileSize`
+bytes, and passes fail2ban-regex a copy in a private (`0700`) temporary
+directory that is removed afterwards. When f2b runs as an ordinary user and
+escalates per command, it passes the validated path: that user can already run
+`sudo fail2ban-regex <file>` directly, so there is no boundary to protect, and
+logs only root can read keep working.
+
 ### Trusted Binary Directories
 
-The sudo-executed binaries (`fail2ban-client`, `fail2ban-regex`,
-`fail2ban-server`) must resolve to an FHS directory (`/usr/bin`, `/usr/sbin`,
-`/usr/local/bin`, ...), which stops a hostile `PATH` from choosing what sudo
-runs. `F2B_TRUSTED_BIN_DIR` may name ONE additional absolute, clean directory
-for non-FHS installs. Leave it unset unless fail2ban lives elsewhere: it widens
+Every binary f2b executes, `sudo` itself included, is resolved to an absolute
+path that must sit in an FHS directory (`/usr/bin`, `/usr/sbin`,
+`/usr/local/bin`, ...), which stops a hostile `PATH` from choosing what runs.
+`F2B_TRUSTED_BIN_DIR` may name ONE additional absolute, clean directory for
+non-FHS installs. Leave it unset unless fail2ban lives elsewhere: it widens
 which binaries f2b will run as root.
 
 ### Privilege Escalation Process
@@ -194,6 +205,15 @@ func ContainsPathTraversal(input string) bool {
 `ValidatePathWithSecurity` (`fail2ban/pathsecurity.go`), which canonicalizes the
 path, resolves symlinks and requires the result to stay inside one of the
 allowed base directories listed under [Allowed Paths](#allowed-paths).
+`--log-file` is then opened through an `os.Root` anchored at that base, so a
+directory swapped for a symlink after validation cannot redirect the open.
+
+### Log-Derived Output
+
+Log lines can carry attacker-chosen text. Plain `logs`, `logs-watch` and
+`test-filter` output replaces control characters other than tab and newline
+with `\xHH` escapes, so a log line cannot retitle the terminal, move the cursor
+or hide lines. JSON output relies on the encoder's escaping.
 
 ## Safe Command Execution
 
@@ -215,9 +235,6 @@ The `Runner` interface provides safe command execution with timeout handling:
 
 ```go
 type Runner interface {
-    CombinedOutput(name string, args ...string) ([]byte, error)
-    CombinedOutputWithSudo(name string, args ...string) ([]byte, error)
-    CombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error)
     CombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error)
 }
 ```
@@ -249,7 +266,7 @@ still holds.
 // CORRECT - Use modern standardized helpers with context support
 func TestBanCommand_WithPrivileges(t *testing.T) {
     // Mock runner + mock sudo checker; no real command can execute
-    client, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, true)
+    client, cleanup := fail2bantest.SetupMockEnvironmentWithSudo(t, true)
     defer cleanup()
 
     ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -282,7 +299,6 @@ func TestPathTraversalDetection(t *testing.T) {
         AllowedBasePaths: []string{t.TempDir()},
         MaxPathLength:    4096,
         AllowSymlinks:    false,
-        ResolveSymlinks:  true,
     }
 
     for _, maliciousPath := range maliciousPaths {
@@ -300,7 +316,7 @@ func TestPathTraversalDetection(t *testing.T) {
 ```go
 func setupSecureTestEnvironment(t *testing.T) {
     // Modern standardized setup with complete isolation and context support
-    _, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, true)
+    _, cleanup := fail2bantest.SetupMockEnvironmentWithSudo(t, true)
     defer cleanup()
 
     // All mock environment is configured with:

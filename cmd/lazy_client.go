@@ -123,12 +123,12 @@ func (l *lazyClient) ListFiltersWithContext(ctx context.Context) ([]string, erro
 	return c.ListFiltersWithContext(ctx)
 }
 
-func (l *lazyClient) TestFilterWithContext(ctx context.Context, filter string) (string, error) {
+func (l *lazyClient) TestFilterWithContext(ctx context.Context, filter, logFile string) (string, error) {
 	c, err := l.resolve(ctx)
 	if err != nil {
 		return "", err
 	}
-	return c.TestFilterWithContext(ctx, filter)
+	return c.TestFilterWithContext(ctx, filter, logFile)
 }
 
 // Ensure lazyClient satisfies the Client interface.

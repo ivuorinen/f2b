@@ -6,14 +6,20 @@ Load this when the user ran `/graphify add <url>` or passed `--watch`. Neither i
 
 Fetch a URL and add it to the corpus, then update the graph.
 
+Write the URL to `graphify-out/.graphify_add_url.txt` with the Write tool, and the `--author` and `--contributor`
+names, when the user gave them, to `graphify-out/.graphify_add_author.txt` and
+`graphify-out/.graphify_add_contributor.txt`. The program gets them as `sys.argv`, so they never become shell or
+Python source:
+
 ```bash
 $(cat graphify-out/.graphify_python) -c "
 import sys
 from graphify.ingest import ingest
 from pathlib import Path
 
+url, author, contributor = sys.argv[1], sys.argv[2] or None, sys.argv[3] or None
 try:
-    out = ingest('URL', Path('./raw'), author='AUTHOR', contributor='CONTRIBUTOR')
+    out = ingest(url, Path('./raw'), author=author, contributor=contributor)
     print(f'Saved to {out}')
 except ValueError as e:
     print(f'error: {e}', file=sys.stderr)
@@ -21,10 +27,17 @@ except ValueError as e:
 except RuntimeError as e:
     print(f'error: {e}', file=sys.stderr)
     sys.exit(1)
-"
+" "$(cat graphify-out/.graphify_add_url.txt)" \
+  "$(cat graphify-out/.graphify_add_author.txt 2>/dev/null)" \
+  "$(cat graphify-out/.graphify_add_contributor.txt 2>/dev/null)"
+rc=$?
+rm -f graphify-out/.graphify_add_url.txt graphify-out/.graphify_add_author.txt \
+    graphify-out/.graphify_add_contributor.txt
+exit "$rc"
 ```
 
-Replace `URL` with the actual URL, `AUTHOR` with the user's name if provided, `CONTRIBUTOR` likewise. If the command exits with an error, tell the user what went wrong - do not silently continue. After a successful save, automatically run the `--update` pipeline on `./raw` to merge the new file into the existing graph.
+If the command exits with an error, tell the user what went wrong - do not silently continue. After a successful
+save, automatically run the `--update` pipeline on `./raw` to merge the new file into the existing graph.
 
 Supported URL types (auto-detected):
 - YouTube / any video URL → audio downloaded via yt-dlp, transcribed to `.txt` on next run (requires `pip install 'graphifyy[video]'`)
@@ -40,11 +53,15 @@ Supported URL types (auto-detected):
 
 Start a background watcher that monitors a folder and auto-updates the graph when files change.
 
+Write the folder to watch to `graphify-out/.graphify_input_path.txt` with the Write tool, then run:
+
 ```bash
-$(cat graphify-out/.graphify_python) -m graphify.watch INPUT_PATH --debounce 3
+WATCH_PATH=$(cat graphify-out/.graphify_input_path.txt)
+rm -f graphify-out/.graphify_input_path.txt
+$(cat graphify-out/.graphify_python) -m graphify.watch --debounce 3 -- "$WATCH_PATH"
 ```
 
-Replace INPUT_PATH with the folder to watch. Behavior depends on what changed:
+The `--` keeps a folder name that starts with `-` from being read as an option. Behavior depends on what changed:
 
 - **Code files only (.py, .ts, .go, etc.):** re-runs AST extraction + rebuild + cluster immediately, no LLM needed. `graph.json` and `GRAPH_REPORT.md` are updated automatically.
 - **Docs, papers, or images:** writes a `graphify-out/needs_update` flag and prints a notification to run `/graphify --update` (LLM semantic re-extraction required).

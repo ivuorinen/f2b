@@ -60,12 +60,15 @@ If the list is empty, say so plainly and stop — do not proceed to traversal.
 
 ### Step 1 — Traversal
 
-Build the **expanded query string** by joining the selected tokens with spaces. Use this string as `QUESTION` below — NOT the original user question. (The original question is preserved only for `save-result` at the end.)
+Build the **expanded query string** by joining the selected tokens with spaces. Use this string as the question
+below — NOT the original user question. (The original question is preserved only for `save-result` at the end.)
 
-Prefer the CLI when it is installed:
+Write the expanded query string to `graphify-out/.graphify_question.txt` with the Write tool, then prefer the CLI
+when it is installed:
 ```bash
-graphify query "QUESTION"
-# or: graphify query "QUESTION" --dfs --budget 3000
+# append --dfs and/or --budget 3000 to the first line when needed
+$(cat graphify-out/.graphify_python) -m graphify query "$(cat graphify-out/.graphify_question.txt)"
+rc=$?; rm -f graphify-out/.graphify_question.txt; exit "$rc"
 ```
 
 If the CLI is unavailable, load `graphify-out/graph.json` and run the traversal inline:
@@ -86,8 +89,8 @@ from pathlib import Path
 data = json.loads(Path('graphify-out/graph.json').read_text(encoding='utf-8'))
 G = json_graph.node_link_graph(data, edges='links')
 
-question = 'QUESTION'
-mode = 'MODE'  # 'bfs' or 'dfs'
+question = sys.argv[1]
+mode = sys.argv[2]  # 'bfs' or 'dfs'
 terms = [t.lower() for t in question.split() if len(t) >= 3]  # match the vocab threshold; keeps api/jwt/ios (#1392)
 
 # Find best-matching start nodes
@@ -137,7 +140,7 @@ else:
         frontier = next_frontier
 
 # Token-budget aware output: rank by relevance, cut at budget (~4 chars/token)
-token_budget = BUDGET  # default 2000
+token_budget = int(sys.argv[3])  # default 2000
 char_budget = token_budget * 4
 
 # Score each node by term overlap for ranked output
@@ -160,35 +163,74 @@ output = '\n'.join(lines)
 if len(output) > char_budget:
     output = output[:char_budget] + f'\n... (truncated at ~{token_budget} token budget - use --budget N for more)'
 print(output)
-"
+" "$(cat graphify-out/.graphify_question.txt)" MODE BUDGET
+rc=$?; rm -f graphify-out/.graphify_question.txt; exit "$rc"
 ```
 
-Replace `QUESTION` with the **expanded** query string, `MODE` with `bfs` or `dfs`, and `BUDGET` with the token budget (default `2000`, or whatever `--budget N` specifies). Then answer based on the subgraph output above, using only what the graph contains.
+Write the **expanded** query string to `graphify-out/.graphify_question.txt` again first (the CLI block deleted it).
+Replace `MODE` with `bfs` or `dfs`, and `BUDGET` with the token budget (default `2000`, or whatever `--budget N`
+specifies). Then answer based on the subgraph output above, using only what the graph contains.
 
-After writing the answer, save it back into the graph so it improves future queries. Include the expanded tokens inside the `--answer` text (e.g. `"Expanded from original query via vocab: [tokens]. Then traversed..."`) so the next `--update` extracts the expansion history as a graph node:
+**Free text never goes on the command line.** Questions, answers and node labels come from the user, from you, or
+from ingested documents. Inside double quotes `$(...)` and backticks run as commands, and a heredoc ends early at any
+line equal to its delimiter, so none of them may carry this text. Write each value to its file under `graphify-out/`
+with the Write tool, exactly as it should arrive, and let the command read the file: `"$(cat FILE)"` (the shell
+never re-parses the output of a command substitution), `--answer-file` for answers, and the read loop below for node
+labels, one label per line. The loop stops with an error on a label that starts with `-`, because `save-result`
+would parse it as an option; for the same reason `save-result` gets its question as `--question="$(cat FILE)"`.
+Every block deletes the files it read and exits with the graphify command's status, so write the files again
+before the next block.
+
+After writing the answer, save it back into the graph so it improves future queries. Include the expanded tokens inside the answer text (e.g. `"Expanded from original query via vocab: [tokens]. Then traversed..."`) so the next `--update` extracts the expansion history as a graph node:
 
 ```bash
-$(cat graphify-out/.graphify_python) -m graphify save-result --question "ORIGINAL_QUESTION" --answer "ANSWER" --type query --nodes NODE1 NODE2
+set --
+while IFS= read -r node || [ -n "$node" ]; do
+    case $node in
+        -*) printf 'graphify: refusing a node label that starts with "-": %s\n' "$node" >&2; exit 1 ;;
+    esac
+    [ -n "$node" ] && set -- "$@" "$node"
+done < graphify-out/.graphify_nodes.txt
+$(cat graphify-out/.graphify_python) -m graphify save-result --question="$(cat graphify-out/.graphify_question.txt)" \
+    --answer-file graphify-out/.graphify_answer.txt --type query --nodes "$@"
+rc=$?
+rm -f graphify-out/.graphify_question.txt graphify-out/.graphify_answer.txt graphify-out/.graphify_nodes.txt
+exit "$rc"
 ```
 
-Replace `ORIGINAL_QUESTION` with the user's verbatim question, `ANSWER` with your full answer text (containing the expanded-token trace), `NODE1 NODE2` with the list of node labels you cited. This closes the feedback loop: the next `--update` will extract this Q&A as a node in the graph.
+Before running it, write three files with the Write tool: `graphify-out/.graphify_question.txt` with the user's
+verbatim question, `graphify-out/.graphify_answer.txt` with your full answer text (containing the expanded-token
+trace), and `graphify-out/.graphify_nodes.txt` with the node labels you cited, one per line. This closes the feedback
+loop: the next `--update` will extract this Q&A as a node in the graph.
 
-**Work memory (self-improving loop).** Add an `--outcome` so future sessions learn from this one — append `--outcome useful|dead_end|corrected` to the `save-result` command (and `--correction "the right answer"` when correcting):
+**Work memory (self-improving loop).** Add an `--outcome` so future sessions learn from this one — add
+`--outcome useful|dead_end|corrected` to the `save-result` command before `--nodes`. When correcting, also write the
+right answer to `graphify-out/.graphify_correction.txt` with the Write tool, add
+`--correction="$(cat graphify-out/.graphify_correction.txt)"` before `--nodes`, and add that file to the `rm -f` line:
 
 - `useful` — the cited nodes answered the question well (they become *preferred sources*).
 - `dead_end` — the question/path led nowhere; don't re-derive it next time.
 - `corrected` — the saved answer was wrong; `--correction` records what was right.
 
-At the **start** of graph work, refresh and read the lessons: run `graphify reflect --if-stale` (cheap, deterministic, no LLM; `--if-stale` makes it a no-op when `LESSONS.md` is already newer than every input, e.g. when the git hook just refreshed it), then read `graphify-out/reflections/LESSONS.md`. It lists **preferred sources** (start there), **known dead ends** (skip them), and prior **corrections**. Running `reflect` yourself keeps the lessons current even without the git hook installed; if the post-commit hook *is* installed, `--if-stale` means your session-start run costs almost nothing.
+At the **start** of graph work, refresh and read the lessons: run
+`$(cat graphify-out/.graphify_python) -m graphify reflect --if-stale` (cheap, deterministic, no LLM; `--if-stale`
+makes it a no-op when `LESSONS.md` is already newer than every input, e.g. when the git hook just refreshed it), then
+read `graphify-out/reflections/LESSONS.md`. It lists **preferred sources** (start there), **known dead ends** (skip
+them), and prior **corrections**. Running `reflect` yourself keeps the lessons current even without the git hook
+installed; if the post-commit hook *is* installed, `--if-stale` means your session-start run costs almost nothing.
 
 ---
 
 ## For /graphify path
 
-Find the shortest path between two named concepts in the graph. Prefer the CLI when installed:
+Find the shortest path between two named concepts in the graph. Write the user's two concept names to
+`graphify-out/.graphify_node_a.txt` and `graphify-out/.graphify_node_b.txt` with the Write tool, then prefer the CLI
+when installed:
 
 ```bash
-graphify path "NODE_A" "NODE_B"
+$(cat graphify-out/.graphify_python) -m graphify path \
+    "$(cat graphify-out/.graphify_node_a.txt)" "$(cat graphify-out/.graphify_node_b.txt)"
+rc=$?; rm -f graphify-out/.graphify_node_a.txt graphify-out/.graphify_node_b.txt; exit "$rc"
 ```
 
 If the CLI is unavailable, run it inline:
@@ -203,8 +245,8 @@ from pathlib import Path
 data = json.loads(Path('graphify-out/graph.json').read_text(encoding='utf-8'))
 G = json_graph.node_link_graph(data, edges='links')
 
-a_term = 'NODE_A'
-b_term = 'NODE_B'
+a_term = sys.argv[1]
+b_term = sys.argv[2]
 
 def find_node(term):
     term = term.lower()
@@ -238,25 +280,43 @@ except nx.NetworkXNoPath:
     print(f'No path found between {a_term!r} and {b_term!r}')
 except nx.NodeNotFound as e:
     print(f'Node not found: {e}')
-"
+" "$(cat graphify-out/.graphify_node_a.txt)" "$(cat graphify-out/.graphify_node_b.txt)"
+rc=$?; rm -f graphify-out/.graphify_node_a.txt graphify-out/.graphify_node_b.txt; exit "$rc"
 ```
 
-Replace `NODE_A` and `NODE_B` with the actual concept names from the user. Then explain the path in plain language - what each hop means, why it's significant.
+Write the two concept names to `graphify-out/.graphify_node_a.txt` and `graphify-out/.graphify_node_b.txt` again
+first (the CLI block deleted them). Then explain the path in plain language - what each hop means, why it's
+significant.
 
-After writing the explanation, save it back:
+After writing the explanation, save it back. Write `Path from <first concept> to <second concept>` to
+`graphify-out/.graphify_question.txt`, the explanation to `graphify-out/.graphify_answer.txt`, and the two concept
+names, one per line, to `graphify-out/.graphify_nodes.txt` with the Write tool, then run:
 
 ```bash
-$(cat graphify-out/.graphify_python) -m graphify save-result --question "Path from NODE_A to NODE_B" --answer "ANSWER" --type path_query --nodes NODE_A NODE_B
+set --
+while IFS= read -r node || [ -n "$node" ]; do
+    case $node in
+        -*) printf 'graphify: refusing a node label that starts with "-": %s\n' "$node" >&2; exit 1 ;;
+    esac
+    [ -n "$node" ] && set -- "$@" "$node"
+done < graphify-out/.graphify_nodes.txt
+$(cat graphify-out/.graphify_python) -m graphify save-result --question="$(cat graphify-out/.graphify_question.txt)" \
+    --answer-file graphify-out/.graphify_answer.txt --type path_query --nodes "$@"
+rc=$?
+rm -f graphify-out/.graphify_question.txt graphify-out/.graphify_answer.txt graphify-out/.graphify_nodes.txt
+exit "$rc"
 ```
 
 ---
 
 ## For /graphify explain
 
-Give a plain-language explanation of a single node - everything connected to it. Prefer the CLI when installed:
+Give a plain-language explanation of a single node - everything connected to it. Write the concept the user asked
+about to `graphify-out/.graphify_node.txt` with the Write tool, then prefer the CLI when installed:
 
 ```bash
-graphify explain "NODE_NAME"
+$(cat graphify-out/.graphify_python) -m graphify explain "$(cat graphify-out/.graphify_node.txt)"
+rc=$?; rm -f graphify-out/.graphify_node.txt; exit "$rc"
 ```
 
 If the CLI is unavailable, run it inline:
@@ -271,7 +331,7 @@ from pathlib import Path
 data = json.loads(Path('graphify-out/graph.json').read_text(encoding='utf-8'))
 G = json_graph.node_link_graph(data, edges='links')
 
-term = 'NODE_NAME'
+term = sys.argv[1]
 term_lower = term.lower()
 
 # Find best matching node
@@ -299,13 +359,29 @@ for neighbor in G.neighbors(nid):
     conf = edge.get('confidence', '')
     src_file = G.nodes[neighbor].get('source_file', '')
     print(f'  --{rel}--> {nlabel} [{conf}] ({src_file})')
-"
+" "$(cat graphify-out/.graphify_node.txt)"
+rc=$?; rm -f graphify-out/.graphify_node.txt; exit "$rc"
 ```
 
-Replace `NODE_NAME` with the concept the user asked about. Then write a 3-5 sentence explanation of what this node is, what it connects to, and why those connections are significant. Use the source locations as citations.
+Write the concept to `graphify-out/.graphify_node.txt` again first (the CLI block deleted it). Then write a 3-5
+sentence explanation of what this node is, what it connects to, and why those connections are significant. Use the
+source locations as citations.
 
-After writing the explanation, save it back:
+After writing the explanation, save it back. Write `Explain <concept>` to `graphify-out/.graphify_question.txt`, the
+explanation to `graphify-out/.graphify_answer.txt`, and the concept to `graphify-out/.graphify_nodes.txt` with the
+Write tool, then run:
 
 ```bash
-$(cat graphify-out/.graphify_python) -m graphify save-result --question "Explain NODE_NAME" --answer "ANSWER" --type explain --nodes NODE_NAME
+set --
+while IFS= read -r node || [ -n "$node" ]; do
+    case $node in
+        -*) printf 'graphify: refusing a node label that starts with "-": %s\n' "$node" >&2; exit 1 ;;
+    esac
+    [ -n "$node" ] && set -- "$@" "$node"
+done < graphify-out/.graphify_nodes.txt
+$(cat graphify-out/.graphify_python) -m graphify save-result --question="$(cat graphify-out/.graphify_question.txt)" \
+    --answer-file graphify-out/.graphify_answer.txt --type explain --nodes "$@"
+rc=$?
+rm -f graphify-out/.graphify_question.txt graphify-out/.graphify_answer.txt graphify-out/.graphify_nodes.txt
+exit "$rc"
 ```

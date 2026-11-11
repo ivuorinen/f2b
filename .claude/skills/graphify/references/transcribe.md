@@ -19,13 +19,18 @@ Read the top god node labels from detect output or analysis, then compose a shor
 - Labels: `transformer, attention, encoder, decoder` → `"Machine learning research on transformer architectures and attention mechanisms. Use proper punctuation and paragraph breaks."`
 - Labels: `kubernetes, deployment, pod, helm` → `"DevOps discussion about Kubernetes deployments and Helm charts. Use proper punctuation and paragraph breaks."`
 
-**Export** it as `GRAPHIFY_WHISPER_PROMPT` (the exact name the transcriber reads — and it must be `export`ed so the child Python process sees it) for the next command.
+Write the hint to `graphify-out/.graphify_whisper_prompt.txt` with the Write tool, and the Whisper model name (`base`
+unless the user passed `--whisper-model <name>`) to `graphify-out/.graphify_whisper_model.txt`. The command below
+**exports** them as `GRAPHIFY_WHISPER_PROMPT` and `GRAPHIFY_WHISPER_MODEL` (the exact names the transcriber reads —
+they must be `export`ed so the child Python process sees them). Never type the hint into the command: it is built
+from labels that ingested documents supply, and inside double quotes a `$(...)` or backticks in it would run.
 
 **Step 2 - Transcribe:**
 
 ```bash
-export GRAPHIFY_WHISPER_MODEL=base  # or whatever --whisper-model the user passed (must be exported)
-export GRAPHIFY_WHISPER_PROMPT="<the one-sentence domain hint you composed in Step 1>"
+export GRAPHIFY_WHISPER_MODEL="$(cat graphify-out/.graphify_whisper_model.txt)"
+export GRAPHIFY_WHISPER_PROMPT="$(cat graphify-out/.graphify_whisper_prompt.txt)"
+rm -f graphify-out/.graphify_whisper_model.txt graphify-out/.graphify_whisper_prompt.txt
 $(cat graphify-out/.graphify_python) -c "
 import json, os, sys
 from pathlib import Path
@@ -49,4 +54,5 @@ After transcription:
 - Print how many transcripts were created: `Transcribed N video file(s) -> treating as docs`
 - If transcription fails for a file, print a warning and continue with the rest
 
-**Whisper model:** Default is `base`. If the user passed `--whisper-model <name>`, `export GRAPHIFY_WHISPER_MODEL=<name>` (it must be exported, not just assigned) before running the command above.
+**Whisper model:** Default is `base`. If the user passed `--whisper-model <name>`, write that name to
+`graphify-out/.graphify_whisper_model.txt` instead; the command above exports it.

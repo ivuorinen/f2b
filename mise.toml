@@ -16,6 +16,7 @@ idiomatic_version_file_enable_tools = ["go"]
 [tools]
 "go:github.com/golangci/golangci-lint/v2/cmd/golangci-lint" = "2.15.0"
 "go:github.com/princjef/gomarkdoc/cmd/gomarkdoc" = "1.1.0"
+"go:github.com/rillig/gobco" = "1.3.4"
 "go:github.com/securego/gosec/v2/cmd/gosec" = "2.30.0"
 "go:golang.org/x/vuln/cmd/govulncheck" = "1.9.0"
 actionlint = "1.7.12"
@@ -30,8 +31,9 @@ node = "24.22.2"
 "npm:markdown-link-check" = "3.15.0"
 prek = "0.5.7"
 "pypi:check-jsonschema" = "0.39.0"
-# Renovate does not read `with`: bump mdformat-gfm by hand with mdformat.
-"pypi:mdformat" = { version = "1.0.0", with = ["mdformat-gfm==1.0.0"] }
+# Renovate does not read `with`: bump the plugins by hand with mdformat.
+# mdformat-frontmatter keeps the YAML frontmatter of .claude/agents/*.md.
+"pypi:mdformat" = { version = "1.0.0", with = ["mdformat-gfm==1.0.0", "mdformat-frontmatter==2.2.0"] }
 shfmt = "3.14.1"
 uv = "0.13.6"
 yamlfmt = "0.21.0"
@@ -53,8 +55,13 @@ description = "Run tests with the race detector"
 run = "go test -race ./..."
 
 [tasks.test-cov]
-description = "Run race-enabled tests and write coverage.out"
-run = "go test -race -covermode=atomic -coverprofile=coverage.out ./..."
+description = "Run race-enabled tests, write coverage.out and report branch coverage"
+# gobco takes one package directory per run. Given ./... it exits 0 after
+# printing "nothing to instrument", so the directories come from go list.
+run = [
+  "go test -race -covermode=atomic -coverprofile=coverage.out ./...",
+  'for pkg in $(go list ./...); do gobco -branch ".${pkg#github.com/ivuorinen/f2b}" || exit 1; done',
+]
 
 [tasks.fmt]
 description = "Format Go code"
@@ -84,6 +91,34 @@ run = "prek run --all-files --show-diff-on-failure"
 [tasks.setup]
 description = "Install the prek git hooks"
 run = "prek install"
+
+# Runs the same commit-msg hooks over what the squash merge puts on main, so CI
+# holds no second copy of their patterns. The commit-messages workflow sets the
+# three variables. An unset, invalid or empty range fails instead of passing
+# after checking only the title: a failing git rev-list inside a for word list
+# would be ignored even under errexit, so its output is captured first. The loop
+# splits it through printf because zsh does not word-split a bare $shas.
+[tasks.check-commit-messages]
+description = "Run the commit-msg hooks over PR_TITLE and BASE_SHA..HEAD_SHA"
+run = '''
+: "${BASE_SHA:?}" "${HEAD_SHA:?}"
+shas=$(git rev-list "$BASE_SHA..$HEAD_SHA")
+if [ -z "$shas" ]; then
+  echo "No commits in $BASE_SHA..$HEAD_SHA" >&2
+  exit 1
+fi
+msg=$(mktemp)
+trap 'rm -f "$msg"' EXIT
+check() {
+  prek run --stage commit-msg --commit-msg-filename "$msg" no-session-reference semantic-commit-subject
+}
+printf '%s\n' "$PR_TITLE" >"$msg"
+check
+for sha in $(printf '%s\n' "$shas"); do
+  git log -1 --format=%B "$sha" >"$msg"
+  check
+done
+'''
 
 # Reachability-aware: only fails on vulnerabilities this code can actually
 # reach, unlike a plain dependency-version scan.

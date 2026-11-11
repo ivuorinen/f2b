@@ -17,30 +17,13 @@ import (
 	"time"
 
 	"github.com/ivuorinen/f2b/constants"
+	"github.com/ivuorinen/f2b/fail2ban/internal/query"
 )
 
 // commandWaitDelay bounds how long a canceled command may keep its output
 // pipes open before Wait gives up and kills it. A variable only so tests can
 // shorten it.
 var commandWaitDelay = 5 * time.Second
-
-var logDir = constants.DefaultLogDir // base directory for fail2ban logs
-var logDirMu sync.RWMutex            // protects logDir from concurrent access
-
-// SetLogDir sets the directory path for log files. Log-reading functions read
-// this global via GetLogDir, so tests use it to point log reads at a temp dir.
-func SetLogDir(dir string) {
-	logDirMu.Lock()
-	defer logDirMu.Unlock()
-	logDir = dir
-}
-
-// GetLogDir returns the current log directory path.
-func GetLogDir() string {
-	logDirMu.RLock()
-	defer logDirMu.RUnlock()
-	return logDir
-}
 
 // OSRunner runs commands locally.
 type OSRunner struct{}
@@ -87,27 +70,13 @@ func runCombined(ctx context.Context, name string, args ...string) ([]byte, erro
 	return out, err
 }
 
-// CombinedOutput executes a command without sudo.
-func (r *OSRunner) CombinedOutput(name string, args ...string) ([]byte, error) {
-	return r.CombinedOutputWithContext(context.Background(), name, args...)
-}
-
-// CombinedOutputWithContext executes a command without sudo with context support.
-func (r *OSRunner) CombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error) {
-	if err := validateCommandExecution(name, args); err != nil {
-		return nil, err
-	}
-	return runCombined(ctx, name, args...)
-}
-
-// CombinedOutputWithSudo executes a command with sudo if needed.
-func (r *OSRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte, error) {
-	return r.CombinedOutputWithSudoContext(context.Background(), name, args...)
-}
-
 // CombinedOutputWithSudoContext executes a command with sudo if needed, with context support.
 func (r *OSRunner) CombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error) {
 	if err := validateCommandExecution(name, args); err != nil {
+		return nil, err
+	}
+	path, err := resolveTrustedCommand(name)
+	if err != nil {
 		return nil, err
 	}
 
@@ -115,18 +84,22 @@ func (r *OSRunner) CombinedOutputWithSudoContext(ctx context.Context, name strin
 
 	// If already root, no need for sudo
 	if checker.IsRoot() {
-		return runCombined(ctx, name, args...)
+		return runCombined(ctx, path, args...)
 	}
 
 	// If command requires sudo and user has privileges, use sudo. The command
 	// name and arguments were validated above by validateCommandExecution.
 	if RequiresSudo(name, args...) && checker.HasSudoPrivileges() {
-		sudoArgs := append([]string{name}, args...)
-		return runCombined(ctx, constants.SudoCommand, sudoArgs...)
+		sudoPath, err := resolveTrustedCommand(constants.SudoCommand)
+		if err != nil {
+			return nil, err
+		}
+		sudoArgs := append([]string{path}, args...)
+		return runCombined(ctx, sudoPath, sudoArgs...)
 	}
 
 	// Otherwise run without sudo
-	return runCombined(ctx, name, args...)
+	return runCombined(ctx, path, args...)
 }
 
 // runnerManager provides thread-safe access to the global Runner.
@@ -154,18 +127,6 @@ func GetRunner() Runner {
 	return globalRunnerManager.runner
 }
 
-// RunnerCombinedOutputWithSudoContext executes a command with sudo privileges
-// and context using the global runner, logging its duration. It is the only
-// global-runner entry point: its context-free and non-sudo twins had no
-// production caller, and the context-free one let the service command ignore
-// Ctrl-C.
-func RunnerCombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error) {
-	timer := NewTimedOperation("RunnerCombinedOutputWithSudoContext", name, args...)
-	output, err := GetRunner().CombinedOutputWithSudoContext(ctx, name, args...)
-	timer.FinishWithContext(ctx, err)
-	return output, err
-}
-
 func (c *RealClient) fetchJailsWithContext(ctx context.Context) ([]string, error) {
 	out, err := c.cmdRunner().CombinedOutputWithSudoContext(ctx, c.Path, constants.CommandArgStatus)
 	if err != nil {
@@ -183,20 +144,6 @@ func lastLine(out []byte) string {
 	return strings.TrimSpace(lines[len(lines)-1])
 }
 
-// requestsAllJails reports whether the requested jail list should expand to
-// every configured jail: an empty list, or a list containing "all" or "".
-func requestsAllJails(jails []string) bool {
-	if len(jails) == 0 {
-		return true
-	}
-	for _, j := range jails {
-		if j == constants.AllFilter || j == "" {
-			return true
-		}
-	}
-	return false
-}
-
 // getBanRecordsInternal is the internal implementation with context support
 func (c *RealClient) getBanRecordsInternal(ctx context.Context, jails []string) ([]BanRecord, error) {
 	// Expand to all configured jails when no specific jail is requested: an
@@ -204,7 +151,7 @@ func (c *RealClient) getBanRecordsInternal(ctx context.Context, jails []string) 
 	// single-element ["all"]/[""] expanded, so GetBanRecords(nil) silently
 	// returned nothing and ["sshd","all"] queried a literal jail named "all".
 	toQuery := jails
-	if requestsAllJails(jails) {
+	if query.RequestsAllJails(jails) {
 		toQuery = c.Jails
 	}
 
@@ -228,16 +175,14 @@ func (c *RealClient) getBanRecordsInternal(ctx context.Context, jails []string) 
 				// records when only some jails fail, and a joined error when
 				// all do. Swallowing here made total failure (e.g. broken
 				// socket perms) indistinguishable from "no bans anywhere".
-				getLogger().WithError(err).WithField(string(constants.ContextKeyJail), jail).
-					Warn("Failed to get ban records for jail")
+				// It is not logged here: the caller prints the returned
+				// error, and ProcessJailsParallel logs a partial failure.
 				return nil, fmt.Errorf("jail %s: %w", jail, err)
 			}
 
 			jailRecords, parseErr := ParseBanRecords(string(out), jail)
 			if parseErr != nil {
-				getLogger().WithError(parseErr).WithField("jail", jail).
-					Warn("Failed to parse ban records for jail")
-				return nil, fmt.Errorf("jail %s: parse: %w", jail, parseErr)
+				return nil, fmt.Errorf("jail %s: %w", jail, parseErr)
 			}
 
 			return jailRecords, nil
@@ -262,14 +207,14 @@ func (c *RealClient) GetLogLinesWithLimitContext(ctx context.Context, jail, ip s
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if err := validateMaxLines(maxLines); err != nil {
+	if err := ValidateMaxLines(maxLines); err != nil {
 		return nil, err
 	}
 	if maxLines == 0 {
 		return []string{}, nil
 	}
 
-	jail, ip, err := validateLogFilters(jail, ip)
+	jail, ip, err := ValidateLogFilters(jail, ip)
 	if err != nil {
 		return nil, err
 	}
@@ -323,7 +268,7 @@ func (c *RealClient) executeIPActionWithContext(
 	ctx context.Context,
 	ip, jail, action, errorTemplate string,
 ) (int, error) {
-	if err := ValidateIP(ip); err != nil {
+	if err := ValidateBanTarget(ip); err != nil {
 		return 0, err
 	}
 	if err := ValidateJail(jail); err != nil {
@@ -386,8 +331,9 @@ func (c *RealClient) GetLogLinesWithContext(ctx context.Context, jail, ip string
 	return c.GetLogLinesWithLimitContext(ctx, jail, ip, constants.DefaultLogLinesLimit)
 }
 
-// validateMaxLines rejects negative limits and limits above MaxLogLinesLimit.
-func validateMaxLines(maxLines int) error {
+// ValidateMaxLines rejects negative limits and limits above MaxLogLinesLimit.
+// Exported so fail2bantest.MockClient applies the same rules.
+func ValidateMaxLines(maxLines int) error {
 	if maxLines < 0 {
 		return fmt.Errorf(constants.ErrMaxLinesNegative, maxLines)
 	}
@@ -421,8 +367,9 @@ func (c *RealClient) resolveFilterPath(filter string) (string, error) {
 }
 
 // validateFilterPath validates the filter name and returns the filter's path
-// and the logpath it declares.
-func (c *RealClient) validateFilterPath(filter string) (string, string, error) {
+// and the log to test it against: logFile when given, otherwise the logpath
+// the filter declares.
+func (c *RealClient) validateFilterPath(filter, logFile string) (string, string, error) {
 	cleanPath, err := c.resolveFilterPath(filter)
 	if err != nil {
 		return "", "", err
@@ -433,27 +380,14 @@ func (c *RealClient) validateFilterPath(filter string) (string, string, error) {
 	if err != nil {
 		return "", "", fmt.Errorf("filter not found: %w", err)
 	}
-	content := string(data)
 
-	var logPath string
-	var patterns []string
-	for line := range strings.SplitSeq(content, "\n") {
-		lower := strings.ToLower(strings.TrimSpace(line))
-		if strings.HasPrefix(lower, "logpath") {
-			// Guard against lines with no '=' (e.g. a bare "logpath" key in a
-			// hand-edited file), which would otherwise panic on parts[1].
-			if parts := strings.SplitN(line, "=", 2); len(parts) == 2 {
-				logPath = strings.TrimSpace(parts[1])
-			}
-		}
-		if strings.HasPrefix(lower, "failregex") {
-			if parts := strings.SplitN(line, "=", 2); len(parts) == 2 {
-				patterns = append(patterns, strings.TrimSpace(parts[1]))
-			}
-		}
-	}
-	if len(patterns) == 0 {
+	logPath, hasFailregex := parseFilterFile(string(data))
+	if !hasFailregex {
 		return "", "", errors.New("invalid filter file: no failregex patterns found")
+	}
+
+	if logFile != "" {
+		logPath = logFile
 	}
 
 	// Stock fail2ban filters (filter.d/*.conf) define failregex only; logpath
@@ -462,33 +396,84 @@ func (c *RealClient) validateFilterPath(filter string) (string, string, error) {
 	// "success, 0 matches" for any filter. Fail with guidance instead.
 	if logPath == "" {
 		return "", "", fmt.Errorf(
-			"filter %q defines no logpath; test it against a specific log with: fail2ban-regex <logfile> %s",
-			filter, cleanPath)
+			"filter %q defines no logpath; name a log to test it against: f2b test-filter %s <logfile>",
+			filter, filter)
 	}
 
 	return cleanPath, logPath, nil
 }
 
-// TestFilterWithContext tests a fail2ban filter against its configured log files with context support.
-func (c *RealClient) TestFilterWithContext(ctx context.Context, filter string) (string, error) {
+// parseFilterFile returns the logpath a filter file declares and whether it
+// defines any failregex. Lines with no '=' (a bare "logpath" key in a
+// hand-edited file) carry no value and are skipped.
+func parseFilterFile(content string) (logPath string, hasFailregex bool) {
+	for line := range strings.SplitSeq(content, "\n") {
+		_, value, found := strings.Cut(line, "=")
+		if !found {
+			continue
+		}
+		lower := strings.ToLower(strings.TrimSpace(line))
+		if strings.HasPrefix(lower, "logpath") {
+			logPath = strings.TrimSpace(value)
+		}
+		if strings.HasPrefix(lower, "failregex") {
+			hasFailregex = true
+		}
+	}
+	return logPath, hasFailregex
+}
+
+// TestFilterWithContext runs fail2ban-regex for filter against logFile, or
+// against the logpath the filter declares when logFile is empty.
+func (c *RealClient) TestFilterWithContext(ctx context.Context, filter, logFile string) (output string, err error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	cleanPath, logPath, err := c.validateFilterPath(filter)
+	cleanPath, logPath, err := c.validateFilterPath(filter, logFile)
 	if err != nil {
 		return "", err
 	}
 
-	// fail2ban-regex runs under sudo (RequiresSudo), so the filter-supplied
-	// logpath must pass the log allowlist before it reaches argv — otherwise a
-	// user-writable filter file turns `sudo fail2ban-regex <logpath> <filter>`
-	// into a read-as-root primitive (e.g. logpath = /etc/shadow).
-	validatedLogPath, err := ValidatePathWithSecurity(logPath, CreateLogPathConfig())
+	// fail2ban-regex runs under sudo (RequiresSudo) and prints the lines it
+	// reads, so the log, whether the caller named it or the filter declared
+	// it, must pass the log allowlist — otherwise `sudo fail2ban-regex <log>
+	// <filter>` is a read-as-root primitive (e.g. /etc/shadow).
+	logConfig := CreateLogPathConfig()
+	validatedLogPath, err := ValidatePathWithSecurity(logPath, logConfig)
 	if err != nil {
 		return "", fmt.Errorf("filter %q has an invalid logpath %q: %w", filter, logPath, err)
 	}
 
-	output, err := c.cmdRunner().CombinedOutputWithSudoContext(
-		ctx, constants.Fail2BanRegexCommand, validatedLogPath, cleanPath)
-	return string(output), err
+	// When f2b itself runs as root (`sudo f2b`, the privilege boundary), the
+	// validated path is not handed on: a user who can write a directory on it
+	// could swap the file for a symlink before fail2ban-regex opens it. f2b
+	// opens the log through the allowlisted directory that holds it, where no
+	// component can lead outside, refuses anything but a regular file of at
+	// most DefaultMaxFileSize bytes, and gives fail2ban-regex a copy in a
+	// private directory that is removed afterwards. An ordinary user whose
+	// commands escalate one at a time can already run `sudo fail2ban-regex
+	// <file>` directly, so there is no boundary to protect, and the path is
+	// passed as is: f2b reading the log with that user's privileges would
+	// refuse logs only root can read.
+	regexLog := validatedLogPath
+	if GetSudoChecker().IsRoot() {
+		var removeCopy func() error
+		regexLog, removeCopy, err = copyLogForRegex(
+			validatedLogPath,
+			logConfig.AllowedBasePaths,
+			constants.DefaultMaxFileSize,
+		)
+		if err != nil {
+			return "", fmt.Errorf("filter %q: cannot read log %q: %w", filter, validatedLogPath, err)
+		}
+		defer func() {
+			if rmErr := removeCopy(); rmErr != nil {
+				err = errors.Join(err, fmt.Errorf("could not remove the log copy %q: %w", regexLog, rmErr))
+			}
+		}()
+	}
+
+	getLogger().WithFields(Fields{"filter": filter, "logpath": validatedLogPath}).Info("Running fail2ban-regex")
+	out, err := c.cmdRunner().CombinedOutputWithSudoContext(ctx, constants.Fail2BanRegexCommand, regexLog, cleanPath)
+	return string(out), err
 }

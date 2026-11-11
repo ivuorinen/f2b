@@ -46,6 +46,13 @@ func NewCommand(use, short string, aliases []string, runE func(*cobra.Command, [
 	}
 }
 
+// withArgs sets cmd's positional-argument rule. Without one cobra accepts any
+// number of arguments, so `f2b banned sshd nginx` silently ignored nginx.
+func withArgs(args cobra.PositionalArgs, cmd *cobra.Command) *cobra.Command {
+	cmd.Args = args
+	return cmd
+}
+
 // AddLogFlags adds common log-related flags to a command
 func AddLogFlags(cmd *cobra.Command) {
 	cmd.Flags().IntP(constants.FlagLimit, "n", 0, "Show only the last N log lines")
