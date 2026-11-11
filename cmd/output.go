@@ -67,6 +67,13 @@ func IsPrinted(err error) bool {
 	return errors.As(err, &p)
 }
 
+// writesToStderr reports whether the log output w is os.Stderr. A record of a
+// failure whose error is returned would there repeat the Error: line printed
+// for it, so such records are written only to another sink (a --log-file).
+func writesToStderr(w io.Writer) bool {
+	return w == io.Writer(os.Stderr)
+}
+
 // PrintError logs and prints an error to stderr with enhanced context if available.
 func PrintError(err error) {
 	if err == nil {
@@ -77,7 +84,7 @@ func PrintError(err error) {
 
 	// With logs on stderr the record would only repeat the Error: line below;
 	// with a --log-file it is the copy that outlives the run.
-	if Logger.Output() != io.Writer(os.Stderr) {
+	if !writesToStderr(Logger.Output()) {
 		entry := Logger.WithError(err)
 		if hasContext {
 			entry = entry.WithField("category", string(contextErr.GetCategory()))

@@ -44,9 +44,12 @@ func ServiceCmd(runner fail2ban.Runner, config *Config) *cobra.Command {
 			}
 			timer := fail2ban.NewTimedOperation("service", name, serviceArgs...)
 			out, err := runner.CombinedOutputWithSudoContext(ctx, name, serviceArgs...)
-			timer.FinishWithContext(ctx, err)
+			// A failure is printed once as the Error: line; on stderr the
+			// timer's failure record would repeat it.
+			if err == nil || !writesToStderr(Logger.Output()) {
+				timer.FinishWithContext(ctx, err)
+			}
 			if err != nil {
-				Logger.WithField("action", action).WithError(err).Error("Service action failed")
 				return HandleSystemError(err)
 			}
 

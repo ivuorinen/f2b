@@ -175,8 +175,8 @@ func (c *RealClient) getBanRecordsInternal(ctx context.Context, jails []string) 
 				// records when only some jails fail, and a joined error when
 				// all do. Swallowing here made total failure (e.g. broken
 				// socket perms) indistinguishable from "no bans anywhere".
-				getLogger().WithError(err).WithField(string(constants.ContextKeyJail), jail).
-					Warn("Failed to get ban records for jail")
+				// It is not logged here: the caller prints the returned
+				// error, and ProcessJailsParallel logs a partial failure.
 				return nil, fmt.Errorf("jail %s: %w", jail, err)
 			}
 

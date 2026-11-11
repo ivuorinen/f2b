@@ -143,15 +143,19 @@ func TestServiceCmdHonorsCommandContext(t *testing.T) {
 }
 
 // TestServiceCmdLogsAction pins the audit record for privileged service
-// actions: success and failure both log the action.
+// actions in a log sink other than stderr: success and failure both log the
+// action. The failure record is the timer's, which logs through the fail2ban
+// logger that main points at Logger.
 func TestServiceCmdLogsAction(t *testing.T) {
 	var buf bytes.Buffer
 	originalOutput, originalLevel := Logger.Output(), Logger.GetLevel()
 	Logger.SetOutput(&buf)
 	Logger.SetLevel(slog.LevelInfo)
+	fail2ban.SetLogger(Logger)
 	t.Cleanup(func() {
 		Logger.SetOutput(originalOutput)
 		Logger.SetLevel(originalLevel)
+		fail2ban.SetLogger(fail2ban.NewSlogLogger(fail2ban.SlogText))
 	})
 
 	mock := fail2bantest.MustMockRunner(t)
@@ -176,7 +180,7 @@ func TestServiceCmdLogsAction(t *testing.T) {
 	if err := run("reload"); err == nil {
 		t.Fatal("reload succeeded despite the mocked error")
 	}
-	if !strings.Contains(buf.String(), "Service action failed") || !strings.Contains(buf.String(), "action=reload") {
+	if !strings.Contains(buf.String(), `args="fail2ban reload"`) || !strings.Contains(buf.String(), "reload failed") {
 		t.Errorf("no failure audit line for reload in %q", buf.String())
 	}
 }
