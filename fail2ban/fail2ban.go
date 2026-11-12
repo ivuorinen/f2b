@@ -483,9 +483,34 @@ func (c *RealClient) TestFilterWithContext(ctx context.Context, filter, logFile 
 				err = errors.Join(err, fmt.Errorf("could not remove the log copy %q: %w", regexLog, rmErr))
 			}
 		}()
+	} else if fileErr := requireLogFile(validatedLogPath); fileErr != nil {
+		return "", fmt.Errorf("filter %q: %w", filter, fileErr)
 	}
 
 	getLogger().WithFields(Fields{"filter": filter, "logpath": validatedLogPath}).Info("Running fail2ban-regex")
 	out, err := c.cmdRunner().CombinedOutputWithSudoContext(ctx, constants.Fail2BanRegexCommand, regexLog, cleanPath)
 	return string(out), err
+}
+
+// requireLogFile refuses a log that is missing or not a regular file on the
+// ordinary-user path, where the log path reaches fail2ban-regex as is:
+// fail2ban-regex reads any path that is not a file as one literal log line and
+// reports success without testing a file. It reads metadata only, so a log
+// only root may read still passes; a log in a directory the user cannot
+// search passes unchecked, since only fail2ban-regex under sudo can see it.
+func requireLogFile(path string) error {
+	info, err := os.Stat(path)
+	if errors.Is(err, os.ErrPermission) {
+		return nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("log %s does not exist", path)
+	}
+	if err != nil {
+		return fmt.Errorf("log %s: %w", path, err)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("log %s is not a regular file", path)
+	}
+	return nil
 }

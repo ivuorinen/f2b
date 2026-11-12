@@ -83,7 +83,9 @@ bytes, and passes fail2ban-regex a copy in a private (`0700`) temporary
 directory that is removed afterwards. When f2b runs as an ordinary user and
 escalates per command, it passes the validated path: that user can already run
 `sudo fail2ban-regex <file>` directly, so there is no boundary to protect, and
-logs only root can read keep working.
+logs only root can read keep working. It first checks, from the file's metadata
+alone, that the path names an existing regular file, because fail2ban-regex
+reads any other path as one literal log line and reports success.
 
 ### Trusted Binary Directories
 

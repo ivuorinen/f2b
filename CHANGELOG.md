@@ -62,7 +62,8 @@ ______________________________________________________________________
 - The vendored graphify skill is pinned to the version it was reviewed at
   (0.9.16), and its PATH-resolved `hook-guard` hooks are removed.
 - **BREAKING**: `test-filter` takes an optional log file as its second argument,
-  because stock filters declare no logpath; the `Client` method gained a
+  because stock filters declare no logpath, and refuses a log that is missing
+  or not a regular file; the `Client` method gained a
   `logFile` parameter. The `Runner` interface is reduced to
   `CombinedOutputWithSudoContext`, and `ServiceCmd` takes a `Runner`.
 - `logs` and `logs-watch` fail when the log directory holds no fail2ban log,
