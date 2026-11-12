@@ -475,7 +475,7 @@ func ValidateLogPath(path, logDir string) (string, error)
 ValidateLogPath validates and sanitizes a log file path, confined to logDir.
 
 <a name="ValidateMaxLines"></a>
-## func [ValidateMaxLines](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L336>)
+## func [ValidateMaxLines](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L348>)
 
 ```go
 func ValidateMaxLines(maxLines int) error
@@ -840,7 +840,7 @@ func NewClientWithContext(ctx context.Context, logDir, filterDir string) (*RealC
 NewClientWithContext initializes a RealClient with context support for timeout and cancellation. It checks for fail2ban\-client in PATH, ensures the service is running, checks sudo privileges, and loads available jails. Returns an error if fail2ban is not available, not running, or user lacks sudo privileges.
 
 <a name="RealClient.BanIPWithContext"></a>
-### func \(\*RealClient\) [BanIPWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L298>)
+### func \(\*RealClient\) [BanIPWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L309>)
 
 ```go
 func (c *RealClient) BanIPWithContext(ctx context.Context, ip, jail string) (int, error)
@@ -849,7 +849,7 @@ func (c *RealClient) BanIPWithContext(ctx context.Context, ip, jail string) (int
 BanIPWithContext bans an IP address in the specified jail with context support.
 
 <a name="RealClient.BannedInWithContext"></a>
-### func \(\*RealClient\) [BannedInWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L308>)
+### func \(\*RealClient\) [BannedInWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L320>)
 
 ```go
 func (c *RealClient) BannedInWithContext(ctx context.Context, ip string) ([]string, error)
@@ -858,7 +858,7 @@ func (c *RealClient) BannedInWithContext(ctx context.Context, ip string) ([]stri
 BannedInWithContext returns a list of jails where the specified IP address is currently banned with context support.
 
 <a name="RealClient.GetBanRecordsWithContext"></a>
-### func \(\*RealClient\) [GetBanRecordsWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L323>)
+### func \(\*RealClient\) [GetBanRecordsWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L335>)
 
 ```go
 func (c *RealClient) GetBanRecordsWithContext(ctx context.Context, jails []string) ([]BanRecord, error)
@@ -867,7 +867,7 @@ func (c *RealClient) GetBanRecordsWithContext(ctx context.Context, jails []strin
 GetBanRecordsWithContext retrieves ban records for the specified jails with context support.
 
 <a name="RealClient.GetLogLinesWithContext"></a>
-### func \(\*RealClient\) [GetLogLinesWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L330>)
+### func \(\*RealClient\) [GetLogLinesWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L342>)
 
 ```go
 func (c *RealClient) GetLogLinesWithContext(ctx context.Context, jail, ip string) ([]string, error)
@@ -921,7 +921,7 @@ func (c *RealClient) StatusJailWithContext(ctx context.Context, jail string) (st
 StatusJailWithContext returns the status of a specific fail2ban jail with context support.
 
 <a name="RealClient.TestFilterWithContext"></a>
-### func \(\*RealClient\) [TestFilterWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L428>)
+### func \(\*RealClient\) [TestFilterWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L440>)
 
 ```go
 func (c *RealClient) TestFilterWithContext(ctx context.Context, filter, logFile string) (output string, err error)
@@ -930,13 +930,13 @@ func (c *RealClient) TestFilterWithContext(ctx context.Context, filter, logFile 
 TestFilterWithContext runs fail2ban\-regex for filter against logFile, or against the logpath the filter declares when logFile is empty.
 
 <a name="RealClient.UnbanIPWithContext"></a>
-### func \(\*RealClient\) [UnbanIPWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L303>)
+### func \(\*RealClient\) [UnbanIPWithContext](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/fail2ban.go#L315>)
 
 ```go
 func (c *RealClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (int, error)
 ```
 
-UnbanIPWithContext unbans an IP address from the specified jail with context support.
+UnbanIPWithContext unbans an IP address, or a CIDR range together with every banned address inside it, from the specified jail with context support.
 
 <a name="RealSudoChecker"></a>
 ## type [RealSudoChecker](<https://github.com/ivuorinen/f2b/blob/main/fail2ban/sudo.go#L22-L36>)
