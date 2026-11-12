@@ -197,10 +197,12 @@ func TestCommandFailedLogCarriesCommandPath(t *testing.T) {
 	if err := rootCmd.PersistentPreRunE(cmd, nil); err != nil {
 		t.Fatalf("PersistentPreRunE: %v", err)
 	}
-	_, _ = captureStdoutStderr(func() error {
+	if _, err := captureStdoutStderr(func() error {
 		PrintError(errors.New("boom"))
 		return nil
-	})
+	}); err != nil {
+		t.Fatalf("captureStdoutStderr: %v", err)
+	}
 
 	if !strings.Contains(logBuf.String(), "Command failed") ||
 		!strings.Contains(logBuf.String(), "command_path=banned") {
@@ -361,7 +363,9 @@ func BenchmarkPrintOutputPlain(b *testing.B) {
 	b.ResetTimer()
 	for b.Loop() {
 		buf.Reset()
-		_ = PrintOutputTo(&buf, data, "plain")
+		if err := PrintOutputTo(&buf, data, "plain"); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -372,7 +376,9 @@ func BenchmarkPrintOutputJSON(b *testing.B) {
 	b.ResetTimer()
 	for b.Loop() {
 		buf.Reset()
-		_ = PrintOutputTo(&buf, data, JSONFormat)
+		if err := PrintOutputTo(&buf, data, JSONFormat); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
