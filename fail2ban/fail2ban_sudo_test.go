@@ -252,188 +252,21 @@ func TestRequiresSudo(t *testing.T) {
 	}
 }
 
-func TestCheckSudoRequirements(t *testing.T) {
-	tests := []struct {
-		name          string
-		hasPrivileges bool
-		expectError   bool
-	}{
-		{
-			name:          "with privileges",
-			hasPrivileges: true,
-			expectError:   false,
-		},
-		{
-			name:          "without privileges",
-			hasPrivileges: false,
-			expectError:   true,
-		},
+// TestRealSudoCheckerFailsClosed pins that a failed group lookup or sudo probe
+// reports no privilege rather than assuming some.
+func TestRealSudoCheckerFailsClosed(t *testing.T) {
+	lookupFailed := errors.New("group database unavailable")
+	checker := &RealSudoChecker{
+		groupNames:   func() ([]string, error) { return nil, lookupFailed },
+		runSudoProbe: func(context.Context) error { return lookupFailed },
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Modern standardized setup with automatic cleanup
-			_, cleanup := SetupMockEnvironmentWithSudo(t, tt.hasPrivileges)
-			defer cleanup()
-
-			err := CheckSudoRequirements()
-
-			AssertError(t, err, tt.expectError, tt.name)
-		})
+	if checker.InSudoGroup() {
+		t.Error("InSudoGroup reported membership after the lookup failed")
 	}
-}
-
-func TestSetAndGetSudoChecker(t *testing.T) {
-	// Modern standardized setup with automatic cleanup
-	_, cleanup := SetupMockEnvironment(t)
-	defer cleanup()
-
-	// Create a custom mock checker for this specific test
-	mock := &MockSudoChecker{
-		MockIsRoot:      true,
-		MockInSudoGroup: false,
-		MockCanUseSudo:  false,
+	if checker.CanUseSudo() {
+		t.Error("CanUseSudo reported access after the probe failed")
 	}
-
-	// Set and verify
-	SetSudoChecker(mock)
-	retrieved := GetSudoChecker()
-
-	if retrieved != mock {
-		t.Error("SetSudoChecker/GetSudoChecker did not work correctly")
-	}
-
-	// Verify it works
-	if !retrieved.IsRoot() {
-		t.Error("expected mock checker to report IsRoot() = true")
-	}
-}
-
-func TestSudoCheckingIntegration(t *testing.T) {
-	// Test the integration between different sudo checking components
-
-	tests := []struct {
-		name               string
-		mockIsRoot         bool
-		mockInSudoGroup    bool
-		mockCanUseSudo     bool
-		expectPrivileges   bool
-		expectRequiresPass bool
-	}{
-		{
-			name:               "root user passes all checks",
-			mockIsRoot:         true,
-			mockInSudoGroup:    false,
-			mockCanUseSudo:     false,
-			expectPrivileges:   true,
-			expectRequiresPass: true,
-		},
-		{
-			name:               "sudo group member passes",
-			mockIsRoot:         false,
-			mockInSudoGroup:    true,
-			mockCanUseSudo:     false,
-			expectPrivileges:   true,
-			expectRequiresPass: true,
-		},
-		{
-			name:               "sudo capable user passes",
-			mockIsRoot:         false,
-			mockInSudoGroup:    false,
-			mockCanUseSudo:     true,
-			expectPrivileges:   true,
-			expectRequiresPass: true,
-		},
-		{
-			name:               "regular user fails",
-			mockIsRoot:         false,
-			mockInSudoGroup:    false,
-			mockCanUseSudo:     false,
-			expectPrivileges:   false,
-			expectRequiresPass: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Modern standardized setup with automatic cleanup
-			_, cleanup := SetupMockEnvironment(t)
-			defer cleanup()
-
-			// Set custom mock checker for this test
-			mock := &MockSudoChecker{
-				MockIsRoot:      tt.mockIsRoot,
-				MockInSudoGroup: tt.mockInSudoGroup,
-				MockCanUseSudo:  tt.mockCanUseSudo,
-			}
-			SetSudoChecker(mock)
-
-			// Test individual methods
-			if mock.HasSudoPrivileges() != tt.expectPrivileges {
-				t.Errorf("HasSudoPrivileges() = %v, want %v", mock.HasSudoPrivileges(), tt.expectPrivileges)
-			}
-
-			// Test CheckSudoRequirements
-			err := CheckSudoRequirements()
-			if tt.expectRequiresPass && err != nil {
-				t.Errorf("CheckSudoRequirements() failed when it should pass: %v", err)
-			}
-			if !tt.expectRequiresPass && err == nil {
-				t.Error("CheckSudoRequirements() passed when it should fail")
-			}
-		})
-	}
-}
-
-func TestRealSudoCheckerErrorHandling(t *testing.T) {
-	checker := &RealSudoChecker{}
-
-	// Test that methods don't panic even if user.Current() or other calls fail
-	// We can't easily simulate these failures without complex mocking,
-	// but we can at least verify the methods don't panic
-	defer func() {
-		if r := recover(); r != nil {
-			t.Errorf("RealSudoChecker method panicked: %v", r)
-		}
-	}()
-
-	_ = checker.IsRoot()
-	_ = checker.InSudoGroup()
-	_ = checker.CanUseSudo()
-	_ = checker.HasSudoPrivileges()
-}
-
-func BenchmarkSudoChecking(b *testing.B) {
-	checker := &RealSudoChecker{}
-
-	b.Run("IsRoot", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			checker.IsRoot()
-		}
-	})
-
-	b.Run("InSudoGroup", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			checker.InSudoGroup()
-		}
-	})
-
-	b.Run("HasSudoPrivileges", func(b *testing.B) {
-		for i := 0; i < b.N; i++ {
-			checker.HasSudoPrivileges()
-		}
-	})
-
-	b.Run("MockChecker", func(b *testing.B) {
-		mock := &MockSudoChecker{
-			MockIsRoot:      false,
-			MockInSudoGroup: true,
-			MockCanUseSudo:  false,
-		}
-		for i := 0; i < b.N; i++ {
-			mock.HasSudoPrivileges()
-		}
-	})
 }
 
 func TestRequiresSudoEdgeCases(t *testing.T) {

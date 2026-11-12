@@ -5,10 +5,15 @@ package fail2ban
 import (
 	"context"
 	"errors"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestRunCombinedBoundsOrphanedChild pins that a canceled command returns
@@ -64,4 +69,37 @@ func TestRunCombinedFoldsDiagnosticIntoExitError(t *testing.T) {
 	if err == nil || err.Error() != "exit status 3" {
 		t.Fatalf("silent failure error = %v, want exactly \"exit status 3\"", err)
 	}
+}
+
+// TestRunCombinedDeliversSIGTERMOnCancel pins that cancellation sends SIGTERM.
+// sudo relays SIGTERM to its command but cannot relay SIGKILL, the default
+// cancel, which left the command running as an orphan. Only a signal the
+// script can trap creates the marker.
+func TestRunCombinedDeliversSIGTERMOnCancel(t *testing.T) {
+	dir := t.TempDir()
+	ready, marker := filepath.Join(dir, "ready"), filepath.Join(dir, "terminated")
+	script := `trap ': > "` + marker + `"; kill "$pid"; exit 0' TERM; sleep 30 & pid=$!; : > "` + ready + `"; wait`
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if _, err := runCombined(ctx, "sh", "-c", script); err != nil {
+			t.Logf("runCombined returned after cancellation: %v", err)
+		}
+	}()
+
+	require.Eventually(t, func() bool {
+		_, err := os.Stat(ready)
+		return err == nil
+	}, 5*time.Second, 10*time.Millisecond, "the script never started")
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("runCombined did not return after cancellation")
+	}
+	assert.FileExists(t, marker, "the command was not given SIGTERM")
 }
