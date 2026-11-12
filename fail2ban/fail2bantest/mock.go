@@ -3,6 +3,7 @@ package fail2bantest
 import (
 	"context"
 	"fmt"
+	"net"
 	"slices"
 	"sort"
 	"sync"
@@ -197,13 +198,46 @@ func (m *MockClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (i
 	if _, ok := m.Jails[jail]; !ok {
 		return 0, fail2ban.NewJailNotFoundError(jail)
 	}
-	if m.Banned[jail] == nil || m.Banned[jail][ip].IsZero() {
+	removed := unbannedBy(m.Banned[jail], ip)
+	if len(removed) == 0 {
 		return 1, nil // Already unbanned
 	}
-	delete(m.Banned[jail], ip)
-	m.Logs = append(m.Logs, fmt.Sprintf("%s fail2ban.actions [mock]: NOTICE [%s] Unban %s",
-		time.Now().Format(time.RFC3339), jail, ip))
+	for _, entry := range removed {
+		delete(m.Banned[jail], entry)
+		m.Logs = append(m.Logs, fmt.Sprintf("%s fail2ban.actions [mock]: NOTICE [%s] Unban %s",
+			time.Now().Format(time.RFC3339), jail, entry))
+	}
 	return 0, nil
+}
+
+// unbannedBy returns, sorted, the entries of banned that an unban of target
+// removes: target itself and, when target is a CIDR range, every banned
+// address or range whose address lies inside it, as the real client's range
+// unban does. Checking only the exact key let a command test pass against a
+// mock that kept the addresses inside an unbanned range. An entry with a zero
+// ban time counts as not banned.
+func unbannedBy(banned map[string]time.Time, target string) []string {
+	_, network, cidrErr := net.ParseCIDR(target)
+	var matches []string
+	for entry, at := range banned {
+		if at.IsZero() {
+			continue
+		}
+		if entry == target || (cidrErr == nil && network.Contains(entryAddress(entry))) {
+			matches = append(matches, entry)
+		}
+	}
+	sort.Strings(matches)
+	return matches
+}
+
+// entryAddress returns the address of a ban entry, an IP or a CIDR range, or
+// nil when the entry is neither; net.IPNet.Contains reports false for nil.
+func entryAddress(entry string) net.IP {
+	if ip, _, err := net.ParseCIDR(entry); err == nil {
+		return ip
+	}
+	return net.ParseIP(entry)
 }
 
 // BannedInWithContext returns the sorted list of jails in which the IP is currently banned.

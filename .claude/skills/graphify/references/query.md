@@ -66,7 +66,9 @@ below — NOT the original user question. (The original question is preserved on
 Write the expanded query string to `graphify-out/.graphify_question.txt` with the Write tool, then prefer the CLI
 when it is installed:
 ```bash
-# append --dfs and/or --budget 3000 to the first line when needed
+# when needed, add the fixed options --dfs and/or --budget 3000 to the first line
+# after the closing quote; inside the quotes or the question file they are
+# question text and graphify ignores them as options
 $(cat graphify-out/.graphify_python) -m graphify query "$(cat graphify-out/.graphify_question.txt)"
 rc=$?; rm -f graphify-out/.graphify_question.txt; exit "$rc"
 ```

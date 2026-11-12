@@ -44,4 +44,8 @@ Rules:
   question, say so and ask before reading the report directly.
 - After modifying code, run
   `$(cat graphify-out/.graphify_python) -m graphify update .` to keep the graph
-  current (abstract syntax tree only, no API cost).
+  current (abstract syntax tree only, no API cost), but only when
+  `graphify-out/.graphify_python` exists. graphify-out/ is not committed, so a
+  fresh clone has neither the file nor a graph: run `/graphify` first, which
+  records the interpreter. Without the file, `$(cat ...)` expands to nothing
+  and the shell runs `-m` as the command.

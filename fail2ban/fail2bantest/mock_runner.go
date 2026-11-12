@@ -29,18 +29,14 @@ func NewMockRunner() *MockRunner {
 
 // validateInvocation mirrors OSRunner's input validation so tests exercise the
 // same trust boundary as production: a fixture passing an invalid command or
-// argument must fail here too, not only outside tests. Production only ever
-// prepends "sudo" after validating the inner command, so an explicit sudo
-// prefix validates the inner command the same way.
+// argument must fail here too, not only outside tests. A caller-supplied
+// "sudo" is refused as production refuses it; only the mock's own privilege
+// selection looks up sudo-keyed responses.
 func validateInvocation(name string, args []string) error {
-	inner, innerArgs := name, args
-	if name == constants.SudoCommand && len(args) > 0 {
-		inner, innerArgs = args[0], args[1:]
-	}
-	if err := fail2ban.ValidateCommand(inner); err != nil {
+	if err := fail2ban.ValidateCommand(name); err != nil {
 		return fmt.Errorf(constants.ErrCommandValidationFailed, err)
 	}
-	if err := fail2ban.ValidateArguments(innerArgs); err != nil {
+	if err := fail2ban.ValidateArguments(args); err != nil {
 		return fmt.Errorf(constants.ErrArgumentValidationFailed, err)
 	}
 	return nil
@@ -53,23 +49,6 @@ func (m *MockRunner) CombinedOutput(name string, args ...string) ([]byte, error)
 	}
 
 	key := name + " " + strings.Join(args, " ")
-	if name == constants.SudoCommand {
-		m.mu.Lock()
-		defer m.mu.Unlock()
-
-		m.CallLog = append(m.CallLog, key)
-
-		if err, exists := m.Errors[key]; exists {
-			return nil, err
-		}
-
-		if response, exists := m.Responses[key]; exists {
-			return response, nil
-		}
-
-		return nil, fmt.Errorf("sudo should not be called directly in tests")
-	}
-
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

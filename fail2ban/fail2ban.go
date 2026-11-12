@@ -275,13 +275,24 @@ func (c *RealClient) executeIPActionWithContext(
 		return 0, err
 	}
 
-	out, err := c.cmdRunner().CombinedOutputWithSudoContext(ctx, c.Path, constants.ActionSet, jail, action, ip)
+	args := []string{constants.ActionSet, jail, action, ip}
+	if action == constants.ActionUnbanIP && strings.Contains(ip, "/") {
+		// fail2ban 0.11 removes a range's own entry and stops there; it unbans
+		// the addresses inside a range only when the range itself is not
+		// banned. Naming the validated range twice runs both steps in one
+		// call: the first removes the range entry (or, without one, the
+		// addresses inside it), the second the addresses that remain. A step
+		// with nothing left to remove counts 0.
+		args = append(args, ip)
+	}
+	out, err := c.cmdRunner().CombinedOutputWithSudoContext(ctx, c.Path, args...)
 	if err != nil {
 		return 0, fmt.Errorf(errorTemplate, ip, jail, err)
 	}
 	// fail2ban >= 0.11 (the enforced minimum) prints the NUMBER of addresses
-	// affected by set <jail> banip/unbanip: >=1 means the IP was newly
-	// banned/unbanned (success), 0 means it was already in the desired state.
+	// affected by set <jail> banip/unbanip, summed over every target named:
+	// >=1 means the IP was newly banned/unbanned (success), 0 means it was
+	// already in the desired state.
 	// Only the last line is the answer; earlier lines are stderr noise.
 	code := lastLine(out)
 	count, convErr := strconv.Atoi(code)
@@ -299,7 +310,8 @@ func (c *RealClient) BanIPWithContext(ctx context.Context, ip, jail string) (int
 	return c.executeIPActionWithContext(ctx, ip, jail, constants.ActionBanIP, constants.ErrFailedToBanIP)
 }
 
-// UnbanIPWithContext unbans an IP address from the specified jail with context support.
+// UnbanIPWithContext unbans an IP address, or a CIDR range together with every
+// banned address inside it, from the specified jail with context support.
 func (c *RealClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (int, error) {
 	return c.executeIPActionWithContext(ctx, ip, jail, constants.ActionUnbanIP, constants.ErrFailedToUnbanIP)
 }
@@ -471,9 +483,34 @@ func (c *RealClient) TestFilterWithContext(ctx context.Context, filter, logFile 
 				err = errors.Join(err, fmt.Errorf("could not remove the log copy %q: %w", regexLog, rmErr))
 			}
 		}()
+	} else if fileErr := requireLogFile(validatedLogPath); fileErr != nil {
+		return "", fmt.Errorf("filter %q: %w", filter, fileErr)
 	}
 
 	getLogger().WithFields(Fields{"filter": filter, "logpath": validatedLogPath}).Info("Running fail2ban-regex")
 	out, err := c.cmdRunner().CombinedOutputWithSudoContext(ctx, constants.Fail2BanRegexCommand, regexLog, cleanPath)
 	return string(out), err
+}
+
+// requireLogFile refuses a log that is missing or not a regular file on the
+// ordinary-user path, where the log path reaches fail2ban-regex as is:
+// fail2ban-regex reads any path that is not a file as one literal log line and
+// reports success without testing a file. It reads metadata only, so a log
+// only root may read still passes; a log in a directory the user cannot
+// search passes unchecked, since only fail2ban-regex under sudo can see it.
+func requireLogFile(path string) error {
+	info, err := os.Stat(path)
+	if errors.Is(err, os.ErrPermission) {
+		return nil
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("log %s does not exist", path)
+	}
+	if err != nil {
+		return fmt.Errorf("log %s: %w", path, err)
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("log %s is not a regular file", path)
+	}
+	return nil
 }
