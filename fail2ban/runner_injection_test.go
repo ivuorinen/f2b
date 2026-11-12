@@ -51,20 +51,17 @@ func TestOSRunnerWithoutSudo(t *testing.T) {
 	}
 }
 
-// TestOSRunnerWithSudo tests the OS runner with sudo
-func TestOSRunnerWithSudo(t *testing.T) {
-	// Do not parallelize: this test mutates global runner
-	orig := fail2ban.GetRunner()
-	t.Cleanup(func() { fail2ban.SetRunner(orig) })
-	mock := &fail2bantest.MockRunner{
-		Responses: map[string][]byte{"sudo fail2ban-client status": []byte("ok\n")},
-		Errors:    map[string]error{},
-	}
-	fail2ban.SetRunner(mock)
-	out, err := fail2ban.GetRunner().
-		CombinedOutputWithSudoContext(context.Background(), "sudo", "fail2ban-client", "status")
-	fail2bantest.AssertError(t, err, false, "CombinedOutputWithSudoContext with sudo (mocked)")
-	if strings.TrimSpace(string(out)) != "ok" {
-		t.Fatalf("expected %q, got %q", "ok", strings.TrimSpace(string(out)))
+// TestOSRunnerRefusesCallerSuppliedSudo pins the boundary MockRunner mirrors:
+// the runner adds sudo itself, so a caller naming sudo as the command is
+// refused before anything runs. The context is already canceled, so even if
+// validation regressed, exec would refuse to start real sudo.
+func TestOSRunnerRefusesCallerSuppliedSudo(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := (&fail2ban.OSRunner{}).CombinedOutputWithSudoContext(ctx, "sudo", "fail2ban-client", "status")
+
+	if err == nil || !strings.Contains(err.Error(), "command validation failed") {
+		t.Fatalf("expected sudo as a command to be refused by validation, got %v", err)
 	}
 }

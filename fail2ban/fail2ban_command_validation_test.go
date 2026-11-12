@@ -245,17 +245,22 @@ func runValidateCommandConcurrencyWorker(errChan chan<- error, iterations int) {
 }
 
 func BenchmarkValidateCommand(b *testing.B) {
-	commands := []string{
-		"fail2ban-client",
-		"fail2ban-regex",
-		"service",
-		"systemctl",
-		"malicious-command",
+	commands := []struct {
+		input   string
+		wantErr bool
+	}{
+		{input: "fail2ban-client", wantErr: false},
+		{input: "fail2ban-regex", wantErr: false},
+		{input: "service", wantErr: false},
+		{input: "systemctl", wantErr: false},
+		{input: "malicious-command", wantErr: true},
 	}
 
 	b.ResetTimer()
 	for i := 0; b.Loop(); i++ {
-		cmd := commands[i%len(commands)]
-		_ = ValidateCommand(cmd) // Ignore error in benchmark
+		tc := commands[i%len(commands)]
+		if err := ValidateCommand(tc.input); (err != nil) != tc.wantErr {
+			b.Fatalf("%s: err = %v, want error %v", tc.input, err, tc.wantErr)
+		}
 	}
 }

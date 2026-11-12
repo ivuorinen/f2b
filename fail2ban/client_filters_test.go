@@ -71,9 +71,9 @@ func TestTestFilter(t *testing.T) {
 	tempDir := t.TempDir()
 	filterName := "test-filter"
 	filterPath := filepath.Join(tempDir, filterName+".conf")
-	filterContent := `[Definition]
-failregex = Failed password for .* from <HOST>
-logpath = /var/log/auth.log`
+	// fail2ban-regex must be given a log that exists.
+	logFile := allowedLog(t, "")
+	filterContent := "[Definition]\nfailregex = Failed password for .* from <HOST>\nlogpath = " + logFile
 
 	err := os.WriteFile(filterPath, []byte(filterContent), 0600)
 	if err != nil {
@@ -87,8 +87,8 @@ logpath = /var/log/auth.log`
 	// Configure specific responses for this test
 	mock := fail2bantest.MustMockRunner(t)
 	expectedOutput := "Running tests on fail2ban-regex\nResults: 5 matches found"
-	mock.SetResponse("fail2ban-regex /var/log/auth.log "+filterPath, []byte(expectedOutput))
-	mock.SetResponse("sudo fail2ban-regex /var/log/auth.log "+filterPath, []byte(expectedOutput))
+	mock.SetResponse("fail2ban-regex "+logFile+" "+filterPath, []byte(expectedOutput))
+	mock.SetResponse("sudo fail2ban-regex "+logFile+" "+filterPath, []byte(expectedOutput))
 
 	// Create client with the temp directory as the filter directory
 	client, err := fail2ban.NewClient(constants.DefaultLogDir, tempDir)

@@ -386,12 +386,11 @@ func TestTestFilterWithContext(t *testing.T) {
 	// Enable dev paths to allow temporary directory
 	t.Setenv("ALLOW_DEV_PATHS", "1")
 
-	// Create temporary filter directory
+	// Create temporary filter directory and a log for the filter to declare:
+	// fail2ban-regex must be given a log that exists.
 	tmpDir := t.TempDir()
-	filterContent := `[Definition]
-failregex = ^.* Failed .* for .* from <HOST>
-logpath = /var/log/auth.log
-`
+	logFile := allowedLog(t, "")
+	filterContent := "[Definition]\nfailregex = ^.* Failed .* for .* from <HOST>\nlogpath = " + logFile + "\n"
 	err := os.WriteFile(filepath.Join(tmpDir, "sshd.conf"), []byte(filterContent), 0600)
 	require.NoError(t, err)
 
@@ -415,11 +414,11 @@ failregex = ^.* Failed .* for .* from <HOST>
 			setupMock: func(m *fail2bantest.MockRunner) {
 				fail2bantest.StandardMockSetup(m)
 				m.SetResponse(
-					"fail2ban-regex /var/log/auth.log "+filepath.Join(tmpDir, "sshd.conf"),
+					"fail2ban-regex "+logFile+" "+filepath.Join(tmpDir, "sshd.conf"),
 					[]byte("Success: 0 matches"),
 				)
 				m.SetResponse(
-					"sudo fail2ban-regex /var/log/auth.log "+filepath.Join(tmpDir, "sshd.conf"),
+					"sudo fail2ban-regex "+logFile+" "+filepath.Join(tmpDir, "sshd.conf"),
 					[]byte("Success: 0 matches"),
 				)
 			},
@@ -452,11 +451,11 @@ failregex = ^.* Failed .* for .* from <HOST>
 			setupMock: func(m *fail2bantest.MockRunner) {
 				fail2bantest.StandardMockSetup(m)
 				m.SetResponse(
-					"fail2ban-regex /var/log/auth.log "+filepath.Join(tmpDir, "sshd.conf"),
+					"fail2ban-regex "+logFile+" "+filepath.Join(tmpDir, "sshd.conf"),
 					[]byte("Success: 0 matches"),
 				)
 				m.SetResponse(
-					"sudo fail2ban-regex /var/log/auth.log "+filepath.Join(tmpDir, "sshd.conf"),
+					"sudo fail2ban-regex "+logFile+" "+filepath.Join(tmpDir, "sshd.conf"),
 					[]byte("Success: 0 matches"),
 				)
 			},

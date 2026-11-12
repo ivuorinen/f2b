@@ -34,25 +34,34 @@ func TestValidateArgumentsLetsAnIPv6RangeThrough(t *testing.T) {
 	require.Error(t, fail2ban.ValidateArguments([]string{"set", "sshd", "banip", "2001:db8::/129"}))
 }
 
-// TestRangeBansReachFail2ban pins that ban and unban pass a range through to
-// fail2ban-client unchanged.
+// TestRangeBansReachFail2ban pins that ban passes a range to fail2ban-client
+// unchanged and that unban names it twice. fail2ban 0.11 removes a range's own
+// entry and stops there, and unbans the addresses inside a range only when the
+// range itself is not banned, so with one mention a host ban inside a banned
+// range survives an unban that reports success.
 func TestRangeBansReachFail2ban(t *testing.T) {
 	tests := map[string]struct {
-		action string
-		run    func(*fail2ban.RealClient, string) (int, error)
+		args func(target string) string
+		run  func(*fail2ban.RealClient, string) (int, error)
 	}{
-		"ban": {"banip", func(c *fail2ban.RealClient, target string) (int, error) {
-			return c.BanIPWithContext(context.Background(), target, "sshd")
-		}},
-		"unban": {"unbanip", func(c *fail2ban.RealClient, target string) (int, error) {
-			return c.UnbanIPWithContext(context.Background(), target, "sshd")
-		}},
+		"ban": {
+			args: func(target string) string { return "banip " + target },
+			run: func(c *fail2ban.RealClient, target string) (int, error) {
+				return c.BanIPWithContext(context.Background(), target, "sshd")
+			},
+		},
+		"unban": {
+			args: func(target string) string { return "unbanip " + target + " " + target },
+			run: func(c *fail2ban.RealClient, target string) (int, error) {
+				return c.UnbanIPWithContext(context.Background(), target, "sshd")
+			},
+		},
 	}
 	for name, tt := range tests {
 		for _, target := range []string{"198.51.100.0/24", "2001:db8::/32"} {
 			t.Run(name+" "+target, func(t *testing.T) {
 				client, mock := clientOverMockRunner(t, "sshd")
-				mock.SetResponse("fail2ban-client set sshd "+tt.action+" "+target, []byte("1"))
+				mock.SetResponse("fail2ban-client set sshd "+tt.args(target), []byte("1"))
 
 				code, err := tt.run(client, target)
 

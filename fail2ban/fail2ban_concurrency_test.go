@@ -194,7 +194,11 @@ func TestRunnerManagerLockOrdering(t *testing.T) {
 				for range 100 {
 					fail2ban.SetRunner(fail2bantest.NewMockRunner())
 					fail2ban.GetRunner()
-					_, _ = fail2ban.GetRunner().CombinedOutputWithSudoContext(context.Background(), "test")
+					// "test" is not an allowlisted command, so the call must fail.
+					_, err := fail2ban.GetRunner().CombinedOutputWithSudoContext(context.Background(), "test")
+					if err == nil {
+						t.Errorf("command %q: expected a not-allowlisted error, got nil", "test")
+					}
 				}
 			})
 		}
