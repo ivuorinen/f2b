@@ -367,7 +367,9 @@ func TestTestIPCommand(t *testing.T) {
 					// Set up bans
 					for jail, ips := range tt.setupBans {
 						for _, ip := range ips {
-							_, _ = mock.BanIPWithContext(context.Background(), ip, jail)
+							if _, err := mock.BanIPWithContext(context.Background(), ip, jail); err != nil {
+								t.Fatalf("setup ban %s in %s: %v", ip, jail, err)
+							}
 						}
 					}
 				})

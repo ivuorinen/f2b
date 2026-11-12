@@ -396,7 +396,9 @@ func TestSecurityAudit_PrivilegeEscalation(t *testing.T) {
 			parts := strings.Fields(cmd)
 			// The mock has no canned response, so an error is expected; what
 			// this test asserts is HOW the command was dispatched, not its result.
-			_, _ = mockRunner.CombinedOutputWithSudo(parts[0], parts[1:]...)
+			if _, err := mockRunner.CombinedOutputWithSudo(parts[0], parts[1:]...); err == nil {
+				t.Errorf("%q: expected an error from a mock with no canned response", cmd)
+			}
 		}
 
 		// The security property: an unprivileged user must never be escalated.

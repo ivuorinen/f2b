@@ -220,7 +220,9 @@ func BenchmarkParseBanRecordLine(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		_, _ = parseBanRecordLine(line, "sshd")
+		if _, err := parseBanRecordLine(line, "sshd"); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -229,7 +231,9 @@ func BenchmarkParseBanRecords(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		_, _ = ParseBanRecords(output, "sshd")
+		if _, err := ParseBanRecords(output, "sshd"); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 

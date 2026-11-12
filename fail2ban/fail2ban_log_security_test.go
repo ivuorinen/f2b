@@ -90,17 +90,22 @@ func containsAnyString(s string, substrs []string) bool {
 }
 
 func BenchmarkLogPathSecurity(b *testing.B) {
-	testPaths := []string{
-		"/var/log/fail2ban.log",
-		"../../../etc/passwd",
-		"%2e%2e%2f%2e%2e%2fetc%2fpasswd",
+	testPaths := []struct {
+		input   string
+		wantErr bool
+	}{
+		{input: "/var/log/fail2ban.log", wantErr: false},
+		{input: "../../../etc/passwd", wantErr: true},
+		{input: "%2e%2e%2f%2e%2e%2fetc%2fpasswd", wantErr: true},
 	}
 	base := GetLogDir()
 
 	b.ResetTimer()
 	for b.Loop() {
-		for _, path := range testPaths {
-			_, _ = ValidateLogPath(path, base)
+		for _, tc := range testPaths {
+			if _, err := ValidateLogPath(tc.input, base); (err != nil) != tc.wantErr {
+				b.Fatalf("%s: err = %v, want error %v", tc.input, err, tc.wantErr)
+			}
 		}
 	}
 }
