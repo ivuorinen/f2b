@@ -46,3 +46,19 @@ func TestSudoResponseDoesNotBypassValidation(t *testing.T) {
 		})
 	}
 }
+
+// TestCallerSuppliedSudoIsRefused pins that a caller cannot prefix sudo
+// itself: OSRunner refuses "sudo" as a command, so MockRunner must too, even
+// when a registered sudo response matches the invocation.
+func TestCallerSuppliedSudoIsRefused(t *testing.T) {
+	_, cleanup := SetupMockEnvironmentWithSudo(t, true)
+	t.Cleanup(cleanup)
+	runner := MustMockRunner(t)
+	runner.SetResponse("sudo fail2ban-client status", []byte("1"))
+
+	out, err := runner.CombinedOutputWithSudoContext(context.Background(), "sudo", "fail2ban-client", "status")
+
+	require.ErrorContains(t, err, "command validation failed")
+	assert.Nil(t, out)
+	assert.Empty(t, runner.GetCalls(), "a refused invocation is not recorded as a call")
+}
