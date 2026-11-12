@@ -58,9 +58,12 @@ run = "go test -race ./..."
 description = "Run race-enabled tests, write coverage.out and report branch coverage"
 # gobco takes one package directory per run. Given ./... it exits 0 after
 # printing "nothing to instrument", so the directories come from go list.
+# gobco copies the whole module, ignored files such as .env included, into
+# a $TMPDIR directory it creates with mode 0777 minus the umask; umask 077
+# keeps that copy private to the user, also when a crash leaves it behind.
 run = [
   "go test -race -covermode=atomic -coverprofile=coverage.out ./...",
-  'for pkg in $(go list ./...); do gobco -branch ".${pkg#github.com/ivuorinen/f2b}" || exit 1; done',
+  'umask 077; for pkg in $(go list ./...); do gobco -branch ".${pkg#github.com/ivuorinen/f2b}" || exit 1; done',
 ]
 
 [tasks.fmt]
