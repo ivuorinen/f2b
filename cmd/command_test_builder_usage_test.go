@@ -48,7 +48,9 @@ func TestDemoCommandTestFramework(t *testing.T) {
 			WithSetup(func(mock *fail2bantest.MockClient) {
 				setMockJails(mock, []string{"sshd"})
 				// Pre-ban an IP for testing
-				_, _ = mock.BanIPWithContext(context.Background(), "192.168.1.100", "sshd")
+				if _, err := mock.BanIPWithContext(context.Background(), "192.168.1.100", "sshd"); err != nil {
+					t.Fatalf("setup ban 192.168.1.100 in sshd: %v", err)
+				}
 			}).
 			ExpectSuccess().
 			Run().

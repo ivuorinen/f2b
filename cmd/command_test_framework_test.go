@@ -6,6 +6,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -118,11 +119,16 @@ func (env *TestEnvironment) WithStdoutCapture() *TestEnvironment {
 
 	env.cleanup = append(env.cleanup, func() {
 		os.Stdout = env.originalStdout
+		// Each end is closed once: ReadStdout nils the writer after closing it.
+		var closeErr error
 		if env.stdoutWriter != nil {
-			_ = env.stdoutWriter.Close()
+			closeErr = env.stdoutWriter.Close()
 		}
 		if env.stdoutReader != nil {
-			_ = env.stdoutReader.Close()
+			closeErr = errors.Join(closeErr, env.stdoutReader.Close())
+		}
+		if closeErr != nil {
+			panic(fmt.Sprintf("WithStdoutCapture cleanup: closing the capture pipe failed: %v", closeErr))
 		}
 	})
 	return env
@@ -143,7 +149,10 @@ func (env *TestEnvironment) ReadStdout() string {
 
 	// Close writer if not already closed
 	if env.stdoutWriter != nil {
-		_ = env.stdoutWriter.Close()
+		// ErrClosed is accepted: a caller may hand over a writer it already closed.
+		if err := env.stdoutWriter.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
+			panic(fmt.Sprintf("ReadStdout: closing the captured stdout writer failed: %v", err))
+		}
 		env.stdoutWriter = nil // Prevent multiple closures
 	}
 
@@ -373,27 +382,26 @@ func captureStdoutStderr(fn func() error) (string, error) {
 	}
 	stderrR, stderrW, err := os.Pipe()
 	if err != nil {
-		_ = stdoutR.Close()
-		_ = stdoutW.Close()
-		return "", fmt.Errorf("failed to create stderr pipe: %w", err)
+		return "", errors.Join(fmt.Errorf("failed to create stderr pipe: %w", err), stdoutR.Close(), stdoutW.Close())
 	}
 
 	os.Stdout, os.Stderr = stdoutW, stderrW
 
 	var wg sync.WaitGroup
 	var outBuf, errBuf bytes.Buffer
+	// Each read error is owned by its goroutine and read only after wg.Wait.
+	var outReadErr, errReadErr error
 	wg.Add(2)
-	go func() { defer wg.Done(); _, _ = outBuf.ReadFrom(stdoutR) }()
-	go func() { defer wg.Done(); _, _ = errBuf.ReadFrom(stderrR) }()
+	go func() { defer wg.Done(); _, outReadErr = outBuf.ReadFrom(stdoutR) }()
+	go func() { defer wg.Done(); _, errReadErr = errBuf.ReadFrom(stderrR) }()
 
 	runErr := fn()
 
-	_ = stdoutW.Close()
-	_ = stderrW.Close()
+	closeErr := errors.Join(stdoutW.Close(), stderrW.Close())
 	wg.Wait()
 	os.Stdout, os.Stderr = oldStdout, oldStderr
 
-	return outBuf.String() + errBuf.String(), runErr
+	return outBuf.String() + errBuf.String(), errors.Join(runErr, closeErr, outReadErr, errReadErr)
 }
 
 // executeServiceCommand handles service command execution with stdout/stderr capture

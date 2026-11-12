@@ -36,7 +36,9 @@ func TestComprehensiveFrameworkCapabilities(t *testing.T) {
 			WithJSONFormat().
 			WithSetup(func(mock *fail2bantest.MockClient) {
 				setMockJails(mock, []string{"sshd"})
-				_, _ = mock.BanIPWithContext(context.Background(), "192.168.1.100", "sshd")
+				if _, err := mock.BanIPWithContext(context.Background(), "192.168.1.100", "sshd"); err != nil {
+					t.Fatalf("setup ban 192.168.1.100 in sshd: %v", err)
+				}
 			}).
 			ExpectSuccess().
 			Run().
@@ -108,7 +110,10 @@ func TestComprehensiveFrameworkCapabilities(t *testing.T) {
 						setMockJails(mock, []string{"sshd", "apache"})
 						if tt.command == "unban" || tt.command == "test" {
 							// Pre-ban IP for unban/test scenarios
-							_, _ = mock.BanIPWithContext(context.Background(), "192.168.1.100", "sshd")
+							_, err := mock.BanIPWithContext(context.Background(), "192.168.1.100", "sshd")
+							if err != nil {
+								t.Fatalf("setup ban 192.168.1.100 in sshd: %v", err)
+							}
 						}
 					})
 
@@ -144,7 +149,9 @@ func TestFrameworkPerformance(t *testing.T) {
 				WithSetup(func(mock *fail2bantest.MockClient) {
 					setMockJails(mock, []string{"sshd"})
 					if cmd != "ban" && cmd != "list-jails" {
-						_, _ = mock.BanIPWithContext(context.Background(), "192.168.1.100", "sshd")
+						if _, err := mock.BanIPWithContext(context.Background(), "192.168.1.100", "sshd"); err != nil {
+							t.Fatalf("setup ban 192.168.1.100 in sshd: %v", err)
+						}
 					}
 					if cmd == "status" && len(args) > 0 {
 						mock.StatusJailData = map[string]string{"sshd": "Status for sshd"}
@@ -176,8 +183,11 @@ func TestFrameworkEdgeCases(t *testing.T) {
 			WithJSONFormat().
 			WithSetup(func(mock *fail2bantest.MockClient) {
 				setMockJails(mock, []string{"sshd"})
-				_, _ = mock.BanIPWithContext(context.Background(), "192.168.1.100", "sshd")
-				_, _ = mock.BanIPWithContext(context.Background(), "192.168.1.101", "sshd")
+				for _, ip := range []string{"192.168.1.100", "192.168.1.101"} {
+					if _, err := mock.BanIPWithContext(context.Background(), ip, "sshd"); err != nil {
+						t.Fatalf("setup ban %s in sshd: %v", ip, err)
+					}
+				}
 			}).
 			ExpectSuccess().
 			Run().

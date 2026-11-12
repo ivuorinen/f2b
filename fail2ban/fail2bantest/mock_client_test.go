@@ -3,6 +3,8 @@ package fail2bantest
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"testing"
 
@@ -215,6 +217,51 @@ func TestMockClientUnbanIP(t *testing.T) {
 				if code != tt.expectedCode {
 					t.Errorf("expected code %d, got %d", tt.expectedCode, code)
 				}
+			}
+		})
+	}
+}
+
+// TestMockClientRangeUnbanRemovesAddressesInside pins that the mock models the
+// real client's range unban: it removes the range's own entry and every banned
+// address inside the range, and leaves addresses outside it banned. Without
+// this, a command test passes against a mock that keeps those bans.
+func TestMockClientRangeUnbanRemovesAddressesInside(t *testing.T) {
+	tests := map[string]struct {
+		banned   []string
+		target   string
+		wantCode int
+		wantLeft []string
+	}{
+		"range entry and an address inside": {
+			[]string{"192.168.1.0/24", "192.168.1.100", "192.168.2.1"}, "192.168.1.0/24", 0, []string{"192.168.2.1"},
+		},
+		"address inside without a range entry": {
+			[]string{"192.168.1.100", "192.168.2.1"}, "192.168.1.0/24", 0, []string{"192.168.2.1"},
+		},
+		"IPv6 address inside": {
+			[]string{"2001:db8::1", "2001:db9::1"}, "2001:db8::/32", 0, []string{"2001:db9::1"},
+		},
+		"nothing inside": {
+			[]string{"192.168.2.1"}, "192.168.1.0/24", 1, []string{"192.168.2.1"},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			client := NewMockClient()
+			for _, ip := range tt.banned {
+				_, err := client.BanIPWithContext(bg, ip, "sshd")
+				AssertError(t, err, false, "ban "+ip+" for setup")
+			}
+
+			code, err := client.UnbanIPWithContext(bg, tt.target, "sshd")
+
+			AssertError(t, err, false, "range unban")
+			if code != tt.wantCode {
+				t.Errorf("expected code %d, got %d", tt.wantCode, code)
+			}
+			if left := slices.Sorted(maps.Keys(client.Banned["sshd"])); !slices.Equal(left, tt.wantLeft) {
+				t.Errorf("expected %v to stay banned, got %v", tt.wantLeft, left)
 			}
 		})
 	}
@@ -557,8 +604,12 @@ func BenchmarkMockClientBanUnban(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; b.Loop(); i++ {
 		ip := fmt.Sprintf("192.168.1.%d", i%255)
-		_, _ = client.BanIPWithContext(bg, ip, "sshd")
-		_, _ = client.UnbanIPWithContext(bg, ip, "sshd")
+		if _, err := client.BanIPWithContext(bg, ip, "sshd"); err != nil {
+			b.Fatal(err)
+		}
+		if _, err := client.UnbanIPWithContext(bg, ip, "sshd"); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -568,12 +619,16 @@ func BenchmarkMockClientBannedIn(b *testing.B) {
 	// Pre-ban some IPs
 	for i := range 100 {
 		ip := fmt.Sprintf("192.168.1.%d", i)
-		_, _ = client.BanIPWithContext(bg, ip, "sshd")
+		if _, err := client.BanIPWithContext(bg, ip, "sshd"); err != nil {
+			b.Fatal(err)
+		}
 	}
 
 	b.ResetTimer()
 	for i := 0; b.Loop(); i++ {
 		ip := fmt.Sprintf("192.168.1.%d", i%100)
-		_, _ = client.BannedInWithContext(bg, ip)
+		if _, err := client.BannedInWithContext(bg, ip); err != nil {
+			b.Fatal(err)
+		}
 	}
 }

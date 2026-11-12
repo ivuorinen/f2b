@@ -7,21 +7,22 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// pipeWithData wires a fresh pipe into env, writes data to the writer, closes
-// it, and returns once the write completes.
+// pipeWithData wires a fresh pipe into env, writes data to the writer, and
+// returns once the write completes. The writer stays open: ReadStdout closes it.
 func pipeWithData(t *testing.T, env *TestEnvironment, data string) {
 	t.Helper()
 	r, w, err := os.Pipe()
 	assert.NoError(t, err)
 	env.stdoutReader = r
 	env.stdoutWriter = w
-	done := make(chan struct{})
+	writeErr := make(chan error, 1)
 	go func() {
-		_, _ = w.Write([]byte(data))
-		_ = w.Close()
-		close(done)
+		_, werr := w.Write([]byte(data))
+		writeErr <- werr
 	}()
-	<-done
+	if err := <-writeErr; err != nil {
+		t.Fatalf("write pipe data: %v", err)
+	}
 }
 
 // TestReadStdout_WithData tests reading stdout with actual data
@@ -41,6 +42,9 @@ func TestReadStdout_WriterAlreadyClosed(t *testing.T) {
 	defer env.Cleanup()
 
 	pipeWithData(t, env, "pre-closed data")
+	if err := env.stdoutWriter.Close(); err != nil {
+		t.Fatalf("close writer: %v", err)
+	}
 
 	assert.Equal(t, "pre-closed data", env.ReadStdout(), "Should read data even if writer was pre-closed")
 }
@@ -60,7 +64,9 @@ func TestReadStdout_NilReader(t *testing.T) {
 	assert.Equal(t, "", output, "Should return empty string when reader is nil")
 
 	// Clean up writer
-	_ = w.Close()
+	if err := w.Close(); err != nil {
+		t.Errorf("close writer: %v", err)
+	}
 }
 
 // TestReadStdout_NilWriter tests behavior when writer is nil but reader exists
@@ -71,7 +77,9 @@ func TestReadStdout_NilWriter(t *testing.T) {
 	// Set up only reader, no writer (simulates already-closed writer)
 	r, w, err := os.Pipe()
 	assert.NoError(t, err)
-	_ = w.Close() // Close immediately
+	if err := w.Close(); err != nil { // Close immediately
+		t.Fatalf("close writer: %v", err)
+	}
 	env.stdoutReader = r
 	env.stdoutWriter = nil
 
@@ -107,11 +115,7 @@ func TestReadStdout_EmptyData(t *testing.T) {
 	env.stdoutReader = r
 	env.stdoutWriter = w
 
-	// Close writer immediately without writing
-	go func() {
-		_ = w.Close()
-	}()
-
+	// Write nothing: ReadStdout closes the writer, so the read sees only EOF
 	output := env.ReadStdout()
 	assert.Equal(t, "", output, "Should return empty string when no data written")
 }

@@ -225,7 +225,6 @@ type ipCommandTestCase struct {
 	name        string
 	args        []string
 	jails       []string
-	banResults  map[string]map[string]int
 	setupBanned bool
 	wantOutput  string
 	wantError   bool
@@ -241,9 +240,10 @@ func runIPCommandTests(t *testing.T, command string, tests []ipCommandTestCase) 
 				WithArgs(tt.args...).
 				WithSetup(func(mock *fail2bantest.MockClient) {
 					setMockJails(mock, tt.jails)
-					mock.BanResults = tt.banResults
 					if tt.setupBanned {
-						_, _ = mock.BanIPWithContext(context.Background(), "192.168.1.100", "sshd")
+						if _, err := mock.BanIPWithContext(context.Background(), "192.168.1.100", "sshd"); err != nil {
+							t.Fatalf("setup ban: %v", err)
+						}
 					}
 				})
 
@@ -264,7 +264,6 @@ func TestBanCommand(t *testing.T) {
 			name:       "ban IP without jail specified",
 			args:       []string{"192.168.1.100"},
 			jails:      []string{"sshd", "apache"},
-			banResults: map[string]map[string]int{"192.168.1.100": {"sshd": 0, "apache": 0}},
 			wantOutput: "Banned 192.168.1.100 in apache\nBanned 192.168.1.100 in sshd\n", // alphabetical order
 			wantError:  false,
 		},
@@ -272,7 +271,6 @@ func TestBanCommand(t *testing.T) {
 			name:       "ban IP with specific jail",
 			args:       []string{"192.168.1.100", "sshd"},
 			jails:      []string{"sshd"},
-			banResults: map[string]map[string]int{"192.168.1.100": {"sshd": 0}},
 			wantOutput: "Banned 192.168.1.100 in sshd\n",
 			wantError:  false,
 		},
@@ -369,7 +367,9 @@ func TestTestIPCommand(t *testing.T) {
 					// Set up bans
 					for jail, ips := range tt.setupBans {
 						for _, ip := range ips {
-							_, _ = mock.BanIPWithContext(context.Background(), ip, jail)
+							if _, err := mock.BanIPWithContext(context.Background(), ip, jail); err != nil {
+								t.Fatalf("setup ban %s in %s: %v", ip, jail, err)
+							}
 						}
 					}
 				})

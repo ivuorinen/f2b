@@ -367,27 +367,25 @@ func BenchmarkServiceCmd(b *testing.B) {
 
 		cmd.SetArgs([]string{"status"})
 		if err := cmd.Execute(); err != nil {
-			_ = w.Close()
-			_ = r.Close()
 			os.Stdout = oldStdout
-			b.Fatalf("execute failed: %v", err)
+			b.Fatalf("execute failed: %v", errors.Join(err, w.Close(), r.Close()))
 		}
 
 		if err := w.Close(); err != nil {
-			_ = r.Close()
 			os.Stdout = oldStdout
-			b.Fatalf("failed to close writer: %v", err)
+			b.Fatalf("failed to close writer: %v", errors.Join(err, r.Close()))
 		}
 
 		var stdoutBuf bytes.Buffer
 		if _, err := stdoutBuf.ReadFrom(r); err != nil {
-			_ = r.Close()
 			os.Stdout = oldStdout
-			b.Fatalf("failed to read output: %v", err)
+			b.Fatalf("failed to read output: %v", errors.Join(err, r.Close()))
 		}
 
 		// Clean up at end of iteration
-		_ = r.Close()
 		os.Stdout = oldStdout
+		if err := r.Close(); err != nil {
+			b.Fatalf("failed to close reader: %v", err)
+		}
 	}
 }
