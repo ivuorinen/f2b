@@ -53,8 +53,11 @@ func TestTestHelperFunctions(t *testing.T) {
 	if rt.fatal == "" {
 		t.Fatal("AssertCommandSuccess with an error did not fail")
 	}
+	// The output matches, so only the missing-error check can record a
+	// failure: recordingT.Fatalf returns, and a mismatched output would
+	// record one even without that check.
 	rt = &recordingT{T: t}
-	AssertCommandError(rt, nil, "out", "expected", "should record missing error")
+	AssertCommandError(rt, nil, "expected", "expected", "should record missing error")
 	if rt.fatal == "" {
 		t.Fatal("AssertCommandError with nil error did not fail")
 	}
