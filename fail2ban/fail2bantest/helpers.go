@@ -1,30 +1,22 @@
-package fail2ban
+package fail2bantest
 
-// Test support shared with the cmd and main test packages. It has to live in
-// a non-test file because Go test files are invisible to other packages, and
-// it cannot move to a separate fail2bantest package because fail2ban's own
-// internal tests use it too (that package would import fail2ban, a cycle).
-// It must not import "testing": that would link the testing package into the
-// release binary. TestingInterface stands in for testing.TB, and helpers used
-// only by fail2ban's own tests live in _test.go files.
+// Environment helpers that install the doubles as fail2ban's global runner and
+// sudo checker, plus the assertion helper the test packages share.
 
 import (
+	"testing"
+
 	"github.com/ivuorinen/f2b/constants"
+	"github.com/ivuorinen/f2b/fail2ban"
 )
 
-// TestingInterface is the subset of testing.TB these helpers need.
-type TestingInterface interface {
-	Helper()
-	Fatalf(format string, args ...any)
-}
-
 // SetupMockEnvironment sets up complete mock environment with client, runner, and sudo checker
-func SetupMockEnvironment(t TestingInterface) (client *MockClient, cleanup func()) {
-	t.Helper()
+func SetupMockEnvironment(tb testing.TB) (client *MockClient, cleanup func()) {
+	tb.Helper()
 
 	// Store original components
-	originalChecker := GetSudoChecker()
-	originalRunner := GetRunner()
+	originalChecker := fail2ban.GetSudoChecker()
+	originalRunner := fail2ban.GetRunner()
 
 	// Set up mocks
 	mockClient := NewMockClient()
@@ -34,8 +26,8 @@ func SetupMockEnvironment(t TestingInterface) (client *MockClient, cleanup func(
 	}
 	mockRunner := NewMockRunner()
 
-	SetSudoChecker(mockChecker)
-	SetRunner(mockRunner)
+	fail2ban.SetSudoChecker(mockChecker)
+	fail2ban.SetRunner(mockRunner)
 
 	// Configure comprehensive mock responses
 	mockRunner.SetResponse(constants.MockCommandVersion, []byte(constants.VersionOutput))
@@ -52,20 +44,20 @@ func SetupMockEnvironment(t TestingInterface) (client *MockClient, cleanup func(
 	mockRunner.SetResponse(constants.MockCommandBanned, []byte(constants.MockBannedOutput))
 
 	cleanup = func() {
-		SetSudoChecker(originalChecker)
-		SetRunner(originalRunner)
+		fail2ban.SetSudoChecker(originalChecker)
+		fail2ban.SetRunner(originalRunner)
 	}
 
 	return mockClient, cleanup
 }
 
 // SetupMockEnvironmentWithSudo sets up mock environment with specific sudo privileges
-func SetupMockEnvironmentWithSudo(t TestingInterface, hasSudo bool) (client *MockClient, cleanup func()) {
-	t.Helper()
+func SetupMockEnvironmentWithSudo(tb testing.TB, hasSudo bool) (client *MockClient, cleanup func()) {
+	tb.Helper()
 
 	// Store original components
-	originalChecker := GetSudoChecker()
-	originalRunner := GetRunner()
+	originalChecker := fail2ban.GetSudoChecker()
+	originalRunner := fail2ban.GetRunner()
 
 	// Set up mocks
 	mockClient := NewMockClient()
@@ -75,8 +67,8 @@ func SetupMockEnvironmentWithSudo(t TestingInterface, hasSudo bool) (client *Moc
 	}
 	mockRunner := NewMockRunner()
 
-	SetSudoChecker(mockChecker)
-	SetRunner(mockRunner)
+	fail2ban.SetSudoChecker(mockChecker)
+	fail2ban.SetRunner(mockRunner)
 
 	// Configure mock responses based on sudo availability
 	if hasSudo {
@@ -86,52 +78,52 @@ func SetupMockEnvironmentWithSudo(t TestingInterface, hasSudo bool) (client *Moc
 	}
 
 	cleanup = func() {
-		SetSudoChecker(originalChecker)
-		SetRunner(originalRunner)
+		fail2ban.SetSudoChecker(originalChecker)
+		fail2ban.SetRunner(originalRunner)
 	}
 
 	return mockClient, cleanup
 }
 
 // AssertError provides standardized error checking for tests
-func AssertError(t TestingInterface, err error, expectError bool, testName string) {
-	t.Helper()
+func AssertError(tb testing.TB, err error, expectError bool, testName string) {
+	tb.Helper()
 	if expectError && err == nil {
-		t.Fatalf(constants.ErrTestExpectedError, testName)
+		tb.Fatalf(constants.ErrTestExpectedError, testName)
 	}
 	if !expectError && err != nil {
-		t.Fatalf(constants.ErrTestUnexpected, testName, err)
+		tb.Fatalf(constants.ErrTestUnexpected, testName, err)
 	}
 }
 
 // WithTestRunner sets a test runner and returns a cleanup function.
-// Usage: defer fail2ban.WithTestRunner(t, mockRunner)()
-func WithTestRunner(t TestingInterface, runner Runner) func() {
-	t.Helper()
-	original := GetRunner()
-	SetRunner(runner)
-	return func() { SetRunner(original) }
+// Usage: defer fail2bantest.WithTestRunner(t, mockRunner)()
+func WithTestRunner(tb testing.TB, runner fail2ban.Runner) func() {
+	tb.Helper()
+	original := fail2ban.GetRunner()
+	fail2ban.SetRunner(runner)
+	return func() { fail2ban.SetRunner(original) }
 }
 
 // MustMockRunner returns the current global runner as a *MockRunner, failing
 // the test when the global runner is anything else (e.g. a prior test leaked
 // a different runner).
-func MustMockRunner(t TestingInterface) *MockRunner {
-	t.Helper()
-	mock, ok := GetRunner().(*MockRunner)
+func MustMockRunner(tb testing.TB) *MockRunner {
+	tb.Helper()
+	mock, ok := fail2ban.GetRunner().(*MockRunner)
 	if !ok {
-		t.Fatalf("global runner is %T, want *MockRunner", GetRunner())
+		tb.Fatalf("global runner is %T, want *MockRunner", fail2ban.GetRunner())
 	}
 	return mock
 }
 
 // MustMockSudoChecker returns the current sudo checker as a *MockSudoChecker,
 // failing the test when it is anything else.
-func MustMockSudoChecker(t TestingInterface) *MockSudoChecker {
-	t.Helper()
-	mock, ok := GetSudoChecker().(*MockSudoChecker)
+func MustMockSudoChecker(tb testing.TB) *MockSudoChecker {
+	tb.Helper()
+	mock, ok := fail2ban.GetSudoChecker().(*MockSudoChecker)
 	if !ok {
-		t.Fatalf("sudo checker is %T, want *MockSudoChecker", GetSudoChecker())
+		tb.Fatalf("sudo checker is %T, want *MockSudoChecker", fail2ban.GetSudoChecker())
 	}
 	return mock
 }
@@ -193,15 +185,15 @@ func StandardMockSetup(mockRunner *MockRunner) {
 
 // SetupMockEnvironmentWithStandardResponses combines mock environment setup with standard responses
 // This is a convenience function for tests that need comprehensive mock responses
-func SetupMockEnvironmentWithStandardResponses(t TestingInterface) (client *MockClient, cleanup func()) {
-	t.Helper()
+func SetupMockEnvironmentWithStandardResponses(tb testing.TB) (client *MockClient, cleanup func()) {
+	tb.Helper()
 
-	client, cleanup = SetupMockEnvironment(t)
+	client, cleanup = SetupMockEnvironment(tb)
 
 	// Safe type assertion with error handling
-	mockRunner, ok := GetRunner().(*MockRunner)
+	mockRunner, ok := fail2ban.GetRunner().(*MockRunner)
 	if !ok {
-		t.Fatalf("Expected GetRunner() to return *MockRunner, got %T", GetRunner())
+		tb.Fatalf("Expected GetRunner() to return *MockRunner, got %T", fail2ban.GetRunner())
 	}
 
 	StandardMockSetup(mockRunner)

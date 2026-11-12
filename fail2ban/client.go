@@ -106,7 +106,7 @@ func NewClientWithContext(ctx context.Context, logDir, filterDir string) (*RealC
 	// real cause (socket permission denied, validation failure, timeout) is not
 	// masked as a stopped service.
 	if _, err := rc.cmdRunner().CombinedOutputWithSudoContext(ctx, rc.Path, constants.CommandArgPing); err != nil {
-		return nil, fmt.Errorf("fail2ban service not running: %w", err)
+		return nil, fmt.Errorf("fail2ban ping failed: %w", err)
 	}
 	jails, err := rc.fetchJailsWithContext(ctx)
 	if err != nil {

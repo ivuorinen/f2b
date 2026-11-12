@@ -1,5 +1,4 @@
-// Security utility functions for input validation and threat detection: path
-// traversal detection and dangerous command pattern identification.
+// Path traversal detection for input validation.
 
 package fail2ban
 
@@ -36,27 +35,5 @@ func ContainsPathTraversal(input string) bool {
 		return true
 	}
 
-	// Additional check: Clean the path and verify it doesn't start with ..
-	// This catches cases where IsLocal might pass but the path still tries to escape
-	cleaned := filepath.Clean(input)
-	if strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) || cleaned == ".." {
-		return true
-	}
-
 	return false
-}
-
-// GetDangerousCommandPatterns returns the attack signatures ValidateCommand
-// rejects before a command name reaches the allowlist check.
-//
-// Only real signatures belong here. The DANGEROUS_* placeholder names the
-// injection tests use are test fixtures and live in the test files: shipping
-// them made production validation depend on test data.
-func GetDangerousCommandPatterns() []string {
-	return []string{
-		"rm -rf",                     // Destructive file operations
-		"drop table",                 // SQL injection attempts
-		"'; cat",                     // Command injection with file reads
-		"/etc/passwd", "/etc/shadow", // Specific sensitive file access
-	}
 }

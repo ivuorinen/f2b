@@ -17,8 +17,12 @@ for comprehensive concurrent testing scenarios.
 
 - **Unit tests**: Co-located with source files using `*_test.go` suffix
 - **Integration tests**: `cmd/cmd_integration_test.go` and the top-level `main_*_test.go` files for end-to-end scenarios
-- **Test helpers**: Shared utilities in `cmd/test_helpers_test.go` and `fail2ban/test_helpers.go`
-- **Mocks**: Comprehensive mock implementations in `fail2ban/` package
+- **Test helpers**: Shared utilities in `cmd/test_helpers_test.go` and `fail2ban/fail2bantest/helpers.go`
+- **Mocks**: `MockClient`, `MockRunner` and `MockSudoChecker` in package `fail2ban/fail2bantest`, which only
+  tests import, so the doubles stay out of the binary and out of the `fail2ban` API
+- **External tests**: `fail2ban` tests that use the doubles are in package `fail2ban_test`. They use only
+  exported API, `fail2bantest` and helpers declared in other `fail2ban_test` files: gobco cannot
+  instrument a package whose external tests use helpers from its internal tests
 
 ### Package Organization
 
@@ -39,8 +43,12 @@ fail2ban/
 ├── client_management_test.go           # Client lifecycle tests
 ├── fail2ban_command_validation_test.go # Command validation tests
 ├── fail2ban_concurrency_test.go        # Thread safety and race condition tests
-├── mock.go                             # Thread-safe MockClient implementation
-├── test_helpers.go                     # SetupMockEnvironment* helpers
+├── fail2bantest/
+│   ├── mock.go                         # Thread-safe MockClient implementation
+│   ├── mock_runner.go                  # MockRunner (validates commands like OSRunner)
+│   ├── mock_sudo.go                    # MockSudoChecker
+│   └── helpers.go                      # SetupMockEnvironment* helpers, AssertError
+├── internal/query/                     # Jail selection and log filtering shared with the doubles
 └── ...
 
 main_security_test.go                   # Top-level security tests
@@ -90,7 +98,7 @@ defer env.Cleanup()
 result := NewCommandTest(t, "status").
     WithArgs("sshd").
     WithEnvironment(env).
-    WithSetup(func(mock *fail2ban.MockClient) {
+    WithSetup(func(mock *fail2bantest.MockClient) {
         setMockJails(mock, []string{"sshd", "apache"})
         mock.StatusJailData = map[string]string{
             "sshd": "Status for sshd jail",
@@ -220,7 +228,7 @@ The modern testing framework provides a clean, fluent interface:
 // Modern framework approach
 NewCommandTest(t, "status").
     WithArgs("all").
-    WithSetup(func(mock *fail2ban.MockClient) {
+    WithSetup(func(mock *fail2bantest.MockClient) {
         setMockJails(mock, []string{"sshd"})
         mock.StatusAllData = "Status for all jails"
     }).
@@ -239,7 +247,7 @@ The `MockClient` is a comprehensive, thread-safe mock implementation of the `Cli
 
 ```go
 // Basic setup
-mock := fail2ban.NewMockClient()
+mock := fail2bantest.NewMockClient()
 mock.Jails = map[string]struct{}{"sshd": {}, "apache": {}}
 
 // Configure responses
@@ -254,13 +262,17 @@ mock.Banned = map[string]map[string]time.Time{
 }
 ```
 
+`MockClient` validates ban and unban targets and jails, log filters and log line limits with `fail2ban`'s
+validators before any configured result, so fixtures must use inputs `RealClient` accepts. Configured
+`BanRecords` are returned only for the requested jails.
+
 ### MockRunner Setup
 
 For testing command execution:
 
 ```go
 // Save original and set up mock
-mockRunner := fail2ban.NewMockRunner()
+mockRunner := fail2bantest.NewMockRunner()
 originalRunner := fail2ban.GetRunner()
 defer fail2ban.SetRunner(originalRunner)
 fail2ban.SetRunner(mockRunner)
@@ -275,7 +287,7 @@ For testing privilege scenarios:
 
 ```go
 // Modern standardized setup with automatic cleanup
-_, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, true)
+_, cleanup := fail2bantest.SetupMockEnvironmentWithSudo(t, true)
 defer cleanup()
 
 // The mock environment is now fully configured with privileges
@@ -299,7 +311,7 @@ defer cleanup()
 ```go
 func TestWithMocks(t *testing.T) {
     // Modern standardized setup with automatic cleanup and context support
-    _, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, true)
+    _, cleanup := fail2bantest.SetupMockEnvironmentWithSudo(t, true)
     defer cleanup()
 
     // Create context for timeout testing
@@ -333,7 +345,7 @@ func TestBanCommand_RequiresPrivileges(t *testing.T) {
     for _, tt := range tests {
         t.Run(tt.name, func(t *testing.T) {
             // Mock runner + mock sudo checker for this privilege scenario
-            client, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, tt.hasPrivileges)
+            client, cleanup := fail2bantest.SetupMockEnvironmentWithSudo(t, tt.hasPrivileges)
             defer cleanup()
 
             ctx, cancel := context.WithTimeout(context.Background(), tt.timeout)
@@ -439,7 +451,7 @@ func TestValidateIP_ConcurrentSafety(t *testing.T) {
 // In package cmd, using the fluent CommandTestBuilder
 func TestListJailsJSONOutput(t *testing.T) {
     NewCommandTest(t, "list-jails").
-        WithSetup(func(mock *fail2ban.MockClient) {
+        WithSetup(func(mock *fail2bantest.MockClient) {
             setMockJails(mock, []string{"sshd", "apache"})
         }).
         WithJSONFormat().
@@ -456,7 +468,7 @@ func TestListJailsJSONOutput(t *testing.T) {
 ```go
 // In package cmd: one MockClient shared across the steps keeps ban state
 func TestIntegration_BanUnbanFlow(t *testing.T) {
-    mock := fail2ban.NewMockClient()
+    mock := fail2bantest.NewMockClient()
 
     NewCommandTest(t, "ban").WithMockClient(mock).
         WithArgs("192.168.1.100", "sshd").ExpectSuccess().Run()
@@ -473,7 +485,7 @@ func TestIntegration_BanUnbanFlow(t *testing.T) {
 
 ```go
 func BenchmarkBanIP(b *testing.B) {
-    client, cleanup := fail2ban.SetupMockEnvironment(b)
+    client, cleanup := fail2bantest.SetupMockEnvironment(b)
     defer cleanup()
     ctx := context.Background()
 
@@ -500,13 +512,13 @@ func BenchmarkBanIP(b *testing.B) {
 ### Coverage Verification
 
 ```bash
-# Run tests with coverage
-go test -coverprofile=coverage.out ./...
+# Run race-enabled tests, write coverage.out and report branch coverage with gobco
+mise run test-cov
 
-# View coverage report
+# View the statement coverage report
 go tool cover -html=coverage.out
 
-# Check coverage percentage
+# Check the statement coverage percentage
 go tool cover -func=coverage.out | grep total
 ```
 
@@ -547,7 +559,7 @@ AssertError(t, err, expectError, testName)
 
 // Environment setup with automatic cleanup: installs MockRunner and
 // MockSudoChecker globally and returns the matching MockClient
-client, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, hasPrivileges)
+client, cleanup := fail2bantest.SetupMockEnvironmentWithSudo(t, hasPrivileges)
 defer cleanup()
 ```
 
@@ -572,7 +584,7 @@ defer cleanup()
 
 **Service Commands:**
 
-- `WithServiceSetup(func(*fail2ban.MockRunner))` - Configure service command mocks
+- `WithServiceSetup(func(*fail2bantest.MockRunner))` - Configure service command mocks
 - Service commands support stdout/stderr capture automatically
 
 #### CommandTestResult Assertions
@@ -595,7 +607,7 @@ defer cleanup()
 ```go
 // SetupMockEnvironmentWithSudo configures standard test environment with privileges
 func TestExample(t *testing.T) {
-    client, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, true)
+    client, cleanup := fail2bantest.SetupMockEnvironmentWithSudo(t, true)
     defer cleanup()
 
     jails, err := client.ListJailsWithContext(context.Background())

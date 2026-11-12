@@ -41,7 +41,7 @@ type Client interface {
     GetLogLinesWithContext(ctx context.Context, jail, ip string) ([]string, error)
     GetLogLinesWithLimitContext(ctx context.Context, jail, ip string, maxLines int) ([]string, error)
     ListFiltersWithContext(ctx context.Context) ([]string, error)
-    TestFilterWithContext(ctx context.Context, filter string) (string, error)
+    TestFilterWithContext(ctx context.Context, filter, logFile string) (string, error)
 }
 ```
 
@@ -116,11 +116,12 @@ fail2ban.SetSudoChecker(&MyCustomSudoChecker{})
 
 ### Mock Client
 
-For testing purposes, use the `MockClient`:
+For testing purposes, use `fail2bantest.MockClient` from
+`github.com/ivuorinen/f2b/fail2ban/fail2bantest`:
 
 ```go
 func TestMyFunction(t *testing.T) {
-    mock := fail2ban.NewMockClient()
+    mock := fail2bantest.NewMockClient()
 
     // Configure mock responses
     mock.Jails = map[string]struct{}{
@@ -222,7 +223,7 @@ validationErr := fail2ban.NewValidationError(
 )
 
 systemErr := fail2ban.NewSystemError(
-    "fail2ban service not running",
+    "fail2ban ping failed",
     "Start the service with: sudo systemctl start fail2ban",
     originalError,
 )
@@ -323,7 +324,7 @@ The f2b project includes a fluent testing framework for command testing:
 func TestBanCommand(t *testing.T) {
     cmd.NewCommandTest(t, "ban").
         WithArgs("192.168.1.100", "sshd").
-        WithSetup(func(mock *fail2ban.MockClient) {
+        WithSetup(func(mock *fail2bantest.MockClient) {
             setMockJails(mock, []string{"sshd"})
         }).
         ExpectSuccess().
@@ -358,7 +359,7 @@ Use standardized environment setup:
 
 ```go
 func TestWithMockEnvironment(t *testing.T) {
-    _, cleanup := fail2ban.SetupMockEnvironmentWithSudo(t, true)
+    _, cleanup := fail2bantest.SetupMockEnvironmentWithSudo(t, true)
     defer cleanup()
 
     // Test implementation with mocked environment

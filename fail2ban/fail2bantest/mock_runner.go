@@ -1,8 +1,4 @@
-// Test support: MockRunner is a mock implementation of the Runner interface
-// used only by unit tests (see test_helpers.go for why it is not a _test.go
-// file).
-
-package fail2ban
+package fail2bantest
 
 import (
 	"context"
@@ -11,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/ivuorinen/f2b/constants"
+	"github.com/ivuorinen/f2b/fail2ban"
 )
 
 // MockRunner is a simple mock for Runner, used in unit tests.
@@ -30,39 +27,28 @@ func NewMockRunner() *MockRunner {
 	}
 }
 
+// validateInvocation mirrors OSRunner's input validation so tests exercise the
+// same trust boundary as production: a fixture passing an invalid command or
+// argument must fail here too, not only outside tests. A caller-supplied
+// "sudo" is refused as production refuses it; only the mock's own privilege
+// selection looks up sudo-keyed responses.
+func validateInvocation(name string, args []string) error {
+	if err := fail2ban.ValidateCommand(name); err != nil {
+		return fmt.Errorf(constants.ErrCommandValidationFailed, err)
+	}
+	if err := fail2ban.ValidateArguments(args); err != nil {
+		return fmt.Errorf(constants.ErrArgumentValidationFailed, err)
+	}
+	return nil
+}
+
 // CombinedOutput returns a mocked response or error for a command.
 func (m *MockRunner) CombinedOutput(name string, args ...string) ([]byte, error) {
-	// Mirror OSRunner's input validation so tests exercise the same trust
-	// boundary as production: a fixture passing an invalid command or
-	// argument must fail here too, not only outside tests. Production only
-	// ever prepends "sudo" after validating the inner command, so an explicit
-	// sudo prefix validates the inner command the same way.
-	inner, innerArgs := name, args
-	if name == constants.SudoCommand && len(args) > 0 {
-		inner, innerArgs = args[0], args[1:]
-	}
-	if err := validateCommandExecution(inner, innerArgs); err != nil {
+	if err := validateInvocation(name, args); err != nil {
 		return nil, err
 	}
 
 	key := name + " " + strings.Join(args, " ")
-	if name == constants.SudoCommand {
-		m.mu.Lock()
-		defer m.mu.Unlock()
-
-		m.CallLog = append(m.CallLog, key)
-
-		if err, exists := m.Errors[key]; exists {
-			return nil, err
-		}
-
-		if response, exists := m.Responses[key]; exists {
-			return response, nil
-		}
-
-		return nil, fmt.Errorf("sudo should not be called directly in tests")
-	}
-
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -79,9 +65,14 @@ func (m *MockRunner) CombinedOutput(name string, args ...string) ([]byte, error)
 	return nil, fmt.Errorf("unexpected command: %s", key)
 }
 
-// CombinedOutputWithSudo returns a mocked response for sudo commands.
+// CombinedOutputWithSudo returns a mocked response for sudo commands. It
+// validates before looking up a sudo-keyed response, as OSRunner validates
+// before running anything.
 func (m *MockRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte, error) {
-	checker := GetSudoChecker()
+	if err := validateInvocation(name, args); err != nil {
+		return nil, err
+	}
+	checker := fail2ban.GetSudoChecker()
 
 	// If mock checker says we're root, don't use sudo
 	if checker.IsRoot() {
@@ -89,7 +80,7 @@ func (m *MockRunner) CombinedOutputWithSudo(name string, args ...string) ([]byte
 	}
 
 	// If command requires sudo and we have privileges, mock with sudo
-	if RequiresSudo(name, args...) && checker.HasSudoPrivileges() {
+	if fail2ban.RequiresSudo(name, args...) && checker.HasSudoPrivileges() {
 		sudoKey := "sudo " + name + " " + strings.Join(args, " ")
 
 		// Check for sudo-specific response first (with lock protection)
@@ -148,13 +139,6 @@ func (m *MockRunner) GetCalls() []string {
 	calls := make([]string, len(m.CallLog))
 	copy(calls, m.CallLog)
 	return calls
-}
-
-// CombinedOutputWithContext returns a mocked response or error for a command with context support.
-func (m *MockRunner) CombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error) {
-	return withContextCheck(ctx, func() ([]byte, error) {
-		return m.CombinedOutput(name, args...)
-	})
 }
 
 // CombinedOutputWithSudoContext returns a mocked response for sudo commands with context support.
