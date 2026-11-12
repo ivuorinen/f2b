@@ -604,8 +604,12 @@ func BenchmarkMockClientBanUnban(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; b.Loop(); i++ {
 		ip := fmt.Sprintf("192.168.1.%d", i%255)
-		_, _ = client.BanIPWithContext(bg, ip, "sshd")
-		_, _ = client.UnbanIPWithContext(bg, ip, "sshd")
+		if _, err := client.BanIPWithContext(bg, ip, "sshd"); err != nil {
+			b.Fatal(err)
+		}
+		if _, err := client.UnbanIPWithContext(bg, ip, "sshd"); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -615,12 +619,16 @@ func BenchmarkMockClientBannedIn(b *testing.B) {
 	// Pre-ban some IPs
 	for i := range 100 {
 		ip := fmt.Sprintf("192.168.1.%d", i)
-		_, _ = client.BanIPWithContext(bg, ip, "sshd")
+		if _, err := client.BanIPWithContext(bg, ip, "sshd"); err != nil {
+			b.Fatal(err)
+		}
 	}
 
 	b.ResetTimer()
 	for i := 0; b.Loop(); i++ {
 		ip := fmt.Sprintf("192.168.1.%d", i%100)
-		_, _ = client.BannedInWithContext(bg, ip)
+		if _, err := client.BannedInWithContext(bg, ip); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
