@@ -26,7 +26,7 @@ gh = "2.103.3"
 goreleaser = "2.19.0"
 markdownlint-cli2 = "0.24.0"
 # node runs the npm: tools; uv installs the pypi: tools.
-node = "24.22.2"
+node = "26.13.1"
 "npm:markdown-link-check" = "3.15.0"
 prek = "0.5.7"
 "pypi:check-jsonschema" = "0.39.0"
