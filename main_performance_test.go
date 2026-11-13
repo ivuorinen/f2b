@@ -4,10 +4,10 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 
 	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/fail2ban/fail2bantest"
 )
 
 // writeBenchLog writes content as dir/fail2ban.log and returns a client that
@@ -105,36 +105,16 @@ func BenchmarkConcurrentPerformance(b *testing.B) {
 	})
 }
 
-// BenchmarkGlobalStateAccess benchmarks thread-safe global state access
-func BenchmarkGlobalStateAccess(b *testing.B) {
-	originalLogDir := fail2ban.GetLogDir()
-	defer fail2ban.SetLogDir(originalLogDir)
-
-	b.Run("LogDirAccess", func(b *testing.B) {
-		b.RunParallel(func(pb *testing.PB) {
-			for pb.Next() {
-				if pb.Next() {
-					// 50% reads
-					fail2ban.GetLogDir()
-				} else {
-					// 50% writes
-					fail2ban.SetLogDir("/tmp/test-" + strconv.Itoa(b.N))
-				}
-			}
-		})
-	})
-}
-
 // setupBenchmarkClient creates a properly configured client for benchmarking
 func setupBenchmarkClient(b *testing.B) *fail2ban.RealClient {
 	b.Helper()
 
 	// Setup mock environment
-	_, cleanup := fail2ban.SetupMockEnvironment(b)
+	_, cleanup := fail2bantest.SetupMockEnvironment(b)
 	b.Cleanup(cleanup)
 
 	// Get the mock runner and add additional responses
-	mockRunner := fail2ban.MustMockRunner(b)
+	mockRunner := fail2bantest.MustMockRunner(b)
 	mockRunner.SetResponse("fail2ban-client -V", []byte("fail2ban-client v1.0.0"))
 	mockRunner.SetResponse("fail2ban-client status", []byte("Status: [sshd] Jail list: sshd"))
 	mockRunner.SetResponse(

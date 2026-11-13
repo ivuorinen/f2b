@@ -63,7 +63,11 @@ repos:
       - id: no-discarded-testing-t
         name: Tests must use their *testing.T
         language: pygrep
-        entry: '\(\s*_\s+\*testing\.T\s*\)'
+        # (?x) lets the pattern span lines; it holds no literal spaces.
+        entry: |-
+          (?x)(?<!\])(?<!\)\s)func(\s+\w+)?\((?:[^,()]*,)*?\s*\*testing\.T\s*(?:,[^()]*)?\)\s*\{
+          | [(,]\s*_\s+\*testing\.T\s*[,)]
+        args: [--multiline]
         files: _test\.go$
 
       # The hooks below keep the entry, file types and file patterns of the

@@ -1,4 +1,4 @@
-package fail2ban
+package fail2ban_test
 
 import (
 	"context"
@@ -6,11 +6,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/fail2ban/fail2bantest"
 )
 
 // setupMockForBannedInTest sets up mock responses for BannedIn tests
-func setupMockForBannedInTest(ip, mockResponse string) *MockRunner {
-	mock := NewMockRunner()
+func setupMockForBannedInTest(ip, mockResponse string) *fail2bantest.MockRunner {
+	mock := fail2bantest.NewMockRunner()
 	mock.SetResponse("fail2ban-client -V", []byte("0.11.2"))
 	mock.SetResponse("sudo fail2ban-client -V", []byte("0.11.2"))
 	mock.SetResponse("fail2ban-client ping", []byte("pong"))
@@ -23,10 +26,10 @@ func setupMockForBannedInTest(ip, mockResponse string) *MockRunner {
 }
 
 // newBannedInClient builds a client whose banned query for ip returns response.
-func newBannedInClient(t *testing.T, ip, response string) *RealClient {
+func newBannedInClient(t *testing.T, ip, response string) *fail2ban.RealClient {
 	t.Helper()
-	t.Cleanup(WithTestRunner(t, setupMockForBannedInTest(ip, response)))
-	client, err := NewClient("/var/log", "/etc/fail2ban/filter.d")
+	t.Cleanup(fail2bantest.WithTestRunner(t, setupMockForBannedInTest(ip, response)))
+	client, err := fail2ban.NewClient("/var/log", "/etc/fail2ban/filter.d")
 	require.NoError(t, err)
 	return client
 }
@@ -74,8 +77,8 @@ func TestBanIPParsesLastOutputLine(t *testing.T) {
 	mock.SetResponse("fail2ban-client set sshd banip 192.168.1.100", noisy)
 	mock.SetResponse("sudo fail2ban-client set sshd unbanip 192.168.1.100", []byte("warning\n0\n"))
 	mock.SetResponse("fail2ban-client set sshd unbanip 192.168.1.100", []byte("warning\n0\n"))
-	t.Cleanup(WithTestRunner(t, mock))
-	client, err := NewClient("/var/log", "/etc/fail2ban/filter.d")
+	t.Cleanup(fail2bantest.WithTestRunner(t, mock))
+	client, err := fail2ban.NewClient("/var/log", "/etc/fail2ban/filter.d")
 	require.NoError(t, err)
 
 	code, err := client.BanIPWithContext(context.Background(), "192.168.1.100", "sshd")

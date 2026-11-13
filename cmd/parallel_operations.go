@@ -16,8 +16,9 @@ func ProcessBanOperationParallelWithContext(
 	client fail2ban.Client,
 	ip string,
 	jails []string,
+	config *Config,
 ) ([]OperationResult, error) {
-	return processJailsParallel(ctx, client, ip, jails, BanOperationType)
+	return processJailsParallel(ctx, client, ip, jails, BanOperationType, config)
 }
 
 // ProcessUnbanOperationParallelWithContext unbans ip across multiple jails concurrently.
@@ -26,8 +27,9 @@ func ProcessUnbanOperationParallelWithContext(
 	client fail2ban.Client,
 	ip string,
 	jails []string,
+	config *Config,
 ) ([]OperationResult, error) {
-	return processJailsParallel(ctx, client, ip, jails, UnbanOperationType)
+	return processJailsParallel(ctx, client, ip, jails, UnbanOperationType, config)
 }
 
 // processJailsParallel runs opType's per-jail operation against every jail
@@ -44,6 +46,7 @@ func processJailsParallel(
 	ip string,
 	jails []string,
 	opType OperationType,
+	config *Config,
 ) ([]OperationResult, error) {
 	if len(jails) <= 1 {
 		return ProcessOperationWithContext(ctx, client, ip, jails, opType)
@@ -59,7 +62,7 @@ func processJailsParallel(
 		sem <- struct{}{} // bound in-flight goroutines to the worker limit
 		wg.Go(func() {
 			defer func() { <-sem }()
-			results[i], errs[i] = runJailOperation(ctx, client, ip, jail, opType, logger)
+			results[i], errs[i] = runJailOperation(ctx, client, ip, jail, opType, logger, config)
 		})
 	}
 	wg.Wait()
@@ -76,6 +79,7 @@ func runJailOperation(
 	ip, jail string,
 	opType OperationType,
 	logger *ContextualLogger,
+	config *Config,
 ) (OperationResult, error) {
 	// Stop before spawning a doomed fail2ban-client invocation once the run is
 	// canceled; surface the context error as this jail's status.
@@ -86,7 +90,7 @@ func runJailOperation(
 	jailCtx := fail2ban.WithJail(ctx, jail)
 	// Per-jail CommandTimeout: without it one hung invocation stalls for the
 	// whole ParallelTimeout, while single-jail runs are capped at CommandTimeout.
-	opCtx, opCancel := createTimeoutContext(jailCtx, &cfg)
+	opCtx, opCancel := createTimeoutContext(jailCtx, config)
 	start := time.Now()
 	code, err := opType.OperationCtx(opCtx, client, ip, jail)
 	opCancel()

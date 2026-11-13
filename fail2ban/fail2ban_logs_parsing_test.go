@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/ivuorinen/f2b/constants"
+	"github.com/ivuorinen/f2b/fail2ban/internal/query"
 )
 
 // parseTimestamp extracts and parses timestamp from log line
@@ -124,7 +125,8 @@ func TestParseLogLineWithRealData(t *testing.T) {
 }
 
 // assertProductionFilterPath checks that the production filter predicates
-// (passesFilters / containsIPToken) match and reject as expected for a line.
+// (passesFilters / query.ContainsIPToken) match and reject as expected for a
+// line.
 func assertProductionFilterPath(t *testing.T, line, wantJail, wantIP string) {
 	t.Helper()
 	if wantJail != "" {
@@ -136,11 +138,11 @@ func assertProductionFilterPath(t *testing.T, line, wantJail, wantIP string) {
 		}
 	}
 	if wantIP != "" {
-		if !containsIPToken(line, wantIP) {
-			t.Errorf("containsIPToken(%q) = false, want true for line %q", wantIP, line)
+		if !query.ContainsIPToken(line, wantIP) {
+			t.Errorf("ContainsIPToken(%q) = false, want true for line %q", wantIP, line)
 		}
-		if containsIPToken(line, "203.0.113.255") {
-			t.Errorf("containsIPToken(absent IP) = true, want false for line %q", line)
+		if query.ContainsIPToken(line, "203.0.113.255") {
+			t.Errorf("ContainsIPToken(absent IP) = true, want false for line %q", line)
 		}
 	}
 }
@@ -307,7 +309,6 @@ func assertGetLogLinesCase(t *testing.T, jail, ip string, wantMinimum int, check
 
 func TestParseBanRecordsFromRealLogs(t *testing.T) {
 	// Test with real ban/unban patterns from production
-	parser := NewBanRecordParser()
 
 	tests := []struct {
 		name      string
@@ -337,7 +338,7 @@ func TestParseBanRecordsFromRealLogs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assertParsedBanRecordsFromLogs(t, parser, tt.output, tt.jail, tt.wantCount, tt.checkIP)
+			assertParsedBanRecordsFromLogs(t, tt.output, tt.jail, tt.wantCount, tt.checkIP)
 		})
 	}
 }
@@ -345,10 +346,10 @@ func TestParseBanRecordsFromRealLogs(t *testing.T) {
 // assertParsedBanRecordsFromLogs parses a ban/unban output block and asserts
 // the record count and that checkIP is present with the expected jail.
 func assertParsedBanRecordsFromLogs(
-	t *testing.T, parser *BanRecordParser, output, jail string, wantCount int, checkIP string,
+	t *testing.T, output, jail string, wantCount int, checkIP string,
 ) {
 	t.Helper()
-	records, err := parser.ParseBanRecords(output, jail)
+	records, err := ParseBanRecords(output, jail)
 	if err != nil {
 		t.Fatalf("ParseBanRecords failed: %v", err)
 	}
@@ -559,32 +560,5 @@ func assertRotatedOrder(t *testing.T, files []string, wantCurrent string, wantRo
 		if r.path != wantRotated[i] {
 			t.Errorf("rotated[%d] = %q, want %q", i, r.path, wantRotated[i])
 		}
-	}
-}
-
-// TestContainsIPToken covers whole-token matching including IPv4-mapped IPv6
-// and IP:port forms, which a strict "no adjacent ':'" boundary would miss.
-func TestContainsIPToken(t *testing.T) {
-	tests := []struct {
-		name string
-		line string
-		ip   string
-		want bool
-	}{
-		{"exact token", "Ban 192.168.1.100", "192.168.1.100", true},
-		{"longer address suffix", "Ban 192.168.1.100", "192.168.1.10", false},
-		{"longer address prefix", "Ban 1192.168.1.100", "192.168.1.100", false},
-		{"ipv4-mapped ipv6", "Ban ::ffff:192.168.1.100", "192.168.1.100", true},
-		{"ipv4 with port", "connection from 192.168.1.100:2222", "192.168.1.100", true},
-		{"ipv4-mapped longer address", "Ban ::ffff:192.168.1.100", "92.168.1.100", false},
-		{"ipv6 token", "Ban 2001:db8::1", "2001:db8::1", true},
-		{"ipv6 inside longer address", "Ban 2001:db8::12", "2001:db8::1", false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := containsIPToken(tt.line, tt.ip); got != tt.want {
-				t.Errorf("containsIPToken(%q, %q) = %v, want %v", tt.line, tt.ip, got, tt.want)
-			}
-		})
 	}
 }

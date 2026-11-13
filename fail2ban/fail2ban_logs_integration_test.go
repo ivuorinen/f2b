@@ -182,7 +182,6 @@ func TestIntegrationConcurrentLogReading(t *testing.T) {
 
 func TestIntegrationBanRecordParsing(t *testing.T) {
 	// Test parsing ban records with real patterns
-	parser := NewBanRecordParser()
 
 	// Use dynamic dates relative to current time
 	now := time.Now()
@@ -212,7 +211,7 @@ func TestIntegrationBanRecordParsing(t *testing.T) {
 	}
 
 	output := strings.Join(realPatterns, "\n")
-	records, err := parser.ParseBanRecords(output, "sshd")
+	records, err := ParseBanRecords(output, "sshd")
 	if err != nil {
 		t.Fatalf("Failed to parse ban records: %v", err)
 	}
@@ -413,8 +412,6 @@ func BenchmarkLogParsing(b *testing.B) {
 }
 
 func BenchmarkBanRecordParsing(b *testing.B) {
-	parser := NewBanRecordParser()
-
 	// Use dynamic dates for benchmark
 	now := time.Now()
 	future := now.Add(10 * time.Minute)
@@ -430,7 +427,7 @@ func BenchmarkBanRecordParsing(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		_, err := parser.ParseBanRecords(output, "sshd")
+		_, err := ParseBanRecords(output, "sshd")
 		if err != nil {
 			b.Fatalf("Benchmark failed: %v", err)
 		}

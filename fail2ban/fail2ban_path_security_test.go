@@ -30,7 +30,6 @@ func TestPathTraversalDetection(t *testing.T) {
 		AllowedBasePaths: []string{tempDir},
 		MaxPathLength:    4096,
 		AllowSymlinks:    false,
-		ResolveSymlinks:  true,
 	}
 
 	for _, maliciousPath := range maliciousPaths {
@@ -57,7 +56,6 @@ func TestValidPaths(t *testing.T) {
 		AllowedBasePaths: []string{tempDir},
 		MaxPathLength:    4096,
 		AllowSymlinks:    false,
-		ResolveSymlinks:  true,
 	}
 
 	validPaths := []string{
@@ -112,7 +110,6 @@ func TestSymlinkHandling(t *testing.T) {
 		AllowedBasePaths: []string{tempDir},
 		MaxPathLength:    4096,
 		AllowSymlinks:    false,
-		ResolveSymlinks:  true,
 	}
 
 	_, err := ValidatePathWithSecurity(symlinkPath, configNoSymlinks)
@@ -125,7 +122,6 @@ func TestSymlinkHandling(t *testing.T) {
 		AllowedBasePaths: []string{tempDir},
 		MaxPathLength:    4096,
 		AllowSymlinks:    true,
-		ResolveSymlinks:  true,
 	}
 
 	_, err = ValidatePathWithSecurity(symlinkPath, configWithSymlinks)
@@ -216,7 +212,6 @@ func TestPathLengthLimits(t *testing.T) {
 		AllowedBasePaths: []string{tempDir},
 		MaxPathLength:    4096,
 		AllowSymlinks:    false,
-		ResolveSymlinks:  true,
 	}
 
 	_, err := ValidatePathWithSecurity(normalPath, config)
@@ -327,7 +322,6 @@ func BenchmarkPathValidation(b *testing.B) {
 		AllowedBasePaths: []string{tempDir},
 		MaxPathLength:    4096,
 		AllowSymlinks:    false,
-		ResolveSymlinks:  true,
 	}
 
 	testPath := filepath.Join(tempDir, "test.log")

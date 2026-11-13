@@ -9,13 +9,14 @@ import (
 	"testing"
 
 	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/fail2ban/fail2bantest"
 )
 
 func TestMain(m *testing.M) {
 	Logger.SetOutput(io.Discard)
 
 	// Set up mock environment for all tests
-	_, cleanup := fail2ban.SetupMockEnvironment(&testingT{})
+	_, cleanup := fail2bantest.SetupMockEnvironment(&testingT{})
 	defer cleanup()
 
 	code := m.Run()
@@ -23,8 +24,10 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// testingT implements TestingInterface for TestMain
-type testingT struct{}
+// testingT stands in for testing.TB in TestMain, which has no *testing.T. The
+// setup helper calls only the methods defined below; the embedded nil
+// testing.TB supplies the interface's unexported method.
+type testingT struct{ testing.TB }
 
 func (t *testingT) Helper() {}
 func (t *testingT) Fatalf(format string, args ...any) {
@@ -69,7 +72,7 @@ func TestListJailsCommand(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			NewCommandTest(t, "list-jails").
-				WithSetup(func(mock *fail2ban.MockClient) {
+				WithSetup(func(mock *fail2bantest.MockClient) {
 					setMockJails(mock, tt.jails)
 				}).
 				ExpectSuccess().
@@ -83,7 +86,7 @@ func TestListJailsCommand(t *testing.T) {
 // to print the space-joined plain list regardless of the format flag.
 func TestListJailsCommandJSON(t *testing.T) {
 	NewCommandTest(t, "list-jails").
-		WithSetup(func(mock *fail2ban.MockClient) {
+		WithSetup(func(mock *fail2bantest.MockClient) {
 			setMockJails(mock, []string{"sshd", "apache"})
 		}).
 		WithJSONFormat().
@@ -149,7 +152,7 @@ func assertStatusCommandCase(t *testing.T, args, jails []string, statusAll strin
 	t.Helper()
 	builder := NewCommandTest(t, "status").
 		WithArgs(args...).
-		WithSetup(func(mock *fail2ban.MockClient) {
+		WithSetup(func(mock *fail2bantest.MockClient) {
 			setMockJails(mock, jails)
 			if statusAll != "" {
 				mock.StatusAllData = statusAll
@@ -222,7 +225,6 @@ type ipCommandTestCase struct {
 	name        string
 	args        []string
 	jails       []string
-	banResults  map[string]map[string]int
 	setupBanned bool
 	wantOutput  string
 	wantError   bool
@@ -236,11 +238,12 @@ func runIPCommandTests(t *testing.T, command string, tests []ipCommandTestCase) 
 		t.Run(tt.name, func(t *testing.T) {
 			builder := NewCommandTest(t, command).
 				WithArgs(tt.args...).
-				WithSetup(func(mock *fail2ban.MockClient) {
+				WithSetup(func(mock *fail2bantest.MockClient) {
 					setMockJails(mock, tt.jails)
-					mock.BanResults = tt.banResults
 					if tt.setupBanned {
-						_, _ = mock.BanIPWithContext(context.Background(), "192.168.1.100", "sshd")
+						if _, err := mock.BanIPWithContext(context.Background(), "192.168.1.100", "sshd"); err != nil {
+							t.Fatalf("setup ban: %v", err)
+						}
 					}
 				})
 
@@ -261,7 +264,6 @@ func TestBanCommand(t *testing.T) {
 			name:       "ban IP without jail specified",
 			args:       []string{"192.168.1.100"},
 			jails:      []string{"sshd", "apache"},
-			banResults: map[string]map[string]int{"192.168.1.100": {"sshd": 0, "apache": 0}},
 			wantOutput: "Banned 192.168.1.100 in apache\nBanned 192.168.1.100 in sshd\n", // alphabetical order
 			wantError:  false,
 		},
@@ -269,7 +271,6 @@ func TestBanCommand(t *testing.T) {
 			name:       "ban IP with specific jail",
 			args:       []string{"192.168.1.100", "sshd"},
 			jails:      []string{"sshd"},
-			banResults: map[string]map[string]int{"192.168.1.100": {"sshd": 0}},
 			wantOutput: "Banned 192.168.1.100 in sshd\n",
 			wantError:  false,
 		},
@@ -284,7 +285,7 @@ func TestBanCommand(t *testing.T) {
 		{
 			name:       "ban command without IP",
 			args:       []string{},
-			wantOutput: "Error: IP address required",
+			wantOutput: "Error: IP address or CIDR range required",
 			wantError:  true,
 		},
 	}
@@ -313,7 +314,7 @@ func TestUnbanCommand(t *testing.T) {
 		{
 			name:       "unban command without IP",
 			args:       []string{},
-			wantOutput: "Error: IP address required",
+			wantOutput: "Error: IP address or CIDR range required",
 			wantError:  true,
 		},
 	}
@@ -362,11 +363,13 @@ func TestTestIPCommand(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			builder := NewCommandTest(t, "test").
 				WithArgs(tt.args...).
-				WithSetup(func(mock *fail2ban.MockClient) {
+				WithSetup(func(mock *fail2bantest.MockClient) {
 					// Set up bans
 					for jail, ips := range tt.setupBans {
 						for _, ip := range ips {
-							_, _ = mock.BanIPWithContext(context.Background(), ip, jail)
+							if _, err := mock.BanIPWithContext(context.Background(), ip, jail); err != nil {
+								t.Fatalf("setup ban %s in %s: %v", ip, jail, err)
+							}
 						}
 					}
 				})
@@ -439,7 +442,7 @@ func TestCommandErrorHandling(t *testing.T) {
 		name         string
 		command      string
 		args         []string
-		setupMock    func(*fail2ban.MockClient)
+		setupMock    func(*fail2bantest.MockClient)
 		wantError    bool
 		wantErrorMsg string
 	}{
@@ -447,7 +450,7 @@ func TestCommandErrorHandling(t *testing.T) {
 			name:    "ban IP error",
 			command: "ban",
 			args:    []string{"192.168.1.100", "sshd"},
-			setupMock: func(m *fail2ban.MockClient) {
+			setupMock: func(m *fail2bantest.MockClient) {
 				setMockJails(m, []string{"sshd"})
 				m.SetBanError("sshd", "192.168.1.100", fmt.Errorf("ban failed"))
 			},
@@ -458,7 +461,7 @@ func TestCommandErrorHandling(t *testing.T) {
 			name:    "unban IP error",
 			command: "unban",
 			args:    []string{"192.168.1.100", "sshd"},
-			setupMock: func(m *fail2ban.MockClient) {
+			setupMock: func(m *fail2bantest.MockClient) {
 				setMockJails(m, []string{"sshd"})
 				m.SetUnbanError("sshd", "192.168.1.100", fmt.Errorf("unban failed"))
 			},

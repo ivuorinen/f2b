@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/fail2ban/fail2bantest"
 )
 
 // TestComprehensiveFrameworkCapabilities demonstrates the full power of the test framework
@@ -12,7 +12,7 @@ func TestComprehensiveFrameworkCapabilities(t *testing.T) {
 	// Test 1: Basic command success testing
 	t.Run("basic_success", func(t *testing.T) {
 		NewCommandTest(t, "list-jails").
-			WithSetup(func(mock *fail2ban.MockClient) {
+			WithSetup(func(mock *fail2bantest.MockClient) {
 				setMockJails(mock, []string{"sshd", "apache"})
 			}).
 			ExpectSuccess().
@@ -34,9 +34,11 @@ func TestComprehensiveFrameworkCapabilities(t *testing.T) {
 		NewCommandTest(t, "banned").
 			WithArgs("sshd").
 			WithJSONFormat().
-			WithSetup(func(mock *fail2ban.MockClient) {
+			WithSetup(func(mock *fail2bantest.MockClient) {
 				setMockJails(mock, []string{"sshd"})
-				_, _ = mock.BanIPWithContext(context.Background(), "192.168.1.100", "sshd")
+				if _, err := mock.BanIPWithContext(context.Background(), "192.168.1.100", "sshd"); err != nil {
+					t.Fatalf("setup ban 192.168.1.100 in sshd: %v", err)
+				}
 			}).
 			ExpectSuccess().
 			Run().
@@ -55,7 +57,7 @@ func TestComprehensiveFrameworkCapabilities(t *testing.T) {
 		NewCommandTest(t, "status").
 			WithArgs("all").
 			WithEnvironment(env).
-			WithSetup(func(mock *fail2ban.MockClient) {
+			WithSetup(func(mock *fail2bantest.MockClient) {
 				setMockJails(mock, []string{"sshd", "apache"})
 				mock.StatusAllData = "All systems operational"
 			}).
@@ -68,7 +70,7 @@ func TestComprehensiveFrameworkCapabilities(t *testing.T) {
 	t.Run("chained_assertions", func(t *testing.T) {
 		result := NewCommandTest(t, "status").
 			WithArgs("sshd").
-			WithSetup(func(mock *fail2ban.MockClient) {
+			WithSetup(func(mock *fail2bantest.MockClient) {
 				setMockJails(mock, []string{"sshd"})
 				mock.StatusJailData = map[string]string{
 					"sshd": "Jail: sshd\nStatus: Active\nFiltered: 10 lines",
@@ -104,11 +106,14 @@ func TestComprehensiveFrameworkCapabilities(t *testing.T) {
 			t.Run(tt.name, func(t *testing.T) {
 				builder := NewCommandTest(t, tt.command).
 					WithArgs(tt.args...).
-					WithSetup(func(mock *fail2ban.MockClient) {
+					WithSetup(func(mock *fail2bantest.MockClient) {
 						setMockJails(mock, []string{"sshd", "apache"})
 						if tt.command == "unban" || tt.command == "test" {
 							// Pre-ban IP for unban/test scenarios
-							_, _ = mock.BanIPWithContext(context.Background(), "192.168.1.100", "sshd")
+							_, err := mock.BanIPWithContext(context.Background(), "192.168.1.100", "sshd")
+							if err != nil {
+								t.Fatalf("setup ban 192.168.1.100 in sshd: %v", err)
+							}
 						}
 					})
 
@@ -141,10 +146,12 @@ func TestFrameworkPerformance(t *testing.T) {
 			// Single line test execution
 			NewCommandTest(t, cmd).
 				WithArgs(args...).
-				WithSetup(func(mock *fail2ban.MockClient) {
+				WithSetup(func(mock *fail2bantest.MockClient) {
 					setMockJails(mock, []string{"sshd"})
 					if cmd != "ban" && cmd != "list-jails" {
-						_, _ = mock.BanIPWithContext(context.Background(), "192.168.1.100", "sshd")
+						if _, err := mock.BanIPWithContext(context.Background(), "192.168.1.100", "sshd"); err != nil {
+							t.Fatalf("setup ban 192.168.1.100 in sshd: %v", err)
+						}
 					}
 					if cmd == "status" && len(args) > 0 {
 						mock.StatusJailData = map[string]string{"sshd": "Status for sshd"}
@@ -162,7 +169,7 @@ func TestFrameworkEdgeCases(t *testing.T) {
 	t.Run("empty_output", func(t *testing.T) {
 		// Test framework with empty jail list setup
 		NewCommandTest(t, "list-jails").
-			WithSetup(func(mock *fail2ban.MockClient) {
+			WithSetup(func(mock *fail2bantest.MockClient) {
 				setMockJails(mock, []string{}) // No jails
 			}).
 			ExpectSuccess().
@@ -174,10 +181,13 @@ func TestFrameworkEdgeCases(t *testing.T) {
 		NewCommandTest(t, "banned").
 			WithArgs("sshd").
 			WithJSONFormat().
-			WithSetup(func(mock *fail2ban.MockClient) {
+			WithSetup(func(mock *fail2bantest.MockClient) {
 				setMockJails(mock, []string{"sshd"})
-				_, _ = mock.BanIPWithContext(context.Background(), "192.168.1.100", "sshd")
-				_, _ = mock.BanIPWithContext(context.Background(), "192.168.1.101", "sshd")
+				for _, ip := range []string{"192.168.1.100", "192.168.1.101"} {
+					if _, err := mock.BanIPWithContext(context.Background(), ip, "sshd"); err != nil {
+						t.Fatalf("setup ban %s in sshd: %v", ip, err)
+					}
+				}
 			}).
 			ExpectSuccess().
 			Run().
@@ -188,7 +198,7 @@ func TestFrameworkEdgeCases(t *testing.T) {
 	t.Run("exact_matching", func(t *testing.T) {
 		NewCommandTest(t, "status").
 			WithArgs("sshd").
-			WithSetup(func(mock *fail2ban.MockClient) {
+			WithSetup(func(mock *fail2bantest.MockClient) {
 				setMockJails(mock, []string{"sshd"})
 				mock.StatusJailData = map[string]string{"sshd": "Exact status message"}
 			}).
@@ -201,7 +211,7 @@ func TestFrameworkEdgeCases(t *testing.T) {
 // BenchmarkFrameworkOverhead measures performance impact
 func BenchmarkFrameworkOverhead(b *testing.B) {
 	// Create a mock client once outside the loop
-	mock := fail2ban.NewMockClient()
+	mock := fail2bantest.NewMockClient()
 	setMockJails(mock, []string{"sshd"})
 
 	b.ResetTimer()

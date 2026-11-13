@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ivuorinen/f2b/constants"
-	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/fail2ban/fail2bantest"
 )
 
 // setInvalidTestCfg points the global cfg at a traversal path so any real
@@ -33,7 +33,7 @@ func setValidMockedTestCfg(t *testing.T) {
 	t.Helper()
 	originalCfg := cfg
 	t.Cleanup(func() { cfg = originalCfg })
-	_, cleanup := fail2ban.SetupMockEnvironmentWithStandardResponses(t)
+	_, cleanup := fail2bantest.SetupMockEnvironmentWithStandardResponses(t)
 	t.Cleanup(cleanup)
 	cfg = Config{
 		LogDir:    constants.DefaultLogDir,
@@ -63,7 +63,7 @@ func TestNewLazyClientDefersConstruction(t *testing.T) {
 // -V/ping/status past the command's timeout and Ctrl-C.
 func TestLazyClientResolvesUnderCallerContext(t *testing.T) {
 	setValidMockedTestCfg(t)
-	runner := fail2ban.MustMockRunner(t)
+	runner := fail2bantest.MustMockRunner(t)
 	before := len(runner.GetCalls())
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -98,7 +98,7 @@ func TestLazyClientCachesConstructionError(t *testing.T) {
 // wrong method (an unban that bans) passed every other test.
 func TestLazyClientDelegatesEachOperation(t *testing.T) {
 	setValidMockedTestCfg(t)
-	runner := fail2ban.MustMockRunner(t)
+	runner := fail2bantest.MustMockRunner(t)
 	client := NewLazyClient()
 	ctx := context.Background()
 
