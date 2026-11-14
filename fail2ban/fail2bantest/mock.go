@@ -214,15 +214,12 @@ func (m *MockClient) UnbanIPWithContext(ctx context.Context, ip, jail string) (i
 // removes: target itself and, when target is a CIDR range, every banned
 // address or range whose address lies inside it, as the real client's range
 // unban does. Checking only the exact key let a command test pass against a
-// mock that kept the addresses inside an unbanned range. An entry with a zero
-// ban time counts as not banned.
+// mock that kept the addresses inside an unbanned range. Every entry counts
+// as banned whatever its ban time, as in the other MockClient methods.
 func unbannedBy(banned map[string]time.Time, target string) []string {
 	_, network, cidrErr := net.ParseCIDR(target)
 	var matches []string
-	for entry, at := range banned {
-		if at.IsZero() {
-			continue
-		}
+	for entry := range banned {
 		if entry == target || (cidrErr == nil && network.Contains(entryAddress(entry))) {
 			matches = append(matches, entry)
 		}
