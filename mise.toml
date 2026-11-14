@@ -60,10 +60,27 @@ description = "Run race-enabled tests, write coverage.out and report branch cove
 # printing "nothing to instrument", so the directories come from go list.
 # gobco copies the whole module, ignored files such as .env included, into
 # a $TMPDIR directory it creates with mode 0777 minus the umask; umask 077
-# keeps that copy private to the user, also when a crash leaves it behind.
+# keeps that copy private to the user. The copies go in one directory that
+# the task removes on exit, also after a failure or an interrupt. A TMPDIR
+# inside the module is refused: gobco would copy each copy into itself until
+# the disk fills.
 run = [
   "go test -race -covermode=atomic -coverprofile=coverage.out ./...",
-  'umask 077; for pkg in $(go list ./...); do gobco -branch ".${pkg#github.com/ivuorinen/f2b}" || exit 1; done',
+  '''
+umask 077
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+trap 'exit 1' INT TERM
+case "$(cd "$tmp" && pwd -P)/" in
+"$(pwd -P)"/*)
+  echo "TMPDIR ($TMPDIR) is inside the module: gobco would copy the module into itself" >&2
+  exit 1
+  ;;
+esac
+for pkg in $(go list ./...); do
+  TMPDIR="$tmp" gobco -branch ".${pkg#github.com/ivuorinen/f2b}" || exit 1
+done
+''',
 ]
 
 [tasks.fmt]
