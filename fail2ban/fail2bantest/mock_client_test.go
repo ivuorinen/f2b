@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ivuorinen/f2b/fail2ban"
 )
@@ -262,6 +263,40 @@ func TestMockClientRangeUnbanRemovesAddressesInside(t *testing.T) {
 			}
 			if left := slices.Sorted(maps.Keys(client.Banned["sshd"])); !slices.Equal(left, tt.wantLeft) {
 				t.Errorf("expected %v to stay banned, got %v", tt.wantLeft, left)
+			}
+		})
+	}
+}
+
+// TestMockClientTreatsAZeroBanTimeAsBanned pins one ban-state rule across the
+// mock: a Banned entry is banned whatever its ban time. Unban used to skip an
+// entry with a zero time and answer "already unbanned" while ban and banned-in
+// still reported the same entry as banned.
+func TestMockClientTreatsAZeroBanTimeAsBanned(t *testing.T) {
+	for _, target := range []string{"192.168.1.100", "192.168.1.0/24"} {
+		t.Run("unban "+target, func(t *testing.T) {
+			client := NewMockClient()
+			client.Banned["sshd"] = map[string]time.Time{"192.168.1.100": {}}
+
+			jails, err := client.BannedInWithContext(bg, "192.168.1.100")
+			AssertError(t, err, false, "banned-in")
+			if !slices.Equal(jails, []string{"sshd"}) {
+				t.Errorf("expected banned in [sshd], got %v", jails)
+			}
+			code, err := client.BanIPWithContext(bg, "192.168.1.100", "sshd")
+			AssertError(t, err, false, "ban")
+			if code != 1 {
+				t.Errorf("expected ban code 1 (already banned), got %d", code)
+			}
+
+			code, err = client.UnbanIPWithContext(bg, target, "sshd")
+
+			AssertError(t, err, false, "unban")
+			if code != 0 {
+				t.Errorf("expected unban code 0, got %d", code)
+			}
+			if left := slices.Sorted(maps.Keys(client.Banned["sshd"])); len(left) != 0 {
+				t.Errorf("expected nothing to stay banned, got %v", left)
 			}
 		})
 	}
