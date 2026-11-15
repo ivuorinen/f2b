@@ -30,4 +30,4 @@ jobs:
       contents: read
       issues: write # create, update and delete repository labels
     steps:
-      - uses: ivuorinen/actions/sync-labels@cd8e7a3bc4a77108893a19ec6aaf154d06b93d42 # v2026.11.13
+      - uses: ivuorinen/actions/sync-labels@95bfd957bf148f5bce9b7506f74579ecf7452a51 # v2026.11.14
