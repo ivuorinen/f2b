@@ -40,9 +40,5 @@ Custom hybrid: Layered, with Ports & Adapters at the system boundary.
 
 ## Ambiguities & Contradictions
 
-- `ServiceCmd` takes no client and executes through the process-global runner
-  (`fail2ban.RunnerCombinedOutputWithSudoContext`), bypassing the injected port every other command uses.
-- `runJailOperation` reads the package-global `cfg` although its command was built with an injected `*Config`.
-- `lazyClient.resolve` also reads the global `cfg`; that one is deliberate, so flags are parsed before the client
-  is built.
-- Test doubles live in the production `fail2ban` package (open finding `arch-08222af7`).
+- `lazyClient.resolve` reads the package-global `cfg`; that is deliberate, so flags are parsed before the client is
+  built.
