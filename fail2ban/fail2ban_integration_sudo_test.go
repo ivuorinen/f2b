@@ -187,13 +187,22 @@ func TestSudoCommandSelection(t *testing.T) {
 			description:     "non-root privileged user should use sudo for privileged commands",
 		},
 		{
-			name:            "privileged user does not use sudo for read-only commands",
+			name:            "privileged user uses sudo for status",
 			isRoot:          false,
 			hasPrivileges:   true,
 			command:         "fail2ban-client",
 			args:            []string{"status"},
-			expectedCommand: "fail2ban-client status",
-			description:     "non-root user should not use sudo for read-only commands",
+			expectedCommand: "sudo fail2ban-client status",
+			description:     "status reads the root-only server socket, so a non-root user needs sudo",
+		},
+		{
+			name:            "privileged user does not use sudo for the version flag",
+			isRoot:          false,
+			hasPrivileges:   true,
+			command:         "fail2ban-client",
+			args:            []string{"-V"},
+			expectedCommand: "fail2ban-client -V",
+			description:     "-V prints the client version without touching the server socket",
 		},
 		{
 			name:            "unprivileged user runs without sudo",
@@ -232,12 +241,13 @@ func TestSudoCommandSelection(t *testing.T) {
 			// the runner actually received the expected (possibly sudo-prefixed)
 			// command, not merely log a mismatch.
 			calls := mockRunner.GetCalls()
-			if !slices.Contains(calls, tt.expectedCommand) {
-				t.Errorf("expected command %q in runner calls, got %v", tt.expectedCommand, calls)
+			if !slices.Equal(calls, []string{tt.expectedCommand}) {
+				t.Errorf("expected only %q in runner calls, got %v", tt.expectedCommand, calls)
 			}
 
+			// Each case registers the response for its expected command.
 			if err != nil {
-				t.Logf("Command execution failed (expected in test): %v", err)
+				t.Errorf("command execution failed: %v", err)
 			}
 		})
 	}
