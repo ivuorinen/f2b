@@ -3,27 +3,27 @@ id: review-6ee53829
 auditor: review
 severity: medium
 category: conventions
-area: .github/workflows/pr-lint.yml
+area: .github/workflows/commit-messages.yml
 status: open
 found: 2026-11-11
-location: .github/workflows/pr-lint.yml:1-12
-location_sha: eae03929d896000f
+location: .github/workflows/commit-messages.yml:28-29
+location_sha: 34a5bf504b2f9178
 ---
 
-# The commit-messages check is not required and never re-runs when the PR title is edited
+# The Commit messages check is not a required status check
 
 ## Problem
 
-Ruleset 1889289 requires only "PR Lint" and "prek", so a red "Commit messages" result does not block the squash merge. The job sits in pr-lint.yml, whose pull_request trigger has no `types:`, so editing the title after the check passed triggers nothing.
+Ruleset 1889289 requires only "PR Lint" and "prek", so a failing "Commit messages" result does not block the squash merge. The job itself is in place: commit-messages.yml runs it on opened, synchronize, reopened and edited, with its own concurrency group, so editing the title re-runs it.
 
 ## Evidence
 
-`gh api repos/ivuorinen/f2b/rulesets/1889289` lists required contexts ["PR Lint","prek"]. pr-lint.yml: `on: pull_request: branches: [master, main]` (opened/synchronize/reopened only). Renaming a passed PR to "update stuff" or "Claude-Session: abc" leaves the check green; squash merge uses COMMIT_OR_PR_TITLE.
+`gh api repos/ivuorinen/f2b/rulesets/1889289` lists required contexts ["PR Lint","prek"] (checked 2026-11-15). commit-messages.yml:8-15 sets the triggers and the concurrency group. The squash merge uses COMMIT_OR_PR_TITLE.
 
 ## Impact
 
-A non-semantic or session-linked title or commit can still land on main.
+A non-semantic or session-linked title or commit can still land on main while the check reports the failure.
 
 ## Fix
 
-Move the job to its own workflow triggered on [opened, synchronize, reopened, edited] with its own concurrency group (adding `edited` to pr-lint.yml would cancel the required jobs), and add "Commit messages" to the ruleset's required checks.
+Add "Commit messages" to the ruleset's required checks once commit-messages.yml is on main. Adding it before then blocks every PR whose branch lacks the workflow, because the required context never reports.

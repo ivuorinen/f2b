@@ -23,12 +23,22 @@ func TestRemainingBanTimeComesFromTheBanDuration(t *testing.T) {
 	line := fmt.Sprintf("192.0.2.1 \t%s + 3600 = %s",
 		bannedAt.Format(constants.TimeFormat), misreadEnd.Format(constants.TimeFormat))
 
+	before := time.Now().Unix()
 	records, err := fail2ban.ParseBanRecords(line, "sshd")
+	after := time.Now().Unix()
 
 	require.NoError(t, err)
 	require.Len(t, records, 1)
-	assert.Contains(t, []string{"00:00:50:00", "00:00:49:59"}, records[0].Remaining,
-		"50 minutes of the hour-long ban are left")
+	// The parser subtracts its own clock reading, taken between before and
+	// after, from ban time + 3600, so a paused test worker moves the result
+	// only inside this interval. Read from the misread end, it would be about 0.
+	var days, hours, minutes, seconds int64
+	_, err = fmt.Sscanf(records[0].Remaining, "%d:%d:%d:%d", &days, &hours, &minutes, &seconds)
+	require.NoError(t, err, "remaining time %q", records[0].Remaining)
+	remaining := ((days*24+hours)*60+minutes)*60 + seconds
+	unban := bannedAt.Unix() + 3600
+	assert.GreaterOrEqual(t, remaining, unban-after, "about 50 minutes of the hour-long ban are left")
+	assert.LessOrEqual(t, remaining, unban-before, "about 50 minutes of the hour-long ban are left")
 }
 
 // TestBanDurationThatIsNotANumberMakesTheRecordUnreadable pins that the
