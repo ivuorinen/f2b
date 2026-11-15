@@ -84,24 +84,22 @@ func TestNewClientDefaultPathValidation(t *testing.T) {
 		t.Fatalf("unexpected error with default paths: %v", err)
 	}
 
-	// Verify defaults were applied
-	if client.LogDir != constants.DefaultLogDir {
-		t.Errorf("expected LogDir to be %s, got %s", constants.DefaultLogDir, client.LogDir)
+	// NewClient stores the validators' canonical paths, which resolve
+	// symlinked ancestors (/var and /etc on macOS), so the defaults are
+	// compared in that form rather than as the raw constants.
+	wantLogDir, err := fail2ban.ValidateClientLogPath(constants.DefaultLogDir)
+	if err != nil {
+		t.Fatalf("validate default log dir %s: %v", constants.DefaultLogDir, err)
+	}
+	if client.LogDir != wantLogDir {
+		t.Errorf("expected LogDir to be %s, got %s", wantLogDir, client.LogDir)
 	}
 
-	if client.FilterDir != constants.DefaultFilterDir {
-		// The validator resolves symlinked ancestors (e.g. /etc on macOS).
-		if resolved, err := fail2ban.ValidateClientFilterPath(constants.DefaultFilterDir); err == nil {
-			if client.FilterDir != resolved {
-				t.Errorf(
-					"expected FilterDir to be %s or %s, got %s",
-					constants.DefaultFilterDir,
-					resolved,
-					client.FilterDir,
-				)
-			}
-		} else {
-			t.Errorf("expected FilterDir to be %s, got %s", constants.DefaultFilterDir, client.FilterDir)
-		}
+	wantFilterDir, err := fail2ban.ValidateClientFilterPath(constants.DefaultFilterDir)
+	if err != nil {
+		t.Fatalf("validate default filter dir %s: %v", constants.DefaultFilterDir, err)
+	}
+	if client.FilterDir != wantFilterDir {
+		t.Errorf("expected FilterDir to be %s, got %s", wantFilterDir, client.FilterDir)
 	}
 }
