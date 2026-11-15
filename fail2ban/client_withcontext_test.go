@@ -466,6 +466,13 @@ failregex = ^.* Failed .* for .* from <HOST>
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// A non-root user with sudo, whatever user runs the tests: as root,
+			// f2b hands fail2ban-regex a private copy of the log, whose
+			// generated path the fixture keys cannot name.
+			orig := fail2ban.GetSudoChecker()
+			fail2ban.SetSudoChecker(&fail2bantest.MockSudoChecker{MockHasPrivileges: true, ExplicitPrivilegesSet: true})
+			t.Cleanup(func() { fail2ban.SetSudoChecker(orig) })
+
 			mock := fail2bantest.NewMockRunner()
 			tt.setupMock(mock)
 			t.Cleanup(fail2bantest.WithTestRunner(t, mock))
