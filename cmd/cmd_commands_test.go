@@ -15,6 +15,13 @@ import (
 func TestMain(m *testing.M) {
 	Logger.SetOutput(io.Discard)
 
+	// The log-file and lazy-client tests write under t.TempDir() with
+	// ALLOW_DEV_PATHS set, so TMPDIR must name a directory the allowlist admits.
+	if err := fail2bantest.KeepTempDirUnderDevPaths(); err != nil {
+		fmt.Fprintf(os.Stderr, "TestMain: %v\n", err)
+		os.Exit(1)
+	}
+
 	// Set up mock environment for all tests
 	_, cleanup := fail2bantest.SetupMockEnvironment(&testingT{})
 	defer cleanup()

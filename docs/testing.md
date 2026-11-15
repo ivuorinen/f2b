@@ -47,6 +47,7 @@ fail2ban/
 │   ├── mock.go                         # Thread-safe MockClient implementation
 │   ├── mock_runner.go                  # MockRunner (validates commands like OSRunner)
 │   ├── mock_sudo.go                    # MockSudoChecker
+│   ├── dev_paths_temp_dir.go           # KeepTempDirUnderDevPaths, called from TestMain
 │   └── helpers.go                      # SetupMockEnvironment* helpers, AssertError
 ├── internal/query/                     # Jail selection and log filtering shared with the doubles
 └── ...
@@ -324,6 +325,11 @@ func TestWithMocks(t *testing.T) {
     // - Security test coverage patterns
 }
 ```
+
+Tests that write logs, filters or log files under `t.TempDir()` set `ALLOW_DEV_PATHS`, which admits only `/tmp` and
+`/var/folders`. The `TestMain` of `cmd` and `fail2ban` calls `fail2bantest.KeepTempDirUnderDevPaths`, which points
+`TMPDIR` at `/tmp` when the allowlist does not admit it, so these tests run under any `TMPDIR`. A package that adds
+such tests needs the same call.
 
 ## Common Test Scenarios
 
