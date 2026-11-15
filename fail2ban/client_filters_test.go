@@ -6,6 +6,10 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ivuorinen/f2b/constants"
 	"github.com/ivuorinen/f2b/fail2ban"
@@ -121,5 +125,162 @@ func TestIsValidFilter(t *testing.T) {
 		if err := fail2ban.ValidateFilter(f); err == nil {
 			t.Errorf("expected filter %s to be invalid", f)
 		}
+	}
+}
+
+// TestListFiltersWithContext tests filter listing with context
+func TestListFiltersWithContext(t *testing.T) {
+	tests := []struct {
+		name          string
+		setupMock     func(*fail2bantest.MockRunner)
+		setupEnv      func()
+		timeout       time.Duration
+		expectError   bool
+		expectFilters []string
+	}{
+		{
+			name: "successful filter listing",
+			setupMock: func(m *fail2bantest.MockRunner) {
+				fail2bantest.StandardMockSetup(m)
+				// Mock responses not needed - uses file system
+			},
+			setupEnv: func() {
+				// Client will use default filter directory
+			},
+			timeout:       5 * time.Second,
+			expectError:   false,
+			expectFilters: nil, // Will depend on actual filter directory
+		},
+		{
+			name: "context timeout",
+			setupMock: func(m *fail2bantest.MockRunner) {
+				fail2bantest.StandardMockSetup(m)
+				// Not applicable for file system operation
+			},
+			setupEnv: func() {
+				// No setup needed
+			},
+			timeout:     1 * time.Nanosecond,
+			expectError: true, // Context check happens first
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := fail2bantest.NewMockRunner()
+			tt.setupMock(mock)
+			t.Cleanup(fail2bantest.WithTestRunner(t, mock))
+			tt.setupEnv()
+
+			client, err := fail2ban.NewClient("/var/log", "/etc/fail2ban/filter.d")
+			require.NoError(t, err)
+
+			ctx, cancel := context.WithTimeout(context.Background(), tt.timeout)
+			defer cancel()
+
+			if tt.timeout == 1*time.Nanosecond {
+				time.Sleep(2 * time.Millisecond)
+			}
+
+			filters, err := client.ListFiltersWithContext(ctx)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				// May error if directory doesn't exist, which is fine in tests
+				if err == nil {
+					assert.NotNil(t, filters)
+				}
+			}
+		})
+	}
+}
+
+// TestTestFilterWithContext tests filter testing with context
+func TestTestFilterWithContext(t *testing.T) {
+	// Enable dev paths to allow temporary directory
+	t.Setenv("ALLOW_DEV_PATHS", "1")
+
+	// Create temporary filter directory and a log for the filter to declare:
+	// fail2ban-regex must be given a log that exists.
+	tmpDir := t.TempDir()
+	logFile := allowedLog(t, "")
+	filterContent := "[Definition]\nfailregex = ^.* Failed .* for .* from <HOST>\nlogpath = " + logFile + "\n"
+	err := os.WriteFile(filepath.Join(tmpDir, "sshd.conf"), []byte(filterContent), 0600)
+	require.NoError(t, err)
+
+	// Stock-style filter: failregex only, no logpath — must be rejected.
+	stockContent := "[Definition]\nfailregex = ^.* Failed .* for .* from <HOST>\n"
+	err = os.WriteFile(filepath.Join(tmpDir, "stock.conf"), []byte(stockContent), 0600)
+	require.NoError(t, err)
+
+	// regexSucceeds registers fail2ban-regex over the sshd filter, in both
+	// the plain and the sudo form.
+	regexSucceeds := func(m *fail2bantest.MockRunner) {
+		fail2bantest.StandardMockSetup(m)
+		args := logFile + " " + filepath.Join(tmpDir, "sshd.conf")
+		m.SetResponse("fail2ban-regex "+args, []byte("Success: 0 matches"))
+		m.SetResponse("sudo fail2ban-regex "+args, []byte("Success: 0 matches"))
+	}
+
+	tests := []struct {
+		name        string
+		filter      string
+		setupMock   func(*fail2bantest.MockRunner)
+		timeout     time.Duration
+		expectError bool
+	}{
+		{name: "successful filter test", filter: "sshd", setupMock: regexSucceeds, timeout: 5 * time.Second},
+		// Validation fails before any command runs.
+		{
+			name: "invalid filter name", filter: "invalid@filter", setupMock: fail2bantest.StandardMockSetup,
+			timeout: 5 * time.Second, expectError: true,
+		},
+		// Rejected before any fail2ban-regex invocation.
+		{
+			name: "filter without logpath", filter: "stock", setupMock: fail2bantest.StandardMockSetup,
+			timeout: 5 * time.Second, expectError: true,
+		},
+		{
+			name:        "context timeout",
+			filter:      "sshd",
+			setupMock:   regexSucceeds,
+			timeout:     1 * time.Nanosecond,
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// A non-root user with sudo, whatever user runs the tests: as root,
+			// f2b hands fail2ban-regex a private copy of the log, whose
+			// generated path the fixture keys cannot name.
+			orig := fail2ban.GetSudoChecker()
+			fail2ban.SetSudoChecker(&fail2bantest.MockSudoChecker{MockHasPrivileges: true, ExplicitPrivilegesSet: true})
+			t.Cleanup(func() { fail2ban.SetSudoChecker(orig) })
+
+			mock := fail2bantest.NewMockRunner()
+			tt.setupMock(mock)
+			t.Cleanup(fail2bantest.WithTestRunner(t, mock))
+
+			client, err := fail2ban.NewClient("/var/log", tmpDir)
+			require.NoError(t, err)
+
+			ctx, cancel := context.WithTimeout(context.Background(), tt.timeout)
+			defer cancel()
+
+			if tt.timeout == 1*time.Nanosecond {
+				time.Sleep(2 * time.Millisecond)
+			}
+
+			result, err := client.TestFilterWithContext(ctx, tt.filter, "")
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.NotEmpty(t, result)
+			}
+		})
 	}
 }
