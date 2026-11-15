@@ -1,4 +1,4 @@
-package fail2ban
+package fail2ban_test
 
 import (
 	"os"
@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/ivuorinen/f2b/constants"
+	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/fail2ban/fail2bantest"
 )
 
 // TestNewClientIgnoresInstalledBinaryPath pins the argv an injected mock runner
@@ -32,10 +34,10 @@ func TestNewClientIgnoresInstalledBinaryPath(t *testing.T) {
 	}
 	t.Setenv("PATH", stubDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	_, cleanup := SetupMockEnvironmentWithStandardResponses(t)
+	_, cleanup := fail2bantest.SetupMockEnvironmentWithStandardResponses(t)
 	defer cleanup()
 
-	client, err := NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
+	client, err := fail2ban.NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
 	if err != nil {
 		t.Fatalf("client creation must not depend on a fail2ban binary being installed: %v", err)
 	}
@@ -48,10 +50,10 @@ func TestNewClient(t *testing.T) {
 	// Test normal client creation (in test environment, sudo checking is skipped)
 	t.Run("normal client creation", func(t *testing.T) {
 		// Set up mock environment with standard responses
-		_, cleanup := SetupMockEnvironmentWithStandardResponses(t)
+		_, cleanup := fail2bantest.SetupMockEnvironmentWithStandardResponses(t)
 		defer cleanup()
 
-		client, err := NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
+		client, err := fail2ban.NewClient(constants.DefaultLogDir, constants.DefaultFilterDir)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
 		}
@@ -84,13 +86,13 @@ func TestSudoRequirementsChecking(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Set up mock environment
-			_, cleanup := SetupMockEnvironmentWithSudo(t, tt.hasPrivileges)
+			_, cleanup := fail2bantest.SetupMockEnvironmentWithSudo(t, tt.hasPrivileges)
 			defer cleanup()
 
 			// Test the sudo checking function directly
-			err := CheckSudoRequirements()
+			err := fail2ban.CheckSudoRequirements()
 
-			AssertError(t, err, tt.expectError, tt.name)
+			fail2bantest.AssertError(t, err, tt.expectError, tt.name)
 			if tt.expectError {
 				if tt.errorContains != "" && err != nil && !strings.Contains(err.Error(), tt.errorContains) {
 					t.Errorf("expected error to contain %q, got %q", tt.errorContains, err.Error())

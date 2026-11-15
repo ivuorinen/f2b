@@ -101,10 +101,13 @@ func (cl *ContextualLogger) LogOperation(ctx context.Context, operation string, 
 
 	entry := cl.WithContext(ctx).WithField("duration_ms", duration.Milliseconds())
 
-	if err != nil {
-		entry.WithError(err).Error("Operation failed")
-	} else {
+	switch {
+	case err == nil:
 		entry.Info("Operation completed")
+	case !writesToStderr(cl.Output()):
+		// The caller prints the returned error once; on stderr this record
+		// would repeat it.
+		entry.WithError(err).Error("Operation failed")
 	}
 
 	return err

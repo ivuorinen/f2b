@@ -24,8 +24,33 @@ env:
   MISE_VERSION: v2026.10.25
 
 jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up mise
+        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        with:
+          version: ${{ env.MISE_VERSION }}
+          cache: false
+
+      - name: Lint (gofmt, go vet, golangci-lint)
+        run: mise run lint
+
+      - name: Run race-enabled tests
+        run: mise run test-race
+
   release:
     name: Release
+    needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

@@ -44,7 +44,8 @@ and bounded parallel processing across jails.
 - **Implementations**:
 
   - `RealClient`: Production fail2ban client with timeout handling
-  - `MockClient`: Comprehensive test double with thread-safe operations
+  - `fail2bantest.MockClient`: test double with thread-safe operations, in the
+    test-only `fail2ban/fail2bantest` package
   - `lazyClient` (cmd): defers RealClient construction until first use, so
     commands that need no client (help, version, completion) skip it
 
@@ -203,9 +204,9 @@ fail2ban/client.go
 
 ### Mock Strategy
 
-- `MockClient`: Comprehensive fail2ban operations mock with context support
-- `MockRunner`: System command execution mock with timeout handling
-- `MockSudoChecker`: Privilege checking mock with thread-safe operations
+- `fail2bantest.MockClient`: fail2ban operations mock with context support
+- `fail2bantest.MockRunner`: system command execution mock with timeout handling
+- `fail2bantest.MockSudoChecker`: privilege checking mock with thread-safe operations
 - Thread-safe implementations with configurable behavior
 - Fluent testing framework with substantial test code reduction
 - Modern mock patterns with SetupMockEnvironmentWithSudo helper
@@ -251,12 +252,11 @@ fail2ban/client.go
 - `F2B_TEST_SUDO`: Marks a test environment, so `CanUseSudo()` skips the `sudo -n true`
   probe (presence-checked: any non-empty value enables, unset disables). It does NOT
   prevent sudo: root and members of the `sudo`/`wheel`/`admin` groups still run
-  privileged commands through sudo. Tests must inject `MockSudoChecker` and `MockRunner`.
+  privileged commands through sudo. Tests must inject `fail2bantest.MockSudoChecker` and `fail2bantest.MockRunner`.
 - `F2B_TRUSTED_BIN_DIR`: One extra absolute, clean directory trusted to hold the
   sudo-executed fail2ban binaries, for non-FHS installs; unset trusts only the FHS
   directories
-- `F2B_VERBOSE_TESTS`: Force verbose logging in CI/tests (presence-checked)
-- `ALLOW_DEV_PATHS`: Allow /tmp paths, development only (presence-checked)
+- `ALLOW_DEV_PATHS`: Allow /tmp paths, development only (parsed as a boolean)
 
 ### Runtime Configuration
 

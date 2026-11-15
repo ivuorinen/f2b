@@ -169,7 +169,7 @@ ______________________________________________________________________
 
 ## Troubleshooting
 
-### I get "fail2ban-client not found in PATH" or "fail2ban service not running"
+### I get "fail2ban-client not found in PATH" or "fail2ban ping failed"
 
 - Ensure Fail2Ban is installed and running on your system.
 - You may need to run `sudo systemctl start fail2ban` or similar.

@@ -24,13 +24,11 @@ var benchmarkBanRecordOutput = strings.Join(benchmarkBanRecordData, "\n")
 
 // BenchmarkOriginalBanRecordParsing benchmarks the current implementation
 func BenchmarkOriginalBanRecordParsing(b *testing.B) {
-	parser := NewBanRecordParser()
-
 	b.ResetTimer()
 	b.ReportAllocs()
 
 	for b.Loop() {
-		_, err := parser.ParseBanRecords(benchmarkBanRecordOutput, "sshd")
+		_, err := ParseBanRecords(benchmarkBanRecordOutput, "sshd")
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -42,34 +40,16 @@ func BenchmarkBanRecordLineParsing(b *testing.B) {
 	testLine := "192.168.1.100 2025-07-20 14:30:39 + 2025-07-20 14:40:39 remaining"
 
 	b.Run("original", func(b *testing.B) {
-		parser := NewBanRecordParser()
 		b.ResetTimer()
 		b.ReportAllocs()
 
 		for i := 0; i < b.N; i++ {
-			_, err := parser.ParseBanRecordLine(testLine, "sshd")
+			_, err := parseBanRecordLine(testLine, "sshd")
 			if err != nil {
 				b.Fatal(err)
 			}
 		}
 	})
-}
-
-// BenchmarkTimeParsingOptimization measures the optimized time parser.
-func BenchmarkTimeParsingOptimization(b *testing.B) {
-	timeStr := "2025-07-20 14:30:39"
-
-	cache := NewFastTimeCache("2006-01-02 15:04:05")
-
-	b.ResetTimer()
-	b.ReportAllocs()
-
-	for b.Loop() {
-		_, err := cache.ParseTimeOptimized(timeStr)
-		if err != nil {
-			b.Fatal(err)
-		}
-	}
 }
 
 // BenchmarkLargeDataset tests with larger datasets
@@ -86,12 +66,11 @@ func BenchmarkLargeDataset(b *testing.B) {
 	largeOutput := strings.Join(largeData, "\n")
 
 	b.Run("large_dataset", func(b *testing.B) {
-		parser := NewBanRecordParser()
 		b.ResetTimer()
 		b.ReportAllocs()
 
 		for i := 0; i < b.N; i++ {
-			_, err := parser.ParseBanRecords(largeOutput, "sshd")
+			_, err := ParseBanRecords(largeOutput, "sshd")
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -113,7 +92,6 @@ func BenchmarkDurationFormatting(b *testing.B) {
 
 // BenchmarkRepeatedLineParsing measures allocations for repeated single-line parsing.
 func BenchmarkRepeatedLineParsing(b *testing.B) {
-	parser := NewBanRecordParser()
 	testLine := "192.168.1.100 2025-07-20 14:30:39 + 2025-07-20 14:40:39 remaining"
 
 	b.ResetTimer()
@@ -122,7 +100,7 @@ func BenchmarkRepeatedLineParsing(b *testing.B) {
 	for b.Loop() {
 		// This should demonstrate reduced allocations due to pooling
 		for range 10 {
-			_, err := parser.ParseBanRecordLine(testLine, "sshd")
+			_, err := parseBanRecordLine(testLine, "sshd")
 			if err != nil {
 				b.Fatal(err)
 			}

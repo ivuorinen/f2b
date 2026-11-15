@@ -87,7 +87,11 @@ func TestOpenGzipAwareReader(t *testing.T) {
 			if err != nil {
 				t.Fatalf("OpenGzipAwareReader failed: %v", err)
 			}
-			defer func() { _ = reader.Close() }()
+			defer func() {
+				if err := reader.Close(); err != nil {
+					t.Errorf("close reader: %v", err)
+				}
+			}()
 
 			content, err := io.ReadAll(reader)
 			if err != nil {
@@ -238,13 +242,17 @@ func BenchmarkGzipDetection(b *testing.B) {
 
 	b.Run("regular file", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			_, _ = isGzipFile(regularFile)
+			if _, err := isGzipFile(regularFile); err != nil {
+				b.Fatal(err)
+			}
 		}
 	})
 
 	b.Run("gzip file with extension", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			_, _ = isGzipFile(gzipFile)
+			if _, err := isGzipFile(gzipFile); err != nil {
+				b.Fatal(err)
+			}
 		}
 	})
 }

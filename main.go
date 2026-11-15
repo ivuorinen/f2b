@@ -11,6 +11,12 @@ import (
 )
 
 func main() {
+	os.Exit(run())
+}
+
+// run executes the CLI and returns its exit code, so Execute's deferred cleanup
+// finishes before the process exits and a test can observe the code.
+func run() int {
 	// Set up centralized logging - the fail2ban package logs through cmd.Logger,
 	// which implements fail2ban.LoggerEntry directly (slog-backed).
 	fail2ban.SetLogger(cmd.Logger)
@@ -38,16 +44,13 @@ func main() {
 		// signal exit code must win here too — otherwise only commands that
 		// return nil on cancellation (logs-watch) ever exited 130/143.
 		if code := cmd.SignalExitCode(); code != 0 {
-			os.Exit(code)
+			return code
 		}
-		os.Exit(1)
+		return 1
 	}
 
 	// A signal-interrupted but gracefully completed run (Ctrl-C on logs-watch)
-	// exits 130/143 so scripts can tell interruption from success. Exiting
-	// here, after Execute's deferred cleanup ran, keeps graceful shutdown
-	// (log file closed) intact.
-	if code := cmd.SignalExitCode(); code != 0 {
-		os.Exit(code)
-	}
+	// exits 130/143 so scripts can tell interruption from success; otherwise
+	// the code is 0.
+	return cmd.SignalExitCode()
 }

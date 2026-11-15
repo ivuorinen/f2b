@@ -1,4 +1,4 @@
-package fail2ban
+package fail2ban_test
 
 import (
 	"context"
@@ -6,23 +6,25 @@ import (
 	"testing"
 
 	"github.com/ivuorinen/f2b/constants"
+	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/fail2ban/fail2bantest"
 )
 
 // TestRealClientKeepsInjectedRunner pins the runner field: a client built
 // with one runner keeps using it after the process-global runner changes, so
 // tests (and callers) do not depend on SetRunner state at call time.
 func TestRealClientKeepsInjectedRunner(t *testing.T) {
-	built := NewMockRunner()
-	StandardMockSetup(built)
-	t.Cleanup(WithTestRunner(t, built))
+	built := fail2bantest.NewMockRunner()
+	fail2bantest.StandardMockSetup(built)
+	t.Cleanup(fail2bantest.WithTestRunner(t, built))
 
-	client, err := NewClient("/var/log", "/etc/fail2ban/filter.d")
+	client, err := fail2ban.NewClient("/var/log", "/etc/fail2ban/filter.d")
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
 
 	// Swap the global runner; the client must not follow it.
-	SetRunner(NewMockRunner())
+	fail2ban.SetRunner(fail2bantest.NewMockRunner())
 
 	out, err := client.StatusAllWithContext(context.Background())
 	if err != nil {
@@ -36,11 +38,11 @@ func TestRealClientKeepsInjectedRunner(t *testing.T) {
 // TestZeroValueRealClientUsesGlobalRunner pins the nil-safe fallback: a
 // RealClient literal without an injected runner reads the global runner.
 func TestZeroValueRealClientUsesGlobalRunner(t *testing.T) {
-	mock := NewMockRunner()
+	mock := fail2bantest.NewMockRunner()
 	mock.SetResponse("fail2ban-client status", []byte("global status"))
-	t.Cleanup(WithTestRunner(t, mock))
+	t.Cleanup(fail2bantest.WithTestRunner(t, mock))
 
-	client := &RealClient{Path: constants.Fail2BanClientCommand}
+	client := &fail2ban.RealClient{Path: constants.Fail2BanClientCommand}
 	out, err := client.StatusAllWithContext(context.Background())
 	if err != nil {
 		t.Fatalf("StatusAllWithContext: %v", err)
@@ -54,9 +56,9 @@ func TestZeroValueRealClientUsesGlobalRunner(t *testing.T) {
 // the constant already carries %w, and nesting it printed a literal "%w".
 func TestNewClientInvalidFilterDirMessage(t *testing.T) {
 	t.Setenv("ALLOW_DEV_PATHS", "")
-	t.Cleanup(WithTestRunner(t, NewMockRunner()))
+	t.Cleanup(fail2bantest.WithTestRunner(t, fail2bantest.NewMockRunner()))
 
-	_, err := NewClient("/var/log", "/home/not-a-filter-dir")
+	_, err := fail2ban.NewClient("/var/log", "/home/not-a-filter-dir")
 	if err == nil {
 		t.Fatal("NewClient accepted a filter directory outside the allowlist")
 	}

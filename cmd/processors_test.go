@@ -8,14 +8,15 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/fail2ban/fail2bantest"
 )
 
 // TestUnbanParallelOperation tests the multi-jail parallel unban path.
 func TestUnbanParallelOperation(t *testing.T) {
-	mockRunner := fail2ban.NewMockRunner()
-	restoreRunner := fail2ban.WithTestRunner(t, mockRunner)
+	mockRunner := fail2bantest.NewMockRunner()
+	restoreRunner := fail2bantest.WithTestRunner(t, mockRunner)
 	defer restoreRunner()
-	fail2ban.StandardMockSetup(mockRunner)
+	fail2bantest.StandardMockSetup(mockRunner)
 	mockRunner.SetResponse("fail2ban-client set sshd unbanip 192.168.1.1", []byte("1"))
 	mockRunner.SetResponse("sudo fail2ban-client set sshd unbanip 192.168.1.1", []byte("1"))
 	mockRunner.SetResponse("fail2ban-client set apache unbanip 192.168.1.1", []byte("1"))
@@ -53,7 +54,9 @@ func TestUnbanParallelOperation(t *testing.T) {
 				client,
 				tt.ip,
 				tt.jails,
-				ProcessUnbanOperationParallelWithContext,
+				func(ctx context.Context, c fail2ban.Client, ip string, jails []string) ([]OperationResult, error) {
+					return ProcessUnbanOperationParallelWithContext(ctx, c, ip, jails, nil)
+				},
 			)
 
 			if tt.expectError {

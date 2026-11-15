@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"unicode"
@@ -24,6 +25,27 @@ func ValidateIP(ip string) error {
 			return fmt.Errorf("invalid IP address format")
 		}
 		return NewInvalidIPError(ip)
+	}
+	return nil
+}
+
+// ValidateBanTarget validates what ban and unban act on: an IP address or a
+// CIDR range. fail2ban bans a range as one entry, and unbanning a range also
+// removes every banned address inside it. A range must not be /0, which bans
+// every source, and must be written as its network address: fail2ban masks
+// host bits away, so 192.168.1.23/24 would ban more than the target names.
+func ValidateBanTarget(target string) error {
+	ip, network, err := net.ParseCIDR(target)
+	if err != nil {
+		return ValidateIP(target)
+	}
+	// ParseCIDR accepted the target, so it holds no injection characters and
+	// is safe to echo back.
+	if ones, _ := network.Mask.Size(); ones == 0 {
+		return fmt.Errorf("invalid ban target %s: a /0 range covers every address", target)
+	}
+	if !ip.Equal(network.IP) {
+		return fmt.Errorf("invalid ban target %s: host bits are set, use %s", target, network)
 	}
 	return nil
 }
@@ -106,7 +128,9 @@ func ValidateFilter(filter string) error {
 
 // trustedCommandDirs are the only directories an absolute command path may
 // live in. fail2ban installs its binaries under the standard system prefixes
-// (Homebrew's /opt/homebrew/bin included for macOS).
+// (Homebrew's /opt/homebrew/bin included for macOS). /run/wrappers/bin is where
+// NixOS keeps its setuid sudo, so a store-path fail2ban named by
+// F2B_TRUSTED_BIN_DIR does not use up the one extra directory on sudo.
 var trustedCommandDirs = map[string]bool{
 	"/bin":              true,
 	"/sbin":             true,
@@ -115,6 +139,7 @@ var trustedCommandDirs = map[string]bool{
 	"/usr/local/bin":    true,
 	"/usr/local/sbin":   true,
 	"/opt/homebrew/bin": true,
+	"/run/wrappers/bin": true,
 }
 
 // isTrustedCommandDir reports whether dir may hold f2b's external binaries.
@@ -139,7 +164,6 @@ func ValidateCommand(command string) error {
 	allowedCommands := map[string]bool{
 		constants.Fail2BanClientCommand: true,
 		constants.Fail2BanRegexCommand:  true,
-		constants.Fail2BanServerCommand: true,
 		"service":                       true,
 		"systemctl":                     true,
 	}
@@ -150,22 +174,6 @@ func ValidateCommand(command string) error {
 
 	// Check for null bytes (command injection attempt)
 	if strings.ContainsRune(command, '\x00') {
-		// Don't include potentially malicious input in error message
-		return fmt.Errorf(constants.ErrInvalidCommandFormat)
-	}
-
-	// Check for dangerous patterns first (before including command in error messages)
-	dangerousPatterns := GetDangerousCommandPatterns()
-	cmdLower := strings.ToLower(command)
-	for _, pattern := range dangerousPatterns {
-		if strings.Contains(cmdLower, strings.ToLower(pattern)) {
-			// Don't include potentially dangerous command in error message
-			return fmt.Errorf(constants.ErrInvalidCommandFormat)
-		}
-	}
-
-	// Additional security checks for command injection patterns
-	if containsCommandInjectionPatterns(command) {
 		// Don't include potentially malicious input in error message
 		return fmt.Errorf(constants.ErrInvalidCommandFormat)
 	}
@@ -211,6 +219,41 @@ func resolveCommandName(command string) (string, error) {
 	return command, nil
 }
 
+// adminCommandDirs are trusted directories a non-root PATH commonly omits:
+// Debian's default user PATH has no sbin and service lives in /usr/sbin, where
+// sudo's secure_path used to find it. A variable only so a test can point it at
+// a stub.
+var adminCommandDirs = []string{"/usr/sbin", "/sbin", "/usr/local/sbin"}
+
+// resolveTrustedCommand returns the absolute path of name, which must sit in a
+// trusted directory. Every executed binary passes through here, sudo included:
+// a bare name leaves the choice to PATH, and sudo also searches the caller's
+// PATH for its command wherever sudoers sets no secure_path.
+func resolveTrustedCommand(name string) (string, error) {
+	path, err := lookPathOrAdminDirs(name)
+	if err != nil {
+		return "", fmt.Errorf("%s not found in PATH: %w", name, err)
+	}
+	if !filepath.IsAbs(path) || !isTrustedCommandDir(filepath.Dir(path)) {
+		return "", NewCommandNotAllowedError(path + " (untrusted directory)")
+	}
+	return path, nil
+}
+
+// lookPathOrAdminDirs finds name on PATH, then in adminCommandDirs.
+func lookPathOrAdminDirs(name string) (string, error) {
+	path, err := exec.LookPath(name)
+	if err == nil {
+		return path, nil
+	}
+	for _, dir := range adminCommandDirs {
+		if found, dirErr := exec.LookPath(filepath.Join(dir, name)); dirErr == nil {
+			return found, nil
+		}
+	}
+	return "", err
+}
+
 // ValidateArguments validates command arguments for security. It is the one
 // argument validator: its WithContext twin took a context it never used, so
 // the name promised cancellation that never happened.
@@ -242,7 +285,7 @@ func validateSingleArgument(arg string) error {
 
 	// For IP arguments, validate IP format
 	if isLikelyIPArgument(arg) {
-		if err := ValidateIP(arg); err != nil {
+		if err := ValidateBanTarget(arg); err != nil {
 			return fmt.Errorf("invalid IP format: %w", err)
 		}
 	}
@@ -287,8 +330,11 @@ func containsCommandInjectionPatterns(input string) bool {
 //   - IPv4: exactly four dot-separated groups of 1-3 decimal digits
 //     (so "999.1.1.1" is still IP-shaped and rejected by net.ParseIP)
 //   - IPv6: contains "::" or at least two colons
+//
+// An argument starting with "/" is a path, never an address or range, even
+// when it holds colons like a log named after a timestamp.
 func isLikelyIPArgument(arg string) bool {
-	if arg == "" {
+	if arg == "" || strings.HasPrefix(arg, "/") {
 		return false
 	}
 	// IPv6 shape: "::" or two-plus colons (jail names cannot contain colons).

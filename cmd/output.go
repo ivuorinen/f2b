@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/spf13/cobra"
 
@@ -27,22 +29,6 @@ const (
 // os.Stderr until PersistentPreRunE chooses the format, and satisfies
 // fail2ban.LoggerEntry, so the fail2ban package logs through it (wired in main).
 var Logger = fail2ban.NewSlogLogger(fail2ban.SlogText)
-
-func init() {
-	// Reduce log verbosity in CI/test environments. The logger already writes
-	// text to os.Stderr by construction.
-	configureCIFriendlyLogging()
-}
-
-// configureCIFriendlyLogging sets appropriate log levels for CI/test environments
-func configureCIFriendlyLogging() {
-	// Detect CI environments by checking common CI environment variables
-	// If in CI or test environment, reduce logging noise unless explicitly overridden
-	if (fail2ban.IsCI() || fail2ban.IsTestEnvironment()) &&
-		os.Getenv("F2B_LOG_LEVEL") == "" && os.Getenv("F2B_VERBOSE_TESTS") == "" {
-		Logger.SetLevel(slog.LevelError)
-	}
-}
 
 // PrintOutput prints data to stdout in the specified format (PlainFormat or JSONFormat).
 func PrintOutput(data any, format string) error {
@@ -69,6 +55,30 @@ func PrintOutputTo(w io.Writer, data any, format string) error {
 	return nil
 }
 
+// escapeControlChars replaces every control character in s except tab and
+// newline (C0, DEL and C1) with a visible \xHH escape, for plain output of
+// log-derived text: a log line could otherwise retitle the terminal, move the
+// cursor or hide lines. A byte that is not valid UTF-8 is judged on its own, so
+// a raw 8-bit C1 byte, which 8-bit terminals act on, is escaped too. JSON
+// output needs none of this: the encoder escapes control characters.
+func escapeControlChars(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		r, size := utf8.DecodeRuneInString(s[i:])
+		if r == utf8.RuneError && size == 1 {
+			r = rune(s[i])
+		}
+		if unicode.IsControl(r) && r != '\t' && r != '\n' {
+			fmt.Fprintf(&b, `\x%02x`, r)
+		} else {
+			b.WriteString(s[i : i+size])
+		}
+		i += size
+	}
+	return b.String()
+}
+
 // printedError marks an error that was already reported to the user via
 // PrintError, so main doesn't print it a second time. Unwrap keeps
 // errors.Is/errors.As working on the underlying error.
@@ -84,26 +94,36 @@ func IsPrinted(err error) bool {
 	return errors.As(err, &p)
 }
 
+// writesToStderr reports whether the log output w is os.Stderr. A record of a
+// failure whose error is returned would there repeat the Error: line printed
+// for it, so such records are written only to another sink (a --log-file).
+func writesToStderr(w io.Writer) bool {
+	return w == io.Writer(os.Stderr)
+}
+
 // PrintError logs and prints an error to stderr with enhanced context if available.
 func PrintError(err error) {
 	if err == nil {
 		return
 	}
 
-	// Check if error provides enhanced context
-	if contextErr, ok := errors.AsType[*fail2ban.ContextualError](err); ok {
-		Logger.WithFields(map[string]any{
-			"error":    err.Error(),
-			"category": string(contextErr.GetCategory()),
-		}).Error(constants.MsgCommandFailed)
+	contextErr, hasContext := errors.AsType[*fail2ban.ContextualError](err)
 
-		fmt.Fprintln(os.Stderr, constants.ErrorPrefix, err)
+	// With logs on stderr the record would only repeat the Error: line below;
+	// with a --log-file it is the copy that outlives the run.
+	if !writesToStderr(Logger.Output()) {
+		entry := Logger.WithError(err)
+		if hasContext {
+			entry = entry.WithField("category", string(contextErr.GetCategory()))
+		}
+		entry.Error(constants.MsgCommandFailed)
+	}
+
+	fmt.Fprintln(os.Stderr, constants.ErrorPrefix, err)
+	if hasContext {
 		if remediation := contextErr.GetRemediation(); remediation != "" {
 			fmt.Fprintln(os.Stderr, "Hint:", remediation)
 		}
-	} else {
-		Logger.WithError(err).Error(constants.MsgCommandFailed)
-		fmt.Fprintln(os.Stderr, constants.ErrorPrefix, err)
 	}
 }
 

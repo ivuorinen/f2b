@@ -7,8 +7,8 @@ working on this project.
 
 ## Quick Reference
 
-- **Security**: Never execute real sudo commands in tests, always use MockRunner
-- **Testing**: Mock all system interactions with `MockRunner`/`MockSudoChecker`
+- **Security**: Never execute real sudo commands in tests, always use `fail2bantest.MockRunner`
+- **Testing**: Mock all system interactions with `fail2bantest.MockRunner`/`fail2bantest.MockSudoChecker`
   (`F2B_TEST_SUDO` only skips the sudo probe; it does not mock sudo)
 - **Format/Lint**: Run `prek run --all-files` (see AGENTS.md) before suggesting changes
 - **Commits**: Use semantic commit format: `type(scope): message`

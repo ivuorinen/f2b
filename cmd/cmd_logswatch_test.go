@@ -408,7 +408,7 @@ func (m *MockLogsWatchClient) ListFiltersWithContext(_ context.Context) ([]strin
 	return []string{"sshd"}, nil
 }
 
-func (m *MockLogsWatchClient) TestFilterWithContext(_ context.Context, _ string) (string, error) {
+func (m *MockLogsWatchClient) TestFilterWithContext(_ context.Context, _, _ string) (string, error) {
 	return "mock filter test result", nil
 }
 

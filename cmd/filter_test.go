@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"testing"
 	"time"
 
@@ -9,14 +10,40 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/fail2ban/fail2bantest"
 )
+
+// filterArgsClient records what the command asked the client to test.
+type filterArgsClient struct {
+	fail2ban.Client
+	filter, logFile string
+}
+
+func (c *filterArgsClient) TestFilterWithContext(_ context.Context, filter, logFile string) (string, error) {
+	c.filter, c.logFile = filter, logFile
+	return "ok", nil
+}
+
+// TestTestFilterCmdForwardsLogFile pins the optional second argument: stock
+// filters declare no logpath, so this is the only way to test one.
+func TestTestFilterCmdForwardsLogFile(t *testing.T) {
+	client := &filterArgsClient{}
+	cmd := TestFilterCmd(client, &Config{Format: PlainFormat, FileTimeout: time.Second})
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetArgs([]string{"sshd", "/var/log/auth.log"})
+
+	require.NoError(t, cmd.ExecuteContext(context.Background()))
+
+	assert.Equal(t, "sshd", client.filter)
+	assert.Equal(t, "/var/log/auth.log", client.logFile)
+}
 
 // TestTestFilterCmdCreation tests TestFilterCmd command creation
 func TestTestFilterCmdCreation(t *testing.T) {
-	mockRunner := fail2ban.NewMockRunner()
-	restoreRunner := fail2ban.WithTestRunner(t, mockRunner)
+	mockRunner := fail2bantest.NewMockRunner()
+	restoreRunner := fail2bantest.WithTestRunner(t, mockRunner)
 	defer restoreRunner()
-	fail2ban.StandardMockSetup(mockRunner)
+	fail2bantest.StandardMockSetup(mockRunner)
 
 	client, err := fail2ban.NewClient("/var/log/fail2ban", "/etc/fail2ban/filter.d")
 	require.NoError(t, err)
@@ -30,7 +57,7 @@ func TestTestFilterCmdCreation(t *testing.T) {
 
 	// Verify command structure
 	assert.NotNil(t, cmd)
-	assert.Equal(t, "test-filter <filter>", cmd.Use)
+	assert.Equal(t, "test-filter <filter> [logfile]", cmd.Use)
 	assert.NotEmpty(t, cmd.Short)
 	assert.NotNil(t, cmd.RunE)
 }
@@ -39,14 +66,14 @@ func TestTestFilterCmdCreation(t *testing.T) {
 func TestTestFilterCmdExecution(t *testing.T) {
 	tests := []struct {
 		name        string
-		setup       func(*fail2ban.MockClient)
+		setup       func(*fail2bantest.MockClient)
 		args        []string
 		expectError bool
 		wantOutput  string
 	}{
 		{
 			name: "successful filter test",
-			setup: func(m *fail2ban.MockClient) {
+			setup: func(m *fail2bantest.MockClient) {
 				m.SetFilterTest("sshd", "Filter sshd: 3 matches in /var/log/auth.log")
 			},
 			args:        []string{"sshd"},
@@ -55,13 +82,13 @@ func TestTestFilterCmdExecution(t *testing.T) {
 		},
 		{
 			name:        "no filter provided - lists available",
-			setup:       func(_ *fail2ban.MockClient) {},
+			setup:       func(_ *fail2bantest.MockClient) {},
 			args:        []string{},
 			expectError: true, // Should error saying filter required
 		},
 		{
 			name:        "invalid filter name (path traversal)",
-			setup:       func(_ *fail2ban.MockClient) {},
+			setup:       func(_ *fail2bantest.MockClient) {},
 			args:        []string{"../../../etc/passwd"},
 			expectError: true,
 		},
@@ -72,7 +99,7 @@ func TestTestFilterCmdExecution(t *testing.T) {
 			// A MockClient makes the success path deterministic: its
 			// TestFilterWithContext returns the configured output, so the
 			// happy path can assert real output without a filesystem fixture.
-			client := fail2ban.NewMockClient()
+			client := fail2bantest.NewMockClient()
 			tt.setup(client)
 
 			config := &Config{

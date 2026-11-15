@@ -3,7 +3,7 @@ package cmd
 import (
 	"testing"
 
-	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/fail2ban/fail2bantest"
 )
 
 // TestCommandTestFrameworkCoverage tests the uncovered functions in the test framework
@@ -138,7 +138,7 @@ func TestCommandTestBuilder_WithSetup(t *testing.T) {
 	setupCalled := false
 	builder := NewCommandTest(t, "version")
 
-	builder.WithSetup(func(mockClient *fail2ban.MockClient) {
+	builder.WithSetup(func(mockClient *fail2bantest.MockClient) {
 		setupCalled = true
 		// Verify we received a mock client
 		if mockClient == nil {

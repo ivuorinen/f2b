@@ -18,14 +18,10 @@ func TestGetLogLinesErrorHandling(t *testing.T) {
 		// Set log directory to non-existent path
 		SetLogDir("/nonexistent/path/that/should/not/exist")
 
-		lines, err := readLogs(context.Background(), "sshd", "")
-		if err != nil {
-			t.Errorf("a missing log directory has no files to fail on, got: %v", err)
-		}
-
-		// Should return empty slice for missing directory, not error
-		if len(lines) != 0 {
-			t.Errorf("Expected empty lines for non-existent directory, got %d lines", len(lines))
+		// A wrong --log-dir must not look like a healthy log with no matches.
+		_, err := readLogs(context.Background(), "sshd", "")
+		if err == nil || !strings.Contains(err.Error(), "/nonexistent/path/that/should/not/exist") {
+			t.Errorf("missing log directory must be an error naming it, got: %v", err)
 		}
 	})
 
@@ -37,13 +33,10 @@ func TestGetLogLinesErrorHandling(t *testing.T) {
 
 		SetLogDir(tempDir)
 
-		lines, err := readLogs(context.Background(), "sshd", "192.168.1.100")
-		if err != nil {
-			t.Errorf("Should not error on empty directory, got: %v", err)
-		}
-
-		if len(lines) != 0 {
-			t.Errorf("Expected no lines from empty directory, got %d", len(lines))
+		// fail2ban logging to the journal leaves no fail2ban.log to read.
+		_, err := readLogs(context.Background(), "sshd", "192.168.1.100")
+		if err == nil || !strings.Contains(err.Error(), tempDir) {
+			t.Errorf("directory without a fail2ban log must be an error naming it, got: %v", err)
 		}
 	})
 

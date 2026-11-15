@@ -11,7 +11,7 @@ const (
 	ErrFilterNotFound    = "filter %s not found. Check the filter directory (filter.d) for available filters"
 	ErrIPRequired        = "IP address required. Usage: f2b <command> <ip-address> [jail]"
 	ErrJailRequired      = "jail name required. Use 'f2b status' to list available jails"
-	ErrFilterRequired    = "filter name required. Usage: f2b test-filter <filter>"
+	ErrFilterRequired    = "filter name required. Usage: f2b test-filter <filter> [logfile]"
 	ErrInvalidCommand    = "invalid command: %s. Use 'f2b --help' to see available commands"
 	ErrCommandNotAllowed = "command not allowed: %s. This command contains potentially dangerous characters"
 	ErrInvalidArgument   = "invalid argument: %s. Check command usage with 'f2b <command> --help'"

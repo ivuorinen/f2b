@@ -13,7 +13,13 @@ func TestParallelOperations_IndexValidation(t *testing.T) {
 	jails := []string{"sshd", "apache"} // Use default jails from mock
 
 	// This should not panic even if there were negative indices
-	results, err := ProcessBanOperationParallelWithContext(context.Background(), mockClient, "192.168.1.100", jails)
+	results, err := ProcessBanOperationParallelWithContext(
+		context.Background(),
+		mockClient,
+		"192.168.1.100",
+		jails,
+		nil,
+	)
 
 	if err != nil {
 		t.Fatalf("ProcessBanOperationParallel failed: %v", err)
@@ -45,7 +51,13 @@ func TestParallelOperations_UnbanIndexValidation(t *testing.T) {
 	jails := []string{"sshd", "apache"}
 
 	// This should not panic even if there were negative indices
-	results, err := ProcessUnbanOperationParallelWithContext(context.Background(), mockClient, "192.168.1.100", jails)
+	results, err := ProcessUnbanOperationParallelWithContext(
+		context.Background(),
+		mockClient,
+		"192.168.1.100",
+		jails,
+		nil,
+	)
 
 	if err != nil {
 		t.Fatalf("ProcessUnbanOperationParallel failed: %v", err)
@@ -75,6 +87,7 @@ func TestParallelOperations_EmptyJailsList(t *testing.T) {
 		mockClient,
 		"192.168.1.100",
 		[]string{},
+		nil,
 	)
 
 	if err != nil {
@@ -93,7 +106,13 @@ func TestParallelOperations_ErrorHandling(t *testing.T) {
 	// Use non-existent jail to trigger error
 	jails := []string{"nonexistent1", "nonexistent2"}
 
-	results, err := ProcessBanOperationParallelWithContext(context.Background(), mockClient, "192.168.1.100", jails)
+	results, err := ProcessBanOperationParallelWithContext(
+		context.Background(),
+		mockClient,
+		"192.168.1.100",
+		jails,
+		nil,
+	)
 
 	// Errors should now be returned (aggregated)
 	if err == nil {
@@ -129,7 +148,7 @@ func TestParallelOperations_ConcurrentSafety(t *testing.T) {
 
 	for _, ip := range ips {
 		go func(testIP string) {
-			results, err := ProcessBanOperationParallelWithContext(context.Background(), mockClient, testIP, jails)
+			results, err := ProcessBanOperationParallelWithContext(context.Background(), mockClient, testIP, jails, nil)
 			if err != nil {
 				errChan <- err
 				return

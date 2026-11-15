@@ -7,7 +7,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"net"
 	"strings"
 
 	"github.com/ivuorinen/f2b/constants"
@@ -47,12 +46,11 @@ func WithJail(ctx context.Context, jail string) context.Context {
 	return context.WithValue(ctx, constants.ContextKeyJail, jail)
 }
 
-// WithIP adds a validated IP address to the context
+// WithIP adds a validated IP address or CIDR range to the context
 func WithIP(ctx context.Context, ip string) context.Context {
 	ip = strings.TrimSpace(ip)
 
-	// Validate IP before storing
-	if net.ParseIP(ip) == nil {
+	if ValidateBanTarget(ip) != nil {
 		getLogger().WithField("ip", ip).Warn("Invalid IP not stored in context")
 		return ctx
 	}

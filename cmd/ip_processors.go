@@ -17,10 +17,10 @@ type multiJailOperationFunc func(
 	jails []string,
 ) ([]OperationResult, error)
 
-// validateIPAndJails validates an IP address and a list of jail names,
-// returning an error if any validation fails.
+// validateIPAndJails validates an IP address or CIDR range and a list of jail
+// names, returning an error if any validation fails.
 func validateIPAndJails(ip string, jails []string) error {
-	if err := fail2ban.ValidateIP(ip); err != nil {
+	if err := fail2ban.ValidateBanTarget(ip); err != nil {
 		return err
 	}
 	for _, jail := range jails {

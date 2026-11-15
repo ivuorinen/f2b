@@ -3,7 +3,7 @@ package cmd
 import (
 	"testing"
 
-	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/fail2ban/fail2bantest"
 )
 
 // TestStatusCommandRefactored demonstrates comprehensive status command testing with the modern framework
@@ -64,7 +64,7 @@ func assertStatusRefactoredCase(t *testing.T, args, jails []string, statusAll st
 	t.Helper()
 	builder := NewCommandTest(t, "status").
 		WithArgs(args...).
-		WithSetup(func(mock *fail2ban.MockClient) {
+		WithSetup(func(mock *fail2bantest.MockClient) {
 			setMockJails(mock, jails)
 			if statusAll != "" {
 				mock.StatusAllData = statusAll
@@ -100,7 +100,7 @@ func TestStatusCommandFrameworkAdvanced(t *testing.T) {
 		WithArgs("sshd").
 		WithJSONFormat().
 		WithEnvironment(env).
-		WithSetup(func(mock *fail2ban.MockClient) {
+		WithSetup(func(mock *fail2bantest.MockClient) {
 			setMockJails(mock, []string{"sshd", "apache"})
 			mock.StatusJailData = map[string]string{
 				"sshd": "Status for sshd jail",
@@ -114,7 +114,7 @@ func TestStatusCommandFrameworkAdvanced(t *testing.T) {
 	// Chained assertions example
 	result := NewCommandTest(t, "status").
 		WithArgs("all").
-		WithSetup(func(mock *fail2ban.MockClient) {
+		WithSetup(func(mock *fail2bantest.MockClient) {
 			setMockJails(mock, []string{"sshd", "apache", "nginx"})
 			mock.StatusAllData = "All jails status summary"
 		}).

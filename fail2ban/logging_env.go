@@ -41,21 +41,6 @@ func getLogger() LoggerEntry {
 	return box.l
 }
 
-// IsCI detects if we're running in a CI environment
-func IsCI() bool {
-	ciEnvVars := []string{
-		"CI", "GITHUB_ACTIONS", "TRAVIS", "CIRCLECI", "JENKINS_URL",
-		"BUILDKITE", "TF_BUILD", "GITLAB_CI",
-	}
-
-	for _, envVar := range ciEnvVars {
-		if os.Getenv(envVar) != "" {
-			return true
-		}
-	}
-	return false
-}
-
 // IsTestEnvironment detects if we're running in a test environment.
 //
 // It must NOT match on os.Args content: the previous substring scan for

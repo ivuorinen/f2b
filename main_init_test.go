@@ -5,12 +5,12 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/fail2ban/fail2bantest"
 )
 
 func TestMain(m *testing.M) {
 	// Set up mock environment for all tests
-	_, cleanup := fail2ban.SetupMockEnvironment(&testingT{})
+	_, cleanup := fail2bantest.SetupMockEnvironment(&testingT{})
 	defer cleanup()
 
 	// Run tests
@@ -19,8 +19,10 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// testingT implements TestingInterface for TestMain
-type testingT struct{}
+// testingT stands in for testing.TB in TestMain, which has no *testing.T. The
+// setup helper calls only the methods defined below; the embedded nil
+// testing.TB supplies the interface's unexported method.
+type testingT struct{ testing.TB }
 
 func (t *testingT) Helper() {}
 func (t *testingT) Fatalf(format string, args ...any) {

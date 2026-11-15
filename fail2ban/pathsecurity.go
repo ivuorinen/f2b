@@ -5,17 +5,19 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/ivuorinen/f2b/constants"
 )
 
-// PathSecurityConfig holds configuration for path security validation
+// PathSecurityConfig holds configuration for path security validation.
+// Symlinks are always resolved before the base check: a path is judged by
+// where it leads.
 type PathSecurityConfig struct {
 	AllowedBasePaths []string // List of allowed base directories
 	MaxPathLength    int      // Maximum allowed path length (0 = unlimited)
 	AllowSymlinks    bool     // Whether to allow symlinks
-	ResolveSymlinks  bool     // Whether to resolve symlinks before validation
 }
 
 // GetLogAllowedPaths returns allowed paths for log directories.
@@ -39,9 +41,11 @@ func GetFilterAllowedPaths() []string {
 	return expandAllowedPaths(paths)
 }
 
-// appendDevPathsIfAllowed adds development paths if ALLOW_DEV_PATHS is set
+// appendDevPathsIfAllowed adds development paths when ALLOW_DEV_PATHS is true.
+// It is parsed as a boolean because it widens what root may be made to read: a
+// presence check turned ALLOW_DEV_PATHS=0 into an enable.
 func appendDevPathsIfAllowed(paths []string) []string {
-	if os.Getenv("ALLOW_DEV_PATHS") != "" {
+	if allowed, err := strconv.ParseBool(os.Getenv("ALLOW_DEV_PATHS")); err == nil && allowed {
 		return append(paths, "/tmp", "/var/folders") // macOS temp dirs
 	}
 	return paths
@@ -59,7 +63,7 @@ func expandAllowedPaths(paths []string) []string {
 			expanded = append(expanded, p)
 			seen[p] = struct{}{}
 		}
-		if resolved, err := resolveAncestorSymlinks(p, true); err == nil && resolved != "" && resolved != p {
+		if resolved, err := resolveAncestorSymlinks(p); err == nil && resolved != "" && resolved != p {
 			if _, ok := seen[resolved]; !ok {
 				expanded = append(expanded, resolved)
 				seen[resolved] = struct{}{}
@@ -75,7 +79,6 @@ func CreateLogPathConfig() PathSecurityConfig {
 		AllowedBasePaths: GetLogAllowedPaths(),
 		MaxPathLength:    4096,
 		AllowSymlinks:    true,
-		ResolveSymlinks:  true,
 	}
 }
 
@@ -85,17 +88,15 @@ func CreateFilterPathConfig() PathSecurityConfig {
 		AllowedBasePaths: GetFilterAllowedPaths(),
 		MaxPathLength:    4096,
 		AllowSymlinks:    true,
-		ResolveSymlinks:  true,
 	}
 }
 
 // CreateSingleDirPathConfig creates a path config for a single directory (like log file validation)
 func CreateSingleDirPathConfig(baseDir string) PathSecurityConfig {
 	return PathSecurityConfig{
-		AllowedBasePaths: []string{baseDir},
+		AllowedBasePaths: expandAllowedPaths([]string{baseDir}),
 		MaxPathLength:    4096,
 		AllowSymlinks:    false,
-		ResolveSymlinks:  true,
 	}
 }
 
@@ -190,7 +191,6 @@ func hasPathTraversal(path string) bool {
 		"%2e%2e", // URL encoded ..
 		"%2f",    // URL encoded /
 		"%5c",    // URL encoded \
-		"..",     // Unicode ..
 		"․․",     // Unicode bullet points (can look like ..)
 		"．．",     // Full-width Unicode ..
 	}
@@ -209,10 +209,8 @@ func hasPathTraversal(path string) bool {
 func normalizeUnicode(path string) string {
 	// Replace various Unicode representations of dots and slashes
 	replacements := map[string]string{
-		".": ".",  // Unicode dot
 		"․": ".",  // Unicode bullet (one dot leader)
 		"．": ".",  // Full-width dot
-		"/": "/",  // Unicode slash
 		"⁄": "/",  // Unicode fraction slash
 		"／": "/",  // Full-width slash
 		"＼": "\\", // Full-width backslash
@@ -226,68 +224,72 @@ func normalizeUnicode(path string) string {
 	return result
 }
 
-// handleSymlinks resolves or validates symlinks according to configuration
+// handleSymlinks returns path with every symlink resolved, so the base check
+// that follows sees where the path really leads. Inspecting only the leaf let
+// <base>/link/secret pass while link pointed outside the base.
 func handleSymlinks(path string, config PathSecurityConfig) (string, error) {
-	// Check if the path is a symlink
 	if info, err := os.Lstat(path); err == nil {
-		if info.Mode()&os.ModeSymlink != 0 {
-			if !config.AllowSymlinks {
-				return "", fmt.Errorf("symlinks not allowed: %s", path)
-			}
-
-			if config.ResolveSymlinks {
-				resolved, err := filepath.EvalSymlinks(path)
-				if err != nil {
-					return "", fmt.Errorf(constants.ErrFailedToResolveSymlink, err)
-				}
-				return resolved, nil
-			}
+		if info.Mode()&os.ModeSymlink != 0 && !config.AllowSymlinks {
+			return "", fmt.Errorf("symlinks not allowed: %s", path)
 		}
 	} else if !os.IsNotExist(err) {
 		return "", fmt.Errorf("failed to check file info: %w", err)
 	}
 
-	// If leaf doesn't exist, resolve symlinks in the deepest existing ancestor
-	if config.ResolveSymlinks {
-		return resolveAncestorSymlinks(path, config.AllowSymlinks)
+	resolved, err := resolveAncestorSymlinks(path)
+	if err != nil {
+		return "", err
 	}
-	return path, nil
+	if !config.AllowSymlinks && resolved != path && !differsOnlyInBase(path, resolved, config.AllowedBasePaths) {
+		return "", fmt.Errorf("symlinks not allowed in path: %s", path)
+	}
+	return resolved, nil
 }
 
-// resolveAncestorSymlinks resolves symlinks in existing ancestor directories
-func resolveAncestorSymlinks(path string, allowSymlinks bool) (string, error) {
-	dir := path
+// differsOnlyInBase reports whether path and resolved name the same location
+// relative to one of bases, meaning the only symlink sits at or above the base.
+// A symlink there is the host's layout (/var on macOS), not an escape.
+func differsOnlyInBase(path, resolved string, bases []string) bool {
+	for _, base := range bases {
+		rel, err := filepath.Rel(base, path)
+		if err != nil || !filepath.IsLocal(rel) {
+			continue
+		}
+		realBase, err := resolveAncestorSymlinks(base)
+		if err == nil && filepath.Join(realBase, rel) == resolved {
+			return true
+		}
+	}
+	return false
+}
+
+// resolveAncestorSymlinks resolves every symlink in the deepest existing prefix
+// of path and re-appends the components that do not exist yet, such as a log
+// file about to be created.
+func resolveAncestorSymlinks(path string) (string, error) {
+	existing := path
 	var tail []string
 	for {
-		d := filepath.Dir(dir)
-		if d == dir {
+		if _, err := os.Lstat(existing); err == nil {
 			break
 		}
-		if _, err := os.Lstat(dir); err == nil {
-			break
+		parent := filepath.Dir(existing)
+		if parent == existing {
+			return path, nil
 		}
-		tail = append([]string{filepath.Base(dir)}, tail...)
-		dir = d
+		tail = append([]string{filepath.Base(existing)}, tail...)
+		existing = parent
 	}
-	if fi, err := os.Lstat(dir); err == nil && fi.Mode()&os.ModeSymlink != 0 {
-		if !allowSymlinks {
-			return "", fmt.Errorf("symlinks not allowed in path: %s", dir)
-		}
-		resolved, err := filepath.EvalSymlinks(dir)
-		if err != nil {
-			return "", fmt.Errorf(constants.ErrFailedToResolveSymlink, err)
-		}
-		return filepath.Join(append([]string{resolved}, tail...)...), nil
+	resolved, err := filepath.EvalSymlinks(existing)
+	if err != nil {
+		return "", fmt.Errorf(constants.ErrFailedToResolveSymlink, err)
 	}
-	return path, nil
+	return filepath.Join(append([]string{resolved}, tail...)...), nil
 }
 
-// validateBasePath ensures the path is within allowed base directories
+// validateBasePath ensures the path is within allowed base directories. An
+// empty list allows nothing.
 func validateBasePath(path string, allowedBasePaths []string) error {
-	if len(allowedBasePaths) == 0 {
-		return nil // No restrictions if no base paths configured
-	}
-
 	for _, basePath := range allowedBasePaths {
 		cleanBasePath, err := filepath.Abs(filepath.Clean(basePath))
 		if err != nil {
@@ -303,7 +305,8 @@ func validateBasePath(path string, allowedBasePaths []string) error {
 	return fmt.Errorf("path outside allowed directories: %s", path)
 }
 
-// validateFileType checks for dangerous file types (devices, named pipes, etc.)
+// validateFileType refuses anything but regular files and directories: opening
+// a device, named pipe or socket can block or have side effects.
 func validateFileType(path string) error {
 	// Check if file exists
 	info, err := os.Stat(path)
@@ -314,26 +317,8 @@ func validateFileType(path string) error {
 		return fmt.Errorf("failed to stat file: %w", err)
 	}
 
-	mode := info.Mode()
-
-	// Block device files
-	if mode&os.ModeDevice != 0 {
-		return fmt.Errorf("device files not allowed: %s", path)
-	}
-
-	// Block named pipes (FIFOs)
-	if mode&os.ModeNamedPipe != 0 {
-		return fmt.Errorf("named pipes not allowed: %s", path)
-	}
-
-	// Block socket files
-	if mode&os.ModeSocket != 0 {
-		return fmt.Errorf("socket files not allowed: %s", path)
-	}
-
-	// Block irregular files (anything that's not a regular file or directory)
-	if !mode.IsRegular() && !mode.IsDir() {
-		return fmt.Errorf("irregular file type not allowed: %s", path)
+	if mode := info.Mode(); !mode.IsRegular() && !mode.IsDir() {
+		return fmt.Errorf("only regular files and directories are allowed: %s", path)
 	}
 
 	return nil

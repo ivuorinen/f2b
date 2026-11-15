@@ -43,7 +43,9 @@ func BenchmarkGetBanRecordsParallel(b *testing.B) {
 
 	b.ResetTimer()
 	for b.Loop() {
-		_, _ = ProcessJailsParallel(ctx, jails, workFunc)
+		if _, err := ProcessJailsParallel(ctx, jails, workFunc); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -58,13 +60,17 @@ func BenchmarkSingleJailOperation(b *testing.B) {
 
 	b.Run("sequential", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			_, _ = workFunc(ctx, jail)
+			if _, err := workFunc(ctx, jail); err != nil {
+				b.Fatal(err)
+			}
 		}
 	})
 
 	b.Run("parallel", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			_, _ = ProcessJailsParallel(ctx, []string{jail}, workFunc)
+			if _, err := ProcessJailsParallel(ctx, []string{jail}, workFunc); err != nil {
+				b.Fatal(err)
+			}
 		}
 	})
 }

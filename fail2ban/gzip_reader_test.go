@@ -62,7 +62,9 @@ func testOpenGzipAwareReaderNonexistent(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error for non-existent file")
 		if reader != nil {
-			_ = reader.Close()
+			if err := reader.Close(); err != nil {
+				t.Errorf("close reader: %v", err)
+			}
 		}
 	}
 	if reader != nil {
@@ -180,7 +182,11 @@ func testGzipReaderPlainFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Should not error on plain file: %v", err)
 	}
-	defer func() { _ = reader.Close() }()
+	defer func() {
+		if err := reader.Close(); err != nil {
+			t.Errorf("close reader: %v", err)
+		}
+	}()
 
 	data, err := io.ReadAll(reader)
 	if err != nil {
@@ -207,14 +213,23 @@ func testGzipReaderGzipFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to write to gzip file: %v", err)
 	}
-	_ = gzWriter.Close()
-	_ = f.Close()
+	// A failed close here would leave a truncated fixture behind.
+	if err := gzWriter.Close(); err != nil {
+		t.Fatalf("Failed to close gzip writer: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("Failed to close gzip file: %v", err)
+	}
 
 	reader, err := openGzipAwareReader(gzFile)
 	if err != nil {
 		t.Fatalf("Should not error on gzip file: %v", err)
 	}
-	defer func() { _ = reader.Close() }()
+	defer func() {
+		if err := reader.Close(); err != nil {
+			t.Errorf("close reader: %v", err)
+		}
+	}()
 
 	data, err := io.ReadAll(reader)
 	if err != nil {

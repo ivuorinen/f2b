@@ -13,7 +13,7 @@ import (
 
 // StatusCmd returns the status command with injected client and config
 func StatusCmd(client fail2ban.Client, config *Config) *cobra.Command {
-	return NewCommand(
+	return withArgs(cobra.MaximumNArgs(1), NewCommand(
 		"status [all|<jail>]",
 		"Show status of all jails or a specific jail",
 		[]string{"st", "stat", "show-status"},
@@ -54,7 +54,7 @@ func StatusCmd(client fail2ban.Client, config *Config) *cobra.Command {
 			}
 
 			return PrintOutputTo(GetCmdOutput(cmd), FormatStatusResult(target, out), config.Format)
-		})
+		}))
 }
 
 // printStatusUsage prints the status command usage help, listing the currently

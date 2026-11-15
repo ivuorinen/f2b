@@ -10,23 +10,26 @@ import (
 func TestIPCmd(client interface {
 	BannedInWithContext(context.Context, string) ([]string, error)
 }, config *Config) *cobra.Command {
-	return NewCommand("test <ip>", "Test if an IP is banned", nil, func(cmd *cobra.Command, args []string) error {
-		// Create timeout context for testing IP
-		ctx, cancel := createTimeoutContext(cmd.Context(), config)
-		defer cancel()
+	return withArgs(
+		cobra.MaximumNArgs(1),
+		NewCommand("test <ip>", "Test if an IP is banned", nil, func(cmd *cobra.Command, args []string) error {
+			// Create timeout context for testing IP
+			ctx, cancel := createTimeoutContext(cmd.Context(), config)
+			defer cancel()
 
-		// Validate IP argument
-		ip, err := ValidateIPArgument(args)
-		if err != nil {
-			return HandleValidationError(err)
-		}
+			// Validate IP argument
+			ip, err := ValidateIPArgument(args)
+			if err != nil {
+				return HandleValidationError(err)
+			}
 
-		jails, err := client.BannedInWithContext(ctx, ip)
-		if err != nil {
-			return HandleClientError(err)
-		}
+			jails, err := client.BannedInWithContext(ctx, ip)
+			if err != nil {
+				return HandleClientError(err)
+			}
 
-		result := FormatBannedResult(ip, jails)
-		return PrintOutputTo(GetCmdOutput(cmd), result, config.Format)
-	})
+			result := FormatBannedResult(ip, jails)
+			return PrintOutputTo(GetCmdOutput(cmd), result, config.Format)
+		}),
+	)
 }

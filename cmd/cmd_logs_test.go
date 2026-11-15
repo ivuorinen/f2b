@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/ivuorinen/f2b/constants"
-	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/fail2ban/fail2bantest"
 )
 
 // TestLogsCommand pins plain output to one log line per output line. It used
@@ -54,7 +54,7 @@ func TestLogsCommand(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			NewCommandTest(t, "logs").
 				WithArgs(tt.args...).
-				WithSetup(func(mock *fail2ban.MockClient) {
+				WithSetup(func(mock *fail2bantest.MockClient) {
 					mock.LogLines = tt.logLines
 				}).
 				ExpectSuccess().
@@ -70,7 +70,7 @@ func TestLogsCommandJSONIsArray(t *testing.T) {
 	NewCommandTest(t, "logs").
 		WithArgs("sshd").
 		WithJSONFormat().
-		WithSetup(func(mock *fail2ban.MockClient) {
+		WithSetup(func(mock *fail2bantest.MockClient) {
 			mock.LogLines = []string{"2024-01-01 12:00:00 [sshd] Ban 192.168.1.100"}
 		}).
 		ExpectSuccess().
@@ -80,7 +80,7 @@ func TestLogsCommandJSONIsArray(t *testing.T) {
 	NewCommandTest(t, "logs").
 		WithArgs("sshd", "9.9.9.9").
 		WithJSONFormat().
-		WithSetup(func(mock *fail2ban.MockClient) {
+		WithSetup(func(mock *fail2bantest.MockClient) {
 			mock.LogLines = []string{"2024-01-01 12:00:00 [sshd] Ban 192.168.1.100"}
 		}).
 		ExpectSuccess().

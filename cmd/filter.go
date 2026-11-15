@@ -11,9 +11,9 @@ import (
 
 // TestFilterCmd returns the test-filter command with injected client and config
 func TestFilterCmd(client fail2ban.Client, config *Config) *cobra.Command {
-	return NewCommand(
-		"test-filter <filter>",
-		"Test a Fail2Ban filter",
+	return withArgs(cobra.MaximumNArgs(2), NewCommand(
+		"test-filter <filter> [logfile]",
+		"Test a Fail2Ban filter against a log file (required for filters that declare no logpath)",
 		nil,
 		func(cmd *cobra.Command, args []string) error {
 			// Create timeout context for filter testing (use file timeout as it involves file operations)
@@ -45,11 +45,12 @@ func TestFilterCmd(client fail2ban.Client, config *Config) *cobra.Command {
 				return HandleValidationError(err)
 			}
 
-			out, err := client.TestFilterWithContext(ctx, filterName)
+			out, err := client.TestFilterWithContext(ctx, filterName, ParseOptionalArgs(args, 2)[1])
 			if err != nil {
 				return HandleClientError(err)
 			}
 
-			return PrintOutputTo(GetCmdOutput(cmd), out, config.Format)
-		})
+			// fail2ban-regex echoes the log lines it reads.
+			return printLogText(GetCmdOutput(cmd), out, config.Format)
+		}))
 }

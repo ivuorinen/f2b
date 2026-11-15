@@ -22,7 +22,7 @@ func BannedCmd(client bannedClient, config *Config) *cobra.Command {
 	if client == nil {
 		panic("client cannot be nil")
 	}
-	return NewCommand(
+	return withArgs(cobra.MaximumNArgs(1), NewCommand(
 		"banned [all|<jail>]",
 		"List banned IPs with remaining time",
 		nil,
@@ -52,7 +52,7 @@ func BannedCmd(client bannedClient, config *Config) *cobra.Command {
 			}
 
 			return printBanRecords(cmd, records, config.Format)
-		})
+		}))
 }
 
 // resolveBannedJail resolves the jail to query. Jail names are case-sensitive,

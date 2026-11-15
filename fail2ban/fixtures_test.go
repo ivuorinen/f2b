@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/ivuorinen/f2b/constants"
@@ -23,9 +24,29 @@ const (
 	errFailedToGetAbsPath = "Failed to get absolute path: %v"
 )
 
+// testLogDir is where the log-reading tests point RealClient; production code
+// passes the directory explicitly.
+var (
+	testLogDir   = constants.DefaultLogDir
+	testLogDirMu sync.RWMutex
+)
+
+// SetLogDir points the log-reading tests at dir.
+func SetLogDir(dir string) {
+	testLogDirMu.Lock()
+	defer testLogDirMu.Unlock()
+	testLogDir = dir
+}
+
+// GetLogDir returns the directory the log-reading tests read from.
+func GetLogDir() string {
+	testLogDirMu.RLock()
+	defer testLogDirMu.RUnlock()
+	return testLogDir
+}
+
 // dangerousCommandSentinels are placeholder command names used by the
-// injection tests. They are test fixtures, not attack signatures, so they are
-// kept out of the production GetDangerousCommandPatterns list.
+// injection tests. They are test fixtures, not attack signatures.
 var dangerousCommandSentinels = []string{
 	"DANGEROUS_RM_COMMAND",
 	"DANGEROUS_SYSTEM_CALL",
@@ -165,47 +186,4 @@ func setupTempDirWithFiles(tb testing.TB, files map[string][]byte) string {
 	}
 
 	return tempDir
-}
-
-// SetupBasicMockClient creates a mock client with standard responses configured
-func SetupBasicMockClient() *MockClient {
-	client := NewMockClient()
-	// Set up common test data
-	client.StatusAllData = "Status: [sshd, apache] Jail list: sshd, apache"
-	client.StatusJailData["sshd"] = "Status for jail: sshd"
-	client.StatusJailData["apache"] = "Status for jail: apache"
-	return client
-}
-
-// AssertErrorContains checks that error contains expected substring
-func AssertErrorContains(tb testing.TB, err error, expectedSubstring string, testName string) {
-	tb.Helper()
-	if err == nil {
-		tb.Fatalf("%s: expected error containing %q but got none", testName, expectedSubstring)
-	}
-	if !strings.Contains(err.Error(), expectedSubstring) {
-		tb.Fatalf("%s: expected error containing %q but got %q", testName, expectedSubstring, err.Error())
-	}
-}
-
-// AssertCommandSuccess checks that command succeeded and output contains expected text
-func AssertCommandSuccess(tb testing.TB, err error, output, expectedOutput, testName string) {
-	tb.Helper()
-	if err != nil {
-		tb.Fatalf(constants.ErrTestUnexpectedWithOutput, testName, err, output)
-	}
-	if expectedOutput != "" && !strings.Contains(output, expectedOutput) {
-		tb.Fatalf(constants.ErrTestExpectedOutput, testName, expectedOutput, output)
-	}
-}
-
-// AssertCommandError checks that command failed and output contains expected error text
-func AssertCommandError(tb testing.TB, err error, output, expectedError, testName string) {
-	tb.Helper()
-	if err == nil {
-		tb.Fatalf("%s: expected error but got none, output: %s", testName, output)
-	}
-	if expectedError != "" && !strings.Contains(output, expectedError) {
-		tb.Fatalf("%s: expected error output to contain %q, got: %s", testName, expectedError, output)
-	}
 }

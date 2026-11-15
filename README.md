@@ -73,7 +73,7 @@ ______________________________________________________________________
 - **Comprehensive Test Coverage**: High coverage across packages
 - **Mock-Only Testing**: Never executes real sudo commands during testing
 - **Thread Safety**: Extensive race condition testing and protection
-- **Security Audit Trail**: Comprehensive logging of all privileged operations
+- **Security Audit Trail**: `ban`, `unban`, `service` and `test-filter` actions are logged
 
 ______________________________________________________________________
 
@@ -93,6 +93,8 @@ f2b status sshd
 f2b ban 192.168.1.100
 f2b ban 192.168.1.100 sshd
 f2b unban 192.168.1.100
+f2b ban 198.51.100.0/24 sshd   # a CIDR range is one ban entry
+f2b unban 198.51.100.0/24      # also unbans every banned address inside it
 
 # Check if IP is banned
 f2b test 192.168.1.100
@@ -102,7 +104,7 @@ f2b test 192.168.1.100
 
 ```bash
 # JSON output for scripting and automation
-f2b banned all --format=json | jq '.[] | select(.Remaining | test("^0[01]:"))'
+f2b banned all --format=json | jq '.[] | select(.remaining | test("^0[01]:"))'
 
 # Advanced log monitoring with filtering and real-time watching
 f2b logs sshd --limit 50                    # Recent jail logs
@@ -115,12 +117,12 @@ f2b service restart            # Restart with automatic sudo
 f2b service stop               # Stop service gracefully
 
 # Filter testing with comprehensive validation
-f2b test-filter sshd          # Test jail filter configuration
-f2b test-filter apache        # Validate Apache filter
+f2b test-filter sshd /var/log/auth.log            # Stock filters declare no logpath, so name the log
+f2b test-filter apache-auth /var/log/apache2/error.log
 
 # Parallel processing for enterprise-scale operations
 f2b banned all                # Automatic parallel jail processing
-f2b status all                # Concurrent status for all jails
+f2b status all                # Jail count and names
 f2b list-jails                # Fast jail enumeration
 
 # Advanced IP testing and validation
@@ -170,8 +172,9 @@ F2B_PARALLEL_TIMEOUT=60s                # Parallel operation timeout
 F2B_TEST_SUDO=1                         # Mark a test environment; skips the sudo probe (does NOT mock sudo)
 F2B_TEST=1                              # Mark a test environment; disables real sudo probing
 GO_TEST=1                               # Same as F2B_TEST (checked by IsTestEnvironment())
-F2B_VERBOSE_TESTS=1                     # Force verbose logging in CI/tests
-ALLOW_DEV_PATHS=1                       # Allow /tmp paths (development only)
+
+# Development only, parsed as a boolean: anything but a true value leaves it off
+ALLOW_DEV_PATHS=1                       # Allow /tmp paths
 ```
 
 ### Global Flags
@@ -188,25 +191,22 @@ ALLOW_DEV_PATHS=1                       # Allow /tmp paths (development only)
 --command-timeout duration   # Timeout for individual fail2ban commands
 --file-timeout duration      # Timeout for file operations
 --parallel-timeout duration  # Timeout for parallel operations
-
-# Output Control
---limit int              # Limit output lines (for log commands)
 ```
 
 ### Command-Line Examples
 
 ```bash
-# Custom directories for non-standard installations
-F2B_LOG_DIR=/custom/log F2B_FILTER_DIR=/custom/filters f2b status all
+# Custom directories must sit under the allowed locations (see docs/security.md)
+F2B_LOG_DIR=/var/log/fail2ban F2B_FILTER_DIR=/etc/fail2ban/filter.d f2b status all
 
 # JSON output for scripting and automation
-f2b banned all --format=json | jq '.[] | select(.Remaining | test("^0[01]:"))'
+f2b banned all --format=json | jq '.[] | select(.remaining | test("^0[01]:"))'
 
 # Efficient log monitoring with limits
 f2b logs sshd --limit 50 --format=json
 
 # Debug mode with file logging
-f2b --log-level=debug --log-file=/tmp/f2b-debug.log ban 192.168.1.100
+f2b --log-level=debug --log-file=/var/log/f2b-debug.log ban 192.168.1.100
 ```
 
 ______________________________________________________________________
@@ -241,14 +241,14 @@ ______________________________________________________________________
 ```bash
 # Core Jail & IP Management
 f2b list-jails                         # List all available jails (aliases: ls-jails, jails)
-f2b status all                         # Show status of all jails (alias: st, stat)
+f2b status all                         # Show the jail count and names (alias: st, stat)
 f2b status <jail>                      # Show specific jail status with detailed info
 f2b banned all                         # Show all banned IPs across all jails
 f2b banned <jail>                      # Show banned IPs for specific jail with timestamps
 
 # IP Ban/Unban Operations (Context-Aware with Timeout)
-f2b ban <ip> [jail]                    # Ban IP globally or in specific jail (aliases: b, banip)
-f2b unban <ip> [jail]                  # Unban IP globally or from specific jail (aliases: ub, unbanip)
+f2b ban <ip|cidr> [jail]               # Ban an IP or CIDR range globally or in a jail (aliases: b, banip)
+f2b unban <ip|cidr> [jail]             # Unban an IP or CIDR range globally or from a jail (aliases: ub, unbanip)
 f2b test <ip>                          # Check ban status across all jails with details
 
 # Advanced Log Management & Real-Time Monitoring
@@ -265,8 +265,8 @@ f2b service restart                    # Restart service (Ctrl-C/SIGTERM cancels
 
 # Filter Testing & Validation
 f2b test-filter                        # List available filters
-f2b test-filter <filter>               # Run fail2ban-regex for a filter against its logpath
-f2b test-filter sshd                   # Test the sshd filter
+f2b test-filter <filter> [logfile]     # Run fail2ban-regex against logfile, or the filter's own logpath
+f2b test-filter sshd /var/log/auth.log # Test a stock filter, which declares no logpath
 
 # Utility & Completion Commands
 f2b version                            # Show the f2b version
@@ -285,12 +285,15 @@ f2b help [command]                     # Context-sensitive help with examples
 
 ### JSON Output (`--format json`)
 
-| Command                     | JSON shape                                                  |
-| --------------------------- | ----------------------------------------------------------- |
-| `list-jails`, `logs`        | array of strings                                            |
-| `banned`                    | array of `{"jail", "ip", "banned_at", "remaining"}` objects |
-| `ban`, `unban`              | array of `{"ip", "jail", "status"}` objects                 |
-| `status`, `test`, `version` | string (the command's text output)                          |
+| Command                                               | JSON shape                                                  |
+| ----------------------------------------------------- | ----------------------------------------------------------- |
+| `list-jails`, `logs`                                  | array of strings                                            |
+| `banned`                                              | array of `{"jail", "ip", "banned_at", "remaining"}` objects |
+| `ban`, `unban`                                        | array of `{"ip", "jail", "status"}` objects                 |
+| `logs-watch`                                          | array of strings, one array per batch of new lines          |
+| `status`, `test`, `version`, `service`, `test-filter` | string (the command's text output)                          |
+
+`remaining` is `DD:HH:MM:SS`, or `permanent` for a ban that never expires.
 
 ### Command Aliases
 
@@ -336,7 +339,8 @@ f2b is built as an **enterprise-grade** Go application following modern architec
 - **Parallel Processing**: Automatic concurrent operations for multi-jail scenarios
 - **Real-Time Log Monitoring**: Live log following via `f2b logs-watch`
 - **Enterprise Security**: Advanced input validation and privilege management
-- **Cross-Platform**: Full support for Linux, macOS, Windows, and BSD systems
+- **Platforms**: Linux and macOS. A Windows binary is built, but fail2ban and sudo do not exist there, so
+  only `version`, `completion` and `help` work
 
 For detailed architecture information, implementation patterns, and extension guidelines,
 see [docs/architecture.md](docs/architecture.md).
@@ -351,8 +355,8 @@ ______________________________________________________________________
 # Run all tests
 go test ./...
 
-# Run with coverage
-go test -coverprofile=coverage.out ./...
+# Run with coverage: writes coverage.out and reports branch coverage
+mise run test-cov
 
 # Security-focused testing with enhanced validation
 F2B_TEST_SUDO=true go test ./fail2ban -run TestSudo
@@ -397,7 +401,7 @@ For detailed information about linting tools and configuration, see [docs/lintin
 ```bash
 # Bash script integration
 #!/bin/bash
-BANNED_IPS=$(f2b banned all --format=json | jq -r '.[].IP')
+BANNED_IPS=$(f2b banned all --format=json | jq -r '.[].ip')
 for ip in $BANNED_IPS; do
     echo "Processing banned IP: $ip"
 done

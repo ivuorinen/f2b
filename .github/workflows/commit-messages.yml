@@ -1,0 +1,52 @@
+---
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: Commit messages
+
+# The squash merge puts the PR title on main, so editing the title re-runs the
+# check. It lives outside pr-lint.yml because an `edited` trigger there would
+# cancel the required lint, test and prek runs through their concurrency group.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+    branches: [master, main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# prek and the commit-msg hooks come from mise.toml, so CI runs the same
+# versions as the local hooks. mise itself is pinned; Renovate bumps it via the
+# customManagers:githubActionsVersions preset.
+env:
+  # renovate: datasource=github-releases depName=jdx/mise
+  MISE_VERSION: v2026.10.25
+
+jobs:
+  commit-messages:
+    name: Commit messages
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # every commit in the PR range must be readable
+          persist-credentials: false
+
+      - name: Set up mise
+        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        with:
+          version: ${{ env.MISE_VERSION }}
+
+      # The squash merge puts the PR title and these messages on main, and the
+      # local commit-msg hooks only run where they were installed.
+      - name: Check the PR title and commit messages
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: mise run check-commit-messages

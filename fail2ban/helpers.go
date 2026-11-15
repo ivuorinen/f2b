@@ -13,20 +13,15 @@ import (
 
 // ParseJailList parses the jail list output from fail2ban-client status
 func ParseJailList(output string) ([]string, error) {
-	// Optimized: Find "Jail list:" position directly instead of splitting all lines
-	jailListPos := strings.Index(output, "Jail list:")
+	// Optimized: Find the label position directly instead of splitting all lines
+	const jailListLabel = "Jail list:"
+	jailListPos := strings.Index(output, jailListLabel)
 	if jailListPos == -1 {
 		return nil, fmt.Errorf(constants.ErrFailedToParseJails)
 	}
 
-	// Find the start of the jail list content (after "Jail list:")
-	colonPos := strings.Index(output[jailListPos:], ":")
-	if colonPos == -1 {
-		return nil, fmt.Errorf(constants.ErrFailedToParseJails)
-	}
-
 	// Find the end of the line
-	start := jailListPos + colonPos + 1
+	start := jailListPos + len(jailListLabel)
 	end := strings.Index(output[start:], "\n")
 	if end == -1 {
 		end = len(output) - start

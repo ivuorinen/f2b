@@ -161,16 +161,9 @@ func TestValidateCommandSecurityPatterns(t *testing.T) {
 	}
 }
 
-// TestDangerousCommandSentinelsAreTestFixtures pins that the DANGEROUS_*
-// placeholders stay test data: production patterns carry no sentinel, and
-// every sentinel command is still rejected (by the allowlist, not by a
-// test-only pattern compiled into the binary).
-func TestDangerousCommandSentinelsAreTestFixtures(t *testing.T) {
-	for _, pattern := range GetDangerousCommandPatterns() {
-		if strings.HasPrefix(pattern, "DANGEROUS_") {
-			t.Errorf("production pattern list contains test sentinel %q", pattern)
-		}
-	}
+// TestDangerousCommandSentinelsAreRejectedByTheAllowlist pins that a name off
+// the allowlist is refused without any deny-list being consulted.
+func TestDangerousCommandSentinelsAreRejectedByTheAllowlist(t *testing.T) {
 	for _, sentinel := range dangerousCommandSentinels {
 		err := ValidateCommand(sentinel)
 		if err == nil {
@@ -252,17 +245,22 @@ func runValidateCommandConcurrencyWorker(errChan chan<- error, iterations int) {
 }
 
 func BenchmarkValidateCommand(b *testing.B) {
-	commands := []string{
-		"fail2ban-client",
-		"fail2ban-regex",
-		"service",
-		"systemctl",
-		"malicious-command",
+	commands := []struct {
+		input   string
+		wantErr bool
+	}{
+		{input: "fail2ban-client", wantErr: false},
+		{input: "fail2ban-regex", wantErr: false},
+		{input: "service", wantErr: false},
+		{input: "systemctl", wantErr: false},
+		{input: "malicious-command", wantErr: true},
 	}
 
 	b.ResetTimer()
 	for i := 0; b.Loop(); i++ {
-		cmd := commands[i%len(commands)]
-		_ = ValidateCommand(cmd) // Ignore error in benchmark
+		tc := commands[i%len(commands)]
+		if err := ValidateCommand(tc.input); (err != nil) != tc.wantErr {
+			b.Fatalf("%s: err = %v, want error %v", tc.input, err, tc.wantErr)
+		}
 	}
 }

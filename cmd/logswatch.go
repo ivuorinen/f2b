@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/ivuorinen/f2b/constants"
@@ -48,7 +47,7 @@ func LogsWatchCmd(client fail2ban.Client, config *Config) *cobra.Command {
 				return HandleClientError(err)
 			}
 			if len(prev) > 0 {
-				if err := PrintOutputTo(watch.out, strings.Join(prev, "\n"), config.Format); err != nil {
+				if err := printLogLines(watch.out, prev, config.Format); err != nil {
 					return err
 				}
 			}
@@ -56,6 +55,7 @@ func LogsWatchCmd(client fail2ban.Client, config *Config) *cobra.Command {
 			return watch.run(watchCtx, prev, interval)
 		})
 
+	cmd.Args = cobra.MaximumNArgs(2)
 	cmd.Flags().IntVarP(
 		&limit, constants.FlagLimit, "n", constants.DefaultLogLinesLimit, "Number of log lines to show/tail",
 	)
@@ -87,7 +87,7 @@ func (w logWatch) pollOnce(ctx context.Context, prev []string) ([]string, error)
 		return prev, nil
 	}
 	if newLines := newTailLines(prev, curr); len(newLines) > 0 {
-		if err := PrintOutputTo(w.out, strings.Join(newLines, "\n"), w.config.Format); err != nil {
+		if err := printLogLines(w.out, newLines, w.config.Format); err != nil {
 			return prev, err
 		}
 	}

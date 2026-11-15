@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ivuorinen/f2b/fail2ban"
+	"github.com/ivuorinen/f2b/fail2ban/fail2bantest"
 )
 
 // newParallelTestClient builds a RealClient over a mock runner that answers a
@@ -15,9 +16,9 @@ import (
 // given jail. Shared by the parallel ban/unban tests.
 func newParallelTestClient(t *testing.T, action string, jails ...string) fail2ban.Client {
 	t.Helper()
-	mockRunner := fail2ban.NewMockRunner()
-	t.Cleanup(fail2ban.WithTestRunner(t, mockRunner))
-	fail2ban.StandardMockSetup(mockRunner)
+	mockRunner := fail2bantest.NewMockRunner()
+	t.Cleanup(fail2bantest.WithTestRunner(t, mockRunner))
+	fail2bantest.StandardMockSetup(mockRunner)
 	for _, jail := range jails {
 		cmd := "fail2ban-client set " + jail + " " + action + " 192.168.1.1"
 		mockRunner.SetResponse(cmd, []byte("1"))
@@ -49,7 +50,7 @@ func assertParallelResults(t *testing.T, results []OperationResult, ip, wantStat
 func TestProcessBanOperationParallelMultiJail(t *testing.T) {
 	client := newParallelTestClient(t, "banip", "sshd", "apache")
 	results, err := ProcessBanOperationParallelWithContext(
-		context.Background(), client, "192.168.1.1", []string{"sshd", "apache"})
+		context.Background(), client, "192.168.1.1", []string{"sshd", "apache"}, nil)
 	assert.NoError(t, err)
 	assertParallelResults(t, results, "192.168.1.1", "Banned", "sshd", "apache")
 }
@@ -58,7 +59,7 @@ func TestProcessBanOperationParallelMultiJail(t *testing.T) {
 func TestProcessUnbanOperationParallelMultiJail(t *testing.T) {
 	client := newParallelTestClient(t, "unbanip", "sshd", "apache")
 	results, err := ProcessUnbanOperationParallelWithContext(
-		context.Background(), client, "192.168.1.1", []string{"sshd", "apache"})
+		context.Background(), client, "192.168.1.1", []string{"sshd", "apache"}, nil)
 	assert.NoError(t, err)
 	assertParallelResults(t, results, "192.168.1.1", "Unbanned", "sshd", "apache")
 }
@@ -71,6 +72,7 @@ func TestProcessBanOperationParallelWithContext(t *testing.T) {
 		client,
 		"192.168.1.1",
 		[]string{"sshd"},
+		nil,
 	)
 	assert.NoError(t, err)
 	assertParallelResults(t, results, "192.168.1.1", "Banned", "sshd")
@@ -84,6 +86,7 @@ func TestProcessUnbanOperationParallelWithContext(t *testing.T) {
 		client,
 		"192.168.1.1",
 		[]string{"sshd"},
+		nil,
 	)
 	assert.NoError(t, err)
 	assertParallelResults(t, results, "192.168.1.1", "Unbanned", "sshd")
@@ -93,7 +96,7 @@ func TestProcessUnbanOperationParallelWithContext(t *testing.T) {
 // later jail still returns the jails already changed: dropping them hid that
 // firewall state had been modified.
 func TestProcessOperationWithContextKeepsPartialResults(t *testing.T) {
-	mock := fail2ban.NewMockClient()
+	mock := fail2bantest.NewMockClient()
 	results, err := ProcessOperationWithContext(
 		context.Background(), mock, "192.168.1.1", []string{"sshd", "nosuchjail"}, BanOperationType)
 	require.Error(t, err)

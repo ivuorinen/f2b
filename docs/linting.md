@@ -197,6 +197,8 @@ local checkout, so every tool runs at its `mise.toml` version:
 - **`.github/workflows/lint.yml`**: `mise run lint` and `mise run test-race` on `main`
 - **`.github/workflows/pr-lint.yml`**: `mise run lint`, `mise run docs-api`,
   `mise run test-cov` and `mise run hooks` on pull requests
+- **`.github/workflows/commit-messages.yml`**: `mise run check-commit-messages`
+  over the PR title and every commit in the PR, re-run when the title is edited
 
 ### Workflow Features
 

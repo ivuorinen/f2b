@@ -36,17 +36,16 @@ type Client interface {
 	GetLogLinesWithLimitContext(ctx context.Context, jail, ip string, maxLines int) ([]string, error)
 	// ListFiltersWithContext returns the available Fail2Ban filters.
 	ListFiltersWithContext(ctx context.Context) ([]string, error)
-	// TestFilterWithContext runs fail2ban-regex for the given filter.
-	TestFilterWithContext(ctx context.Context, filter string) (string, error)
+	// TestFilterWithContext runs fail2ban-regex for filter against logFile, or
+	// against the logpath the filter declares when logFile is empty.
+	TestFilterWithContext(ctx context.Context, filter, logFile string) (string, error)
 }
 
 // Runner defines the interface for executing system commands.
 // Implementations provide different execution strategies (real, mock, etc.).
 type Runner interface {
-	CombinedOutput(name string, args ...string) ([]byte, error)
-	CombinedOutputWithSudo(name string, args ...string) ([]byte, error)
-	// Context-aware versions for timeout and cancellation support
-	CombinedOutputWithContext(ctx context.Context, name string, args ...string) ([]byte, error)
+	// CombinedOutputWithSudoContext runs name, through sudo when it needs
+	// privileges and the user has them, under ctx's timeout and cancellation.
 	CombinedOutputWithSudoContext(ctx context.Context, name string, args ...string) ([]byte, error)
 }
 
