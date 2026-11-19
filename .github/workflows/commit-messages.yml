@@ -22,7 +22,7 @@ permissions:
 # customManagers:githubActionsVersions preset.
 env:
   # renovate: datasource=github-releases depName=jdx/mise
-  MISE_VERSION: v2026.10.25
+  MISE_VERSION: v2026.11.8
 
 jobs:
   commit-messages:
