@@ -448,11 +448,12 @@ from the release's binaries in its scheduled sync.
 ### First Release
 
 `mise run release` computes the next version from the existing `v` tags, so it stops with
-`no tags match 'v*'` until the first one exists. That tag is created by hand, once:
+`no tags match 'v*'` until the first one exists. That tag is created by hand, once, on
+`origin/main` rather than on the local branch, so it cannot publish unpushed commits:
 
 ```bash
-git switch main && git pull --ff-only
-git tag -a v0.1.0 -m "Release v0.1.0"
+git fetch origin main
+git tag -a v0.1.0 -m "Release v0.1.0" origin/main
 git push origin v0.1.0
 ```
 
