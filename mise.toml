@@ -23,7 +23,7 @@ actionlint = "1.7.12"
 checkov = "3.4.5"
 cosign = "3.1.4"
 editorconfig-checker = "4.0.2"
-gh = "2.103.3"
+gh = "2.104.0"
 goreleaser = "2.20.2"
 markdownlint-cli2 = "0.24.1"
 # node runs the npm: tools; uv installs the pypi: tools.
