@@ -28,4 +28,4 @@ jobs:
       issues: write # label and close stale issues
       pull-requests: write # label and close stale pull requests
     steps:
-      - uses: ivuorinen/actions/stale@d76c562b012529568933c6b554107cfdfea59bdb # v2026.11.17
+      - uses: ivuorinen/actions/stale@a265a65db5ec2f59cbc24a9a1355e569655fa983 # v2026.11.18
