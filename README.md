@@ -437,7 +437,9 @@ release, svu returns the current tag and the task stops with "already exists".
 2. **GitHub Actions will automatically:**
 
 - Build binaries for Linux, macOS and Windows
-- Create a GitHub release with changelog
+- Create a GitHub release whose notes are the changelog: the commits since the previous
+  release, grouped into breaking changes, features, fixes and other changes (`docs`,
+  `test` and `chore` commits are left out)
 - Sign the checksums file with cosign keyless signing
 - Upload release artifacts
 
