@@ -448,12 +448,13 @@ from the release's binaries in its scheduled sync.
 ### First Release
 
 `mise run release` computes the next version from the existing `v` tags, so it stops with
-`no tags match 'v*'` until the first one exists. That tag is created by hand, once, on
-`origin/main` rather than on the local branch, so it cannot publish unpushed commits. The
-commands are chained, so a failed fetch stops before a stale `origin/main` is tagged:
+`no tags match 'v*'` until the first one exists. That tag is created by hand, once, on the
+`main` commit `git fetch` just read from `origin` (`FETCH_HEAD`) rather than on the local
+branch, so it cannot publish unpushed commits. The commands are chained, so a failed fetch
+stops before anything is tagged:
 
 ```bash
-git fetch origin main && git tag -a v0.1.0 -m "Release v0.1.0" origin/main && git push origin v0.1.0
+git fetch origin main && git tag -a v0.1.0 -m "Release v0.1.0" FETCH_HEAD && git push origin v0.1.0
 ```
 
 Every later release is `mise run release`.

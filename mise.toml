@@ -184,12 +184,14 @@ description = "Update Go modules and mise tools to their latest versions"
 run = ["go get -u -t ./...", "go mod tidy", "mise upgrade --bump --local"]
 
 # Pushing the tag is the release: the release workflow builds, signs and
-# publishes it. HEAD must be exactly origin/main. A tag carries the commits it
-# points at, and branch rulesets do not cover tags, so tagging unpushed work
-# would publish it without a PR. --v0 keeps a breaking change to a minor bump
-# while the version is 0.x. --tag.pattern 'v*' makes svu skip any CalVer tag,
-# which it would otherwise read as v2026.x.y; with no v tag yet, svu fails and
-# the task stops, because the first semver tag is made by hand (see README).
+# publishes it. HEAD must be exactly origin's main, read from FETCH_HEAD:
+# fetch updates the origin/main ref only when the fetch refspec maps main. A
+# tag carries the commits it points at, and branch rulesets do not cover tags,
+# so tagging unpushed work would publish it without a PR. --v0 keeps a
+# breaking change to a minor bump while the version is 0.x. --tag.pattern 'v*'
+# makes svu skip any CalVer tag, which it would otherwise read as v2026.x.y;
+# with no v tag yet, svu fails and the task stops, because the first semver
+# tag is made by hand (see README).
 [tasks.release]
 description = "Tag the next version and push it; the release workflow publishes it"
 run = '''
@@ -202,7 +204,7 @@ if [ "$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then
   exit 1
 fi
 git fetch --quiet --tags origin main
-if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+if [ "$(git rev-parse HEAD)" != "$(git rev-parse FETCH_HEAD)" ]; then
   echo "Error: main is not the same commit as origin/main" >&2
   exit 1
 fi
