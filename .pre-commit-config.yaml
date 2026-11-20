@@ -43,8 +43,9 @@ repos:
         entry: '(?i)(^claude-session:|claude\.ai/code/session_)'
         stages: [commit-msg]
 
-      # AGENTS.md mandates semantic commits and the goreleaser changelog
-      # filters on the type prefix; git's own Merge/Revert/fixup! subjects pass.
+      # AGENTS.md mandates semantic commits, and the goreleaser release notes
+      # filter and group on the type prefix; git's own Merge/Revert/fixup!
+      # subjects pass.
       # (?x) verbose mode lets the pattern span lines in a literal block, which
       # yamlfmt does not re-wrap past the line limit; [ ] is a literal space.
       - id: semantic-commit-subject
