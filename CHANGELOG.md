@@ -3,7 +3,7 @@
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and releases use [CalVer](https://calver.org/) tags (`YYYY.MM.MICRO`).
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ______________________________________________________________________
 
@@ -127,8 +127,9 @@ ______________________________________________________________________
   `codex.sh` is removed. The prek hooks and CI workflows run every tool through
   mise, so `mise.toml` is the only version pin.
 - `mise run test-cov` also reports branch coverage per package with `gobco`.
-- Releases use CalVer tags: `mise run release` pushes the next one (from
-  gh-calver), and CI builds and signs the release.
+- Releases use Semantic Versioning tags (`v0.1.0`), so `go install ...@latest`
+  installs the latest release: `mise run release` pushes the next one (computed
+  by svu), and CI builds and signs the release.
 
 ### Removed
 

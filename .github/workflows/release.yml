@@ -2,11 +2,11 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 name: Release
 
-# `mise run release` pushes the next CalVer tag; this workflow builds and signs.
+# `mise run release` pushes the next SemVer tag; this workflow builds and signs.
 on:
   push:
     tags:
-      - "20*"
+      - "v*.*.*"
 
 # One release at a time; a second tag waits instead of cancelling a release
 # that may already have published assets.

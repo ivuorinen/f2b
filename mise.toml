@@ -23,7 +23,6 @@ actionlint = "1.7.12"
 checkov = "3.4.5"
 cosign = "3.1.4"
 editorconfig-checker = "4.0.2"
-gh = "2.104.0"
 goreleaser = "2.20.2"
 markdownlint-cli2 = "0.24.1"
 # node runs the npm: tools; uv installs the pypi: tools.
@@ -35,6 +34,7 @@ prek = "0.5.10"
 # mdformat-frontmatter keeps the YAML frontmatter of .claude/agents/*.md.
 "pypi:mdformat" = { version = "1.0.0", with = ["mdformat-gfm==1.0.0", "mdformat-frontmatter==2.2.0"] }
 shfmt = "3.14.1"
+svu = "3.4.4"
 uv = "0.13.8"
 yamlfmt = "0.21.0"
 
@@ -183,25 +183,36 @@ run = "rm -rf f2b coverage.out dist/ third_party/"
 description = "Update Go modules and mise tools to their latest versions"
 run = ["go get -u -t ./...", "go mod tidy", "mise upgrade --bump --local"]
 
+# Pushing the tag is the release: the release workflow builds, signs and
+# publishes it. HEAD must be exactly origin's main, read from FETCH_HEAD:
+# fetch updates the origin/main ref only when the fetch refspec maps main. A
+# tag carries the commits it points at, and branch rulesets do not cover tags,
+# so tagging unpushed work would publish it without a PR. --v0 keeps a
+# breaking change to a minor bump while the version is 0.x. --tag.pattern 'v*'
+# makes svu skip any CalVer tag, which it would otherwise read as v2026.x.y;
+# with no v tag yet, svu fails and the task stops, because the first semver
+# tag is made by hand (see README).
 [tasks.release]
-description = "Tag and push a CalVer release (requires a clean main branch)"
+description = "Tag the next version and push it; the release workflow publishes it"
 run = '''
-if ! gh extension list | grep -q calver; then
-  gh extension install ivuorinen/gh-calver
-fi
 if ! git diff --quiet || ! git diff --cached --quiet; then
-  echo "Error: working tree is not clean"
+  echo "Error: working tree is not clean" >&2
   exit 1
 fi
 if [ "$(git rev-parse --abbrev-ref HEAD)" != "main" ]; then
-  echo "Error: not on main branch"
+  echo "Error: not on main branch" >&2
   exit 1
 fi
-tag=$(gh calver next)
+git fetch --quiet --tags origin main
+if [ "$(git rev-parse HEAD)" != "$(git rev-parse FETCH_HEAD)" ]; then
+  echo "Error: main is not the same commit as origin/main" >&2
+  exit 1
+fi
+tag=$(svu next --v0 --tag.pattern 'v*')
 echo "Releasing $tag..."
 git tag -a "$tag" -m "Release $tag"
 git push origin "$tag"
-echo "Tag $tag pushed. GitHub Actions will build and sign the release."
+echo "Tag $tag pushed. GitHub Actions will build, sign and publish the release."
 '''
 
 # Run by the release workflow for the pushed tag. cosign keyless signing needs

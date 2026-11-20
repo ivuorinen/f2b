@@ -418,16 +418,21 @@ ______________________________________________________________________
 
 ### Creating a New Release
 
-Releases use [CalVer](https://calver.org/) tags (`YYYY.MM.MICRO`, e.g. `2026.10.0`) from
-[gh-calver](https://github.com/ivuorinen/gh-calver) and are built by GitHub Actions with
-[GoReleaser](https://goreleaser.com/). CalVer tags are not Go module versions, so
-`go install ...@latest` builds the latest `main` commit rather than the latest release.
+Releases use Semantic Versioning tags (`v0.2.0`), the only version form `go install`
+understands, and are built by GitHub Actions with [GoReleaser](https://goreleaser.com/).
+Once a release exists, `go install github.com/ivuorinen/f2b@latest` installs it.
 
-1. **Tag the release** from a clean `main` branch:
+1. **Tag the release** from `main`:
 
 ```bash
-mise run release   # tags the next CalVer version and pushes it
+mise run release   # tags the next version and pushes it
 ```
+
+The task requires a clean `main` that is the same commit as `origin/main`, and stops otherwise.
+[svu](https://github.com/caarlos0/svu) picks the version from the commits since the last tag:
+`fix:` bumps the patch, `feat:` the minor, and a breaking change (`feat!:`, `BREAKING CHANGE:`)
+also bumps the minor while the version is 0.x. When no commit since the last tag warrants a
+release, svu returns the current tag and the task stops with "already exists".
 
 2. **GitHub Actions will automatically:**
 
@@ -439,6 +444,20 @@ mise run release   # tags the next CalVer version and pushes it
 The Homebrew formula is not published from this repository:
 [ivuorinen/homebrew-tap](https://github.com/ivuorinen/homebrew-tap) generates it
 from the release's binaries in its scheduled sync.
+
+### First Release
+
+`mise run release` computes the next version from the existing `v` tags, so it stops with
+`no tags match 'v*'` until the first one exists. That tag is created by hand, once, on the
+`main` commit `git fetch` just read from `origin` (`FETCH_HEAD`) rather than on the local
+branch, so it cannot publish unpushed commits. The commands are chained, so a failed fetch
+stops before anything is tagged:
+
+```bash
+git fetch origin main && git tag -a v0.1.0 -m "Release v0.1.0" FETCH_HEAD && git push origin v0.1.0
+```
+
+Every later release is `mise run release`.
 
 ### Local Snapshot
 
@@ -458,16 +477,17 @@ Each release includes:
 - `LICENSE.md` and `THIRD_PARTY_LICENSES.txt` (licenses of the bundled modules)
 - Source code archives
 
-Verify a download against the signed checksums:
+Verify a download against the signed checksums. The file names carry the version without the
+tag's `v` prefix:
 
 ```bash
-v=2026.10.0
+v=0.1.0
 cosign verify-blob \
   --bundle "f2b_${v}_checksums.txt.bundle" \
-  --certificate-identity "https://github.com/ivuorinen/f2b/.github/workflows/release.yml@refs/tags/${v}" \
+  --certificate-identity "https://github.com/ivuorinen/f2b/.github/workflows/release.yml@refs/tags/v${v}" \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  "f2b_${v}_checksums.txt"
-sha256sum --ignore-missing -c "f2b_${v}_checksums.txt"
+  "f2b_${v}_checksums.txt" &&
+  sha256sum --ignore-missing -c "f2b_${v}_checksums.txt"
 ```
 
 ______________________________________________________________________
