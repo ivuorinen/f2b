@@ -65,7 +65,7 @@ jobs:
       - name: Run PR Lint
         # Custom PR linting action that performs additional PR-specific checks
         # https://github.com/ivuorinen/actions
-        uses: ivuorinen/actions/pr-lint@0e2414868b504846fb6a677dc932dd793a733869 # v2026.11.22
+        uses: ivuorinen/actions/pr-lint@e51e0e32674a49e4e25cba053f08ee6fcb94849b # v2026.11.23
 
   prek:
     name: prek
